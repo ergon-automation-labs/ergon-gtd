@@ -1,0 +1,167 @@
+defmodule BotArmyGtd.ProjectStore do
+  @moduledoc """
+  In-memory project storage for the GTD bot.
+
+  This is a mock implementation using a GenServer to maintain state.
+  In production, this would use a persistent database like PostgreSQL.
+
+  ## API
+
+  - `create/1` - Create a new project
+  - `update/2` - Update an existing project
+  - `get/1` - Retrieve a project by ID
+  - `list/0` - List all projects
+  """
+
+  use GenServer
+  require Logger
+
+  @server __MODULE__
+
+  # API
+
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: @server)
+  end
+
+  @doc """
+  Create a new project from payload.
+
+  Returns `{:ok, project}` with the created project, or `{:error, reason}`.
+  """
+  def create(payload) when is_map(payload) do
+    GenServer.call(@server, {:create, payload})
+  end
+
+  @doc """
+  Update an existing project.
+
+  Returns `{:ok, project}` with the updated project, or `{:error, reason}`.
+  """
+  def update(project_id, payload) when is_binary(project_id) and is_map(payload) do
+    GenServer.call(@server, {:update, project_id, payload})
+  end
+
+  @doc """
+  Retrieve a project by ID.
+
+  Returns `{:ok, project}` or `{:error, :not_found}`.
+  """
+  def get(project_id) when is_binary(project_id) do
+    GenServer.call(@server, {:get, project_id})
+  end
+
+  @doc """
+  List all projects.
+
+  Returns `{:ok, projects}`.
+  """
+  def list do
+    GenServer.call(@server, :list)
+  end
+
+  # Callbacks
+
+  @impl true
+  def init(_opts) do
+    Logger.info("ProjectStore started")
+    # Load all projects from database into GenServer state
+    projects = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Project)
+    state = Enum.reduce(projects, %{}, fn project, acc ->
+      Map.put(acc, project.id |> to_string(), schema_to_map(project))
+    end)
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_call({:create, payload}, _from, state) do
+    project_id = Ecto.UUID.generate()
+
+    changeset = BotArmyGtd.Schemas.Project.changeset(
+      %BotArmyGtd.Schemas.Project{id: project_id},
+      %{
+        "name" => payload["name"],
+        "description" => Map.get(payload, "description"),
+        "status" => Map.get(payload, "status", "active"),
+        "area" => Map.get(payload, "area")
+      }
+    )
+
+    case BotArmyGtd.Repo.insert(changeset) do
+      {:ok, db_project} ->
+        project = schema_to_map(db_project)
+        new_state = Map.put(state, project_id, project)
+        Logger.info("Created project in database: #{project_id}")
+        {:reply, {:ok, project}, new_state}
+
+      {:error, changeset} ->
+        Logger.error("Failed to create project: #{inspect(changeset.errors)}")
+        {:reply, {:error, :database_error}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:update, project_id, payload}, _from, state) do
+    case Map.get(state, project_id) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      _project ->
+        project_uuid = Ecto.UUID.cast!(project_id)
+        db_project = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Project, project_uuid)
+
+        if db_project do
+          changeset = BotArmyGtd.Schemas.Project.changeset(
+            db_project,
+            %{
+              "name" => Map.get(payload, "name", db_project.name),
+              "description" => Map.get(payload, "description", db_project.description),
+              "status" => Map.get(payload, "status", db_project.status),
+              "area" => Map.get(payload, "area", db_project.area)
+            }
+          )
+
+          case BotArmyGtd.Repo.update(changeset) do
+            {:ok, updated_db_project} ->
+              updated_project = schema_to_map(updated_db_project)
+              new_state = Map.put(state, project_id, updated_project)
+              Logger.info("Updated project in database: #{project_id}")
+              {:reply, {:ok, updated_project}, new_state}
+
+            {:error, changeset} ->
+              Logger.error("Failed to update project: #{inspect(changeset.errors)}")
+              {:reply, {:error, :database_error}, state}
+          end
+        else
+          {:reply, {:error, :not_found}, state}
+        end
+    end
+  end
+
+  @impl true
+  def handle_call({:get, project_id}, _from, state) do
+    case Map.get(state, project_id) do
+      nil -> {:reply, {:error, :not_found}, state}
+      project -> {:reply, {:ok, project}, state}
+    end
+  end
+
+  @impl true
+  def handle_call(:list, _from, state) do
+    projects = Map.values(state)
+    {:reply, {:ok, projects}, state}
+  end
+
+  # Helper function to convert Ecto schema to map for GenServer state
+  defp schema_to_map(%BotArmyGtd.Schemas.Project{} = project) do
+    %{
+      "id" => project.id |> to_string(),
+      "name" => project.name,
+      "description" => project.description,
+      "status" => project.status,
+      "area" => project.area,
+      "created_at" => project.inserted_at |> NaiveDateTime.to_iso8601(),
+      "updated_at" => project.updated_at |> NaiveDateTime.to_iso8601()
+    }
+  end
+end
