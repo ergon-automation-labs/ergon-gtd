@@ -105,6 +105,65 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     end
   end
 
+  @doc """
+  Handle task defer event.
+
+  Defers a task to a future date and publishes a task.state.updated event.
+  """
+  def handle_defer(message) do
+    event_id = message["event_id"]
+    payload = message["payload"]
+
+    case validate_defer_payload(payload) do
+      :ok ->
+        task_id = payload["task_id"]
+        defer_until = payload["defer_until"]
+
+        case BotArmyGtd.TaskStore.update(task_id, %{"due_date" => defer_until}) do
+          {:ok, task} ->
+            Logger.info("Task deferred: task_id=#{task_id}, until=#{defer_until}, event_id=#{event_id}")
+            publish_event("gtd.task.state.updated", payload, task, event_id, message)
+
+          {:error, reason} ->
+            Logger.error("Failed to defer task #{task_id}: #{inspect(reason)}")
+            publish_error(event_id, reason, "Failed to defer task")
+        end
+
+      {:error, reason} ->
+        Logger.warning("Invalid task defer payload: #{inspect(reason)}")
+        publish_error(event_id, reason, "Invalid defer data")
+    end
+  end
+
+  @doc """
+  Handle task delete event.
+
+  Marks a task as deleted and publishes a task.state.updated event.
+  """
+  def handle_delete(message) do
+    event_id = message["event_id"]
+    payload = message["payload"]
+
+    case validate_delete_payload(payload) do
+      :ok ->
+        task_id = payload["task_id"]
+
+        case BotArmyGtd.TaskStore.update(task_id, %{"status" => "deleted"}) do
+          {:ok, task} ->
+            Logger.info("Task deleted: task_id=#{task_id}, event_id=#{event_id}")
+            publish_event("gtd.task.state.updated", payload, task, event_id, message)
+
+          {:error, reason} ->
+            Logger.error("Failed to delete task #{task_id}: #{inspect(reason)}")
+            publish_error(event_id, reason, "Failed to delete task")
+        end
+
+      {:error, reason} ->
+        Logger.warning("Invalid task delete payload: #{inspect(reason)}")
+        publish_error(event_id, reason, "Invalid delete data")
+    end
+  end
+
   # Private functions
 
   defp validate_create_payload(payload) when is_map(payload) do
@@ -127,6 +186,21 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   end
 
   defp validate_complete_payload(_), do: {:error, :invalid_payload}
+
+  defp validate_defer_payload(payload) when is_map(payload) do
+    with :ok <- require_field(payload, "task_id"),
+         :ok <- require_field(payload, "defer_until") do
+      :ok
+    end
+  end
+
+  defp validate_defer_payload(_), do: {:error, :invalid_payload}
+
+  defp validate_delete_payload(payload) when is_map(payload) do
+    require_field(payload, "task_id")
+  end
+
+  defp validate_delete_payload(_), do: {:error, :invalid_payload}
 
   defp require_field(payload, field) do
     case payload do

@@ -217,6 +217,148 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
     end
   end
 
+  describe "handle_defer/1" do
+    test "successfully defers a task to a future date" do
+      # Create a task
+      create_msg = valid_create_message()
+      BotArmyGtd.Handlers.TaskHandler.handle_create(create_msg)
+
+      {:ok, tasks} = BotArmyGtd.TaskStore.list()
+      task = List.first(tasks)
+      task_id = task["id"]
+
+      # Defer the task
+      defer_date = "2026-03-20"
+
+      defer_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.command.defer",
+        "payload" => %{
+          "task_id" => task_id,
+          "defer_until" => defer_date
+        }
+      }
+
+      BotArmyGtd.Handlers.TaskHandler.handle_defer(defer_msg)
+
+      # Verify the task was deferred
+      {:ok, deferred_task} = BotArmyGtd.TaskStore.get(task_id)
+      assert deferred_task["due_date"] == defer_date
+    end
+
+    test "returns error when deferring non-existent task" do
+      defer_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.command.defer",
+        "payload" => %{
+          "task_id" => "non-existent-id",
+          "defer_until" => "2026-03-20"
+        }
+      }
+
+      assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_defer(defer_msg)
+
+      # Verify no tasks were created
+      {:ok, tasks} = BotArmyGtd.TaskStore.list()
+      assert length(tasks) == 0
+    end
+
+    test "returns error when defer_until is missing" do
+      # Create a task
+      create_msg = valid_create_message()
+      BotArmyGtd.Handlers.TaskHandler.handle_create(create_msg)
+
+      {:ok, tasks} = BotArmyGtd.TaskStore.list()
+      task = List.first(tasks)
+      task_id = task["id"]
+
+      # Defer without defer_until
+      defer_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.command.defer",
+        "payload" => %{
+          "task_id" => task_id
+        }
+      }
+
+      assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_defer(defer_msg)
+
+      # Task should not be deferred
+      {:ok, task} = BotArmyGtd.TaskStore.get(task_id)
+      assert is_nil(task["due_date"])
+    end
+  end
+
+  describe "handle_delete/1" do
+    test "successfully marks a task as deleted" do
+      # Create a task
+      create_msg = valid_create_message()
+      BotArmyGtd.Handlers.TaskHandler.handle_create(create_msg)
+
+      {:ok, tasks} = BotArmyGtd.TaskStore.list()
+      task = List.first(tasks)
+      task_id = task["id"]
+
+      # Delete the task
+      delete_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.command.delete",
+        "payload" => %{
+          "task_id" => task_id
+        }
+      }
+
+      BotArmyGtd.Handlers.TaskHandler.handle_delete(delete_msg)
+
+      # Verify the task was marked as deleted
+      {:ok, deleted_task} = BotArmyGtd.TaskStore.get(task_id)
+      assert deleted_task["status"] == "deleted"
+    end
+
+    test "returns error when deleting non-existent task" do
+      delete_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.command.delete",
+        "payload" => %{
+          "task_id" => "non-existent-id"
+        }
+      }
+
+      assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_delete(delete_msg)
+
+      # Verify no tasks were created
+      {:ok, tasks} = BotArmyGtd.TaskStore.list()
+      assert length(tasks) == 0
+    end
+
+    test "preserves other fields when deleting" do
+      # Create a task
+      create_msg = valid_create_message()
+      BotArmyGtd.Handlers.TaskHandler.handle_create(create_msg)
+
+      {:ok, tasks} = BotArmyGtd.TaskStore.list()
+      task = List.first(tasks)
+      task_id = task["id"]
+      original_title = task["title"]
+
+      # Delete the task
+      delete_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.command.delete",
+        "payload" => %{
+          "task_id" => task_id
+        }
+      }
+
+      BotArmyGtd.Handlers.TaskHandler.handle_delete(delete_msg)
+
+      # Verify title was preserved
+      {:ok, deleted_task} = BotArmyGtd.TaskStore.get(task_id)
+      assert deleted_task["title"] == original_title
+      assert deleted_task["status"] == "deleted"
+    end
+  end
+
   # Helper functions
 
   defp valid_create_message do

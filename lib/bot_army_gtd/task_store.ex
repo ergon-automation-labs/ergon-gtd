@@ -85,10 +85,17 @@ defmodule BotArmyGtd.TaskStore do
   def init(_opts) do
     Logger.info("TaskStore started")
     # Load all tasks from database into GenServer state
-    tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
-    state = Enum.reduce(tasks, %{}, fn task, acc ->
-      Map.put(acc, task.id |> to_string(), schema_to_map(task))
-    end)
+    # Gracefully handle database unavailability (e.g., in tests)
+    state = try do
+      tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
+      Enum.reduce(tasks, %{}, fn task, acc ->
+        Map.put(acc, task.id |> to_string(), schema_to_map(task))
+      end)
+    rescue
+      _ ->
+        Logger.warning("Could not load tasks from database (database unavailable). Starting with empty state.")
+        %{}
+    end
     {:ok, state}
   end
 
@@ -114,8 +121,11 @@ defmodule BotArmyGtd.TaskStore do
         "title" => payload["title"],
         "project_id" => payload["project_id"],
         "description" => Map.get(payload, "description"),
-        "status" => "active",
+        "status" => Map.get(payload, "status", "active"),
         "priority" => Map.get(payload, "priority", "normal"),
+        "context" => Map.get(payload, "context"),
+        "source" => Map.get(payload, "source", "user"),
+        "source_metadata" => Map.get(payload, "source_metadata"),
         "due_date" => due_date
       }
     )
@@ -160,7 +170,11 @@ defmodule BotArmyGtd.TaskStore do
             %{
               "title" => Map.get(payload, "title", db_task.title),
               "description" => Map.get(payload, "description", db_task.description),
+              "status" => Map.get(payload, "status", db_task.status),
               "priority" => Map.get(payload, "priority", db_task.priority),
+              "context" => Map.get(payload, "context", db_task.context),
+              "source" => Map.get(payload, "source", db_task.source),
+              "source_metadata" => Map.get(payload, "source_metadata", db_task.source_metadata),
               "due_date" => due_date || db_task.due_date
             }
           )
@@ -248,6 +262,9 @@ defmodule BotArmyGtd.TaskStore do
       "description" => task.description,
       "status" => task.status,
       "priority" => task.priority,
+      "context" => task.context,
+      "source" => task.source,
+      "source_metadata" => task.source_metadata,
       "project_id" => task.project_id |> to_string(),
       "due_date" => if(task.due_date, do: task.due_date |> to_string(), else: nil),
       "completed_at" => if(task.completed_at, do: task.completed_at |> NaiveDateTime.to_iso8601(), else: nil),

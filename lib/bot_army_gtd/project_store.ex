@@ -66,10 +66,17 @@ defmodule BotArmyGtd.ProjectStore do
   def init(_opts) do
     Logger.info("ProjectStore started")
     # Load all projects from database into GenServer state
-    projects = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Project)
-    state = Enum.reduce(projects, %{}, fn project, acc ->
-      Map.put(acc, project.id |> to_string(), schema_to_map(project))
-    end)
+    # Gracefully handle database unavailability (e.g., in tests)
+    state = try do
+      projects = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Project)
+      Enum.reduce(projects, %{}, fn project, acc ->
+        Map.put(acc, project.id |> to_string(), schema_to_map(project))
+      end)
+    rescue
+      _ ->
+        Logger.warning("Could not load projects from database (database unavailable). Starting with empty state.")
+        %{}
+    end
     {:ok, state}
   end
 

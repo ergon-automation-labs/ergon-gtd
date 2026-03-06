@@ -16,9 +16,13 @@ defmodule BotArmyGtd.Application do
       # Database connection
       BotArmyGtd.Repo,
 
-      # Task and project storage
+      # NATS connection (runtime library)
+      {BotArmyRuntime.NATS.Connection, []},
+
+      # Task, project, and inbox storage
       {BotArmyGtd.TaskStore, []},
       {BotArmyGtd.ProjectStore, []},
+      {BotArmyGtd.InboxItemStore, []},
 
       # NATS connection and consumer
       {BotArmyGtd.NATS.Consumer, []}

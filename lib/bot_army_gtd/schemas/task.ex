@@ -14,6 +14,9 @@ defmodule BotArmyGtd.Schemas.Task do
     field :description, :string
     field :status, :string, default: "active"
     field :priority, :string, default: "normal"
+    field :context, :string
+    field :source, :string, default: "user"
+    field :source_metadata, :map
     field :due_date, :date
     field :completed_at, :naive_datetime
     field :project_id, :string
@@ -24,9 +27,31 @@ defmodule BotArmyGtd.Schemas.Task do
   @doc false
   def changeset(task, attrs) do
     task
-    |> cast(attrs, [:title, :description, :status, :priority, :due_date, :completed_at, :project_id])
+    |> cast(attrs, [
+      :title,
+      :description,
+      :status,
+      :priority,
+      :context,
+      :source,
+      :source_metadata,
+      :due_date,
+      :completed_at,
+      :project_id
+    ])
     |> validate_required([:title])
-    |> validate_inclusion(:status, ["active", "completed", "archived"])
+    |> validate_inclusion(:status, [
+      "inbox",
+      "next_action",
+      "waiting_for",
+      "someday_maybe",
+      "reference",
+      "done",
+      "deleted",
+      "active",
+      "completed",
+      "archived"
+    ])
     |> validate_inclusion(:priority, ["low", "normal", "high"])
   end
 end

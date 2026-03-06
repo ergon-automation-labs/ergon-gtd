@@ -32,9 +32,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   use GenServer
   require Logger
 
-  @nats_url System.get_env("NATS_URL", "nats://localhost:4222")
   @reconnect_delay_ms 5000
-  @max_reconnect_retries 10
 
   # API
 
@@ -51,9 +49,12 @@ defmodule BotArmyGtd.NATS.Consumer do
     event = message["event"]
 
     case event do
+      "gtd.inbox.add" -> BotArmyGtd.Handlers.InboxHandler.handle_add(message)
       "gtd.task.create" -> BotArmyGtd.Handlers.TaskHandler.handle_create(message)
       "gtd.task.update" -> BotArmyGtd.Handlers.TaskHandler.handle_update(message)
       "gtd.task.complete" -> BotArmyGtd.Handlers.TaskHandler.handle_complete(message)
+      "gtd.task.command.defer" -> BotArmyGtd.Handlers.TaskHandler.handle_defer(message)
+      "gtd.task.command.delete" -> BotArmyGtd.Handlers.TaskHandler.handle_delete(message)
       "gtd.project.create" -> BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
       "gtd.project.update" -> BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
       _ -> Logger.debug("Unknown GTD event type: #{event}")
@@ -72,10 +73,51 @@ defmodule BotArmyGtd.NATS.Consumer do
       opts: opts
     }
 
-    # In production, connect to NATS here
-    # For now, we just start up ready to receive messages
-    Logger.info("GTD NATS consumer initialized, ready to receive messages from NATS broker")
-    {:ok, state}
+    {:ok, state, {:continue, :connect}}
+  end
+
+  @impl true
+  def handle_continue(:connect, state) do
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+      {:ok, conn} ->
+        Logger.info("Connected to NATS, subscribing to GTD topics")
+
+        subscriptions =
+          [
+            "gtd.inbox.add",
+            "gtd.task.create",
+            "gtd.task.update",
+            "gtd.task.complete",
+            "gtd.task.command.defer",
+            "gtd.task.command.delete",
+            "gtd.project.create",
+            "gtd.project.update"
+          ]
+          |> Enum.map(fn subject ->
+            case Gnat.sub(conn, self(), subject) do
+              {:ok, sub} ->
+                Logger.info("GTD consumer subscribed to #{subject}")
+                sub
+
+              {:error, reason} ->
+                Logger.error("Failed to subscribe to #{subject}: #{inspect(reason)}")
+                nil
+            end
+          end)
+          |> Enum.filter(&(not is_nil(&1)))
+
+        {:noreply, %{state | subscriptions: subscriptions}}
+
+      {:error, _reason} ->
+        Logger.warning("NATS connection not ready, will retry")
+        Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
+        {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_info(:connect_retry, state) do
+    {:noreply, state, {:continue, :connect}}
   end
 
   @impl true

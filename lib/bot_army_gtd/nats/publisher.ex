@@ -20,8 +20,6 @@ defmodule BotArmyGtd.NATS.Publisher do
 
   require Logger
 
-  @nats_url System.get_env("NATS_URL", "nats://localhost:4222")
-
   @doc """
   Publish an event to NATS.
 
@@ -65,10 +63,14 @@ defmodule BotArmyGtd.NATS.Publisher do
   # Private functions
 
   defp do_publish(subject, body) do
-    # In production, this would connect to NATS and publish
-    # For now, log the publish attempt
-    Logger.info("Publishing to #{subject}: #{String.slice(body, 0, 100)}...")
-    :ok
+    case Jason.decode(body) do
+      {:ok, payload} ->
+        BotArmyRuntime.NATS.Publisher.publish(subject, payload)
+
+      {:error, reason} ->
+        Logger.error("Failed to decode body for #{subject}: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
   defp derive_subject(event_type) when is_binary(event_type) do
