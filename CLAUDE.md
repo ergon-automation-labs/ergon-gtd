@@ -4,6 +4,23 @@ Guidance for Claude Code when working with `bot_army_gtd`.
 
 ---
 
+## Parent Framework
+
+This repo follows the architecture and patterns defined in the parent governance framework:
+
+**[→ See parent GOVERNANCE.md](/code/elixir_bots/GOVERNANCE.md)**
+
+Key sections:
+- **Core Principles** - Event-driven NATS, Ecto persistence, dependency injection
+- **NATS Message Pattern** - Standard envelope structure for all messages
+- **Handler Pattern** - Validation → processing → publishing pattern used by all handlers
+- **Store Pattern** - GenServer-based data persistence (if applicable to this repo)
+- **Testing Patterns** - Mox mocking for isolation, no DB access in tests
+
+Repo-specific decisions are documented in `memory/DECISIONS.md` with parent references.
+
+---
+
 ## Purpose
 
 **bot_army_gtd** is the GTD (Getting Things Done) bot implementation.
@@ -39,7 +56,11 @@ Handles:
 │           └── task_handler_test.exs
 ├── mix.exs
 ├── CLAUDE.md
-└── README.md
+├── README.md
+└── memory/
+    ├── MEMORY.md                # Session summaries
+    ├── DECISIONS.md             # Architectural decisions with parent links
+    └── PATTERNS.md              # Repo-specific code patterns
 ```
 
 ---
