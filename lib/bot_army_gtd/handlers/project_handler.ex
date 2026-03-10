@@ -17,6 +17,10 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
 
   require Logger
 
+  defp project_store do
+    Application.get_env(:bot_army_gtd, :project_store, BotArmyGtd.ProjectStore)
+  end
+
   @doc """
   Handle project creation event.
 
@@ -30,7 +34,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
 
     case validate_create_payload(payload) do
       :ok ->
-        case BotArmyGtd.ProjectStore.create(payload) do
+        case project_store().create(payload) do
           {:ok, project} ->
             Logger.info("Project created: project_id=#{project.id}, event_id=#{event_id}")
             publish_event("gtd.project.created", payload, project, event_id, message)
@@ -59,7 +63,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
       :ok ->
         project_id = payload["project_id"]
 
-        case BotArmyGtd.ProjectStore.update(project_id, payload) do
+        case project_store().update(project_id, payload) do
           {:ok, project} ->
             Logger.info("Project updated: project_id=#{project_id}, event_id=#{event_id}")
             publish_event("gtd.project.updated", payload, project, event_id, message)

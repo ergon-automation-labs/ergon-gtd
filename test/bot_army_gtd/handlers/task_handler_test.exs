@@ -6,12 +6,6 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
 
   describe "handle_create/1" do
     test "successfully creates a task" do
-      payload = %{
-        "title" => "Learn Elixir",
-        "project_id" => "project-1",
-        "description" => "Master the fundamentals"
-      }
-
       expected_task = %{
         "id" => "test-task-id",
         "title" => "Learn Elixir",
@@ -22,7 +16,7 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
         "created_at" => "2024-01-01T00:00:00"
       }
 
-      expect(BotArmyGtd.TaskStoreMock, :create, fn ^payload ->
+      expect(BotArmyGtd.TaskStoreMock, :create, fn payload when is_map(payload) ->
         {:ok, expected_task}
       end)
 

@@ -17,6 +17,14 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
 
   require Logger
 
+  defp inbox_item_store do
+    Application.get_env(:bot_army_gtd, :inbox_item_store, BotArmyGtd.InboxItemStore)
+  end
+
+  defp task_store do
+    Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+  end
+
   @doc """
   Handle inbox add event.
 
@@ -60,7 +68,7 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
     source_metadata = Map.get(payload, "source_metadata", %{})
 
     # Create inbox item
-    case BotArmyGtd.InboxItemStore.create(%{
+    case inbox_item_store().create(%{
       "raw_text" => raw_text,
       "source" => source,
       "source_metadata" => source_metadata
@@ -69,7 +77,7 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
         Logger.info("Inbox item created: item_id=#{inbox_item["id"]}, event_id=#{event_id}")
 
         # Create corresponding task
-        case BotArmyGtd.TaskStore.create(%{
+        case task_store().create(%{
           "title" => raw_text,
           "project_id" => "_inbox",
           "description" => nil,
@@ -82,7 +90,7 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
             Logger.info("Task created from inbox: task_id=#{task["id"]}")
 
             # Mark inbox item as processed
-            BotArmyGtd.InboxItemStore.mark_processed(inbox_item["id"])
+            inbox_item_store().mark_processed(inbox_item["id"])
 
             # Publish inbox.item.added event
             publish_inbox_item_added(inbox_item, event_id)

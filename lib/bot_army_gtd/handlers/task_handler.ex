@@ -18,6 +18,10 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
   require Logger
 
+  defp task_store do
+    Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+  end
+
   @doc """
   Handle task creation event.
 
@@ -31,7 +35,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
     case validate_create_payload(payload) do
       :ok ->
-        case BotArmyGtd.TaskStore.create(payload) do
+        case task_store().create(payload) do
           {:ok, task} ->
             Logger.info("Task created: task_id=#{task["id"]}, event_id=#{event_id}")
             publish_event("gtd.task.created", payload, task, event_id, message)
@@ -60,7 +64,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
       :ok ->
         task_id = payload["task_id"]
 
-        case BotArmyGtd.TaskStore.update(task_id, payload) do
+        case task_store().update(task_id, payload) do
           {:ok, task} ->
             Logger.info("Task updated: task_id=#{task_id}, event_id=#{event_id}")
             publish_event("gtd.task.updated", payload, task, event_id, message)
@@ -89,7 +93,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
       :ok ->
         task_id = payload["task_id"]
 
-        case BotArmyGtd.TaskStore.complete(task_id) do
+        case task_store().complete(task_id) do
           {:ok, task} ->
             Logger.info("Task completed: task_id=#{task_id}, event_id=#{event_id}")
             publish_event("gtd.task.completed", payload, task, event_id, message)
@@ -119,7 +123,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         task_id = payload["task_id"]
         defer_until = payload["defer_until"]
 
-        case BotArmyGtd.TaskStore.update(task_id, %{"due_date" => defer_until}) do
+        case task_store().update(task_id, %{"due_date" => defer_until}) do
           {:ok, task} ->
             Logger.info("Task deferred: task_id=#{task_id}, until=#{defer_until}, event_id=#{event_id}")
             publish_event("gtd.task.state.updated", payload, task, event_id, message)
@@ -148,7 +152,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
       :ok ->
         task_id = payload["task_id"]
 
-        case BotArmyGtd.TaskStore.update(task_id, %{"status" => "deleted"}) do
+        case task_store().update(task_id, %{"status" => "deleted"}) do
           {:ok, task} ->
             Logger.info("Task deleted: task_id=#{task_id}, event_id=#{event_id}")
             publish_event("gtd.task.state.updated", payload, task, event_id, message)

@@ -3,6 +3,6 @@ defmodule BotArmyGtdTest do
   doctest BotArmyGtd
 
   test "version" do
-    assert BotArmyGtd.version() == "0.1.0"
+    assert BotArmyGtd.version() == "0.1.1"
   end
 end
