@@ -21,9 +21,6 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
     Application.get_env(:bot_army_gtd, :inbox_item_store, BotArmyGtd.InboxItemStore)
   end
 
-  defp task_store do
-    Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
-  end
 
   @doc """
   Handle inbox add event.
@@ -76,32 +73,11 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
       {:ok, inbox_item} ->
         Logger.info("Inbox item created: item_id=#{inbox_item["id"]}, event_id=#{event_id}")
 
-        # Create corresponding task
-        case task_store().create(%{
-          "title" => raw_text,
-          "project_id" => "_inbox",
-          "description" => nil,
-          "status" => "inbox",
-          "priority" => "normal",
-          "source" => source,
-          "source_metadata" => source_metadata
-        }) do
-          {:ok, task} ->
-            Logger.info("Task created from inbox: task_id=#{task["id"]}")
+        # Publish inbox.item.added event
+        publish_inbox_item_added(inbox_item, event_id)
 
-            # Mark inbox item as processed
-            inbox_item_store().mark_processed(inbox_item["id"])
-
-            # Publish inbox.item.added event
-            publish_inbox_item_added(inbox_item, event_id)
-
-            # Publish task.created event
-            publish_task_created(task, event_id)
-
-          {:error, reason} ->
-            Logger.error("Failed to create task from inbox: #{inspect(reason)}")
-            publish_error(event_id, reason, "Failed to create task from inbox")
-        end
+        # Request parsing from LLM bot
+        publish_parse_request(raw_text, inbox_item["id"], source, source_metadata, event_id)
 
       {:error, reason} ->
         Logger.error("Failed to create inbox item: #{inspect(reason)}")
@@ -125,14 +101,28 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
     }
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
-      :ok -> Logger.debug("Published inbox.item.added event")
+      {:ok, _subject} -> Logger.debug("Published inbox.item.added event")
       {:error, reason} -> Logger.error("Failed to publish inbox event: #{inspect(reason)}")
     end
   end
 
-  defp publish_task_created(task, event_id) do
+  defp publish_parse_request(raw_text, inbox_item_id, source, source_metadata, event_id) do
+    # Request LLM bot to parse the raw text into structured task data
+    output_schema = %{
+      "type" => "object",
+      "required" => ["title"],
+      "properties" => %{
+        "title" => %{"type" => "string"},
+        "description" => %{"type" => "string"},
+        "project" => %{"type" => "string"},
+        "priority" => %{"enum" => ["low", "normal", "high"]},
+        "due_date" => %{"type" => "string"},
+        "tags" => %{"type" => "array", "items" => %{"type" => "string"}}
+      }
+    }
+
     event_data = %{
-      "event" => "gtd.task.created",
+      "event" => "llm.response.parse",
       "event_id" => UUID.uuid4(),
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "source" => "bot_army_gtd",
@@ -140,14 +130,18 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
       "triggered_by" => "gtd.bot",
       "schema_version" => "1.0",
       "payload" => %{
-        "task" => task,
+        "text" => raw_text,
+        "output_schema" => output_schema,
+        "inbox_item_id" => inbox_item_id,
+        "source" => source,
+        "source_metadata" => source_metadata,
         "triggered_by_event_id" => event_id
       }
     }
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
-      :ok -> Logger.debug("Published task.created event")
-      {:error, reason} -> Logger.error("Failed to publish task event: #{inspect(reason)}")
+    case BotArmyRuntime.NATS.Publisher.publish("llm.response.parse", event_data) do
+      {:ok, _subject} -> Logger.debug("Published parse request to LLM bot")
+      {:error, reason} -> Logger.error("Failed to publish parse request: #{inspect(reason)}")
     end
   end
 
@@ -168,7 +162,7 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
     }
 
     case BotArmyGtd.NATS.Publisher.publish(error_event) do
-      :ok -> Logger.debug("Published error event")
+      {:ok, _subject} -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
   end

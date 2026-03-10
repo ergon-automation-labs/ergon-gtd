@@ -44,6 +44,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   Route decoded message to appropriate handler based on event type.
 
   This is the core dispatch logic that routes incoming messages to handlers.
+  Handles both GTD-internal events and cross-bot events from LLM bot.
   """
   def route_message(message) do
     event = message["event"]
@@ -57,7 +58,8 @@ defmodule BotArmyGtd.NATS.Consumer do
       "gtd.task.command.delete" -> BotArmyGtd.Handlers.TaskHandler.handle_delete(message)
       "gtd.project.create" -> BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
       "gtd.project.update" -> BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
-      _ -> Logger.debug("Unknown GTD event type: #{event}")
+      "llm.response.parsed" -> BotArmyGtd.Handlers.InboxParsingHandler.handle_parse(message)
+      _ -> Logger.debug("Unknown event type: #{event}")
     end
   end
 
@@ -91,7 +93,8 @@ defmodule BotArmyGtd.NATS.Consumer do
             "gtd.task.command.defer",
             "gtd.task.command.delete",
             "gtd.project.create",
-            "gtd.project.update"
+            "gtd.project.update",
+            "llm.response.parsed"
           ]
           |> Enum.map(fn subject ->
             case Gnat.sub(conn, self(), subject) do

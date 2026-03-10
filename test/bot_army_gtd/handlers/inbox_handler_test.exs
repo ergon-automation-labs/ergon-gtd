@@ -5,37 +5,16 @@ defmodule BotArmyGtd.Handlers.InboxHandlerTest do
   setup :verify_on_exit!
 
   describe "handle_add/1" do
-    test "successfully adds inbox item and creates task" do
-      inbox_payload = %{
-        "raw_text" => "Buy milk",
-        "source" => "user",
-        "source_metadata" => %{}
-      }
-
+    test "successfully adds inbox item and requests parsing from LLM" do
       expected_inbox_item = %{
-        "id" => "inbox-1",
+        "id" => UUID.uuid4() |> to_string(),
         "raw_text" => "Buy milk",
         "source" => "user",
         "source_metadata" => %{}
-      }
-
-      expected_task = %{
-        "id" => "task-1",
-        "title" => "Buy milk",
-        "project_id" => "_inbox",
-        "status" => "inbox"
       }
 
       expect(BotArmyGtd.InboxItemStoreMock, :create, fn payload when is_map(payload) ->
         {:ok, expected_inbox_item}
-      end)
-
-      expect(BotArmyGtd.TaskStoreMock, :create, fn payload when is_map(payload) ->
-        {:ok, expected_task}
-      end)
-
-      expect(BotArmyGtd.InboxItemStoreMock, :mark_processed, fn "inbox-1" ->
-        {:ok, %{"id" => "inbox-1", "status" => "processed"}}
       end)
 
       message = valid_add_message()
@@ -51,34 +30,15 @@ defmodule BotArmyGtd.Handlers.InboxHandlerTest do
     end
 
     test "accepts custom source" do
-      inbox_payload = %{
+      expected_inbox_item = %{
+        "id" => UUID.uuid4() |> to_string(),
         "raw_text" => "Custom task",
         "source" => "job_bot",
         "source_metadata" => %{}
       }
 
-      expected_inbox_item = %{
-        "id" => "inbox-2",
-        "raw_text" => "Custom task",
-        "source" => "job_bot"
-      }
-
-      expected_task = %{
-        "id" => "task-2",
-        "title" => "Custom task",
-        "project_id" => "_inbox"
-      }
-
       expect(BotArmyGtd.InboxItemStoreMock, :create, fn _payload ->
         {:ok, expected_inbox_item}
-      end)
-
-      expect(BotArmyGtd.TaskStoreMock, :create, fn _payload ->
-        {:ok, expected_task}
-      end)
-
-      expect(BotArmyGtd.InboxItemStoreMock, :mark_processed, fn "inbox-2" ->
-        {:ok, %{}}
       end)
 
       message =
@@ -90,31 +50,27 @@ defmodule BotArmyGtd.Handlers.InboxHandlerTest do
 
     test "accepts source metadata" do
       expected_inbox_item = %{
-        "id" => "inbox-3",
+        "id" => UUID.uuid4() |> to_string(),
         "raw_text" => "Task with metadata"
-      }
-
-      expected_task = %{
-        "id" => "task-3",
-        "title" => "Task with metadata"
       }
 
       expect(BotArmyGtd.InboxItemStoreMock, :create, fn _payload ->
         {:ok, expected_inbox_item}
       end)
 
-      expect(BotArmyGtd.TaskStoreMock, :create, fn _payload ->
-        {:ok, expected_task}
-      end)
-
-      expect(BotArmyGtd.InboxItemStoreMock, :mark_processed, fn "inbox-3" ->
-        {:ok, %{}}
-      end)
-
       message =
         valid_add_message()
         |> put_in(["payload", "source_metadata"], %{"sender_id" => "123"})
 
+      assert :ok = BotArmyGtd.Handlers.InboxHandler.handle_add(message)
+    end
+
+    test "publishes error when inbox item creation fails" do
+      expect(BotArmyGtd.InboxItemStoreMock, :create, fn _payload ->
+        {:error, :database_error}
+      end)
+
+      message = valid_add_message()
       assert :ok = BotArmyGtd.Handlers.InboxHandler.handle_add(message)
     end
   end
