@@ -37,7 +37,8 @@ defmodule BotArmyGtd.MixProject do
       {:ex_doc, "~> 0.30", only: :dev},
       {:credo, "~> 1.7", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev, :test]},
-      {:excoveralls, "~> 0.17", only: :test}
+      {:excoveralls, "~> 0.17", only: :test},
+      {:mox, "~> 1.0", only: :test}
     ]
   end
 end

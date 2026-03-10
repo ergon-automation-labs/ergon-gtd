@@ -1,5 +1,10 @@
 import Config
 
+# Test configuration uses mocks instead of real database stores
+config :bot_army_gtd, :task_store, BotArmyGtd.TaskStoreMock
+config :bot_army_gtd, :project_store, BotArmyGtd.ProjectStoreMock
+config :bot_army_gtd, :inbox_item_store, BotArmyGtd.InboxItemStoreMock
+
 # Test against Kubernetes PostgreSQL (via NodePort)
 # Uses same configuration as production, just with test database
 config :bot_army_gtd, BotArmyGtd.Repo,
