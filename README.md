@@ -36,9 +36,11 @@ mix credo                        # Linting
 | `gtd.task.complete` | TaskHandler | Mark task complete |
 | `gtd.task.command.defer` | TaskHandler | Defer task |
 | `gtd.task.command.delete` | TaskHandler | Delete task |
+| `gtd.task.decompose` | DecompositionHandler | Request multi-step task decomposition (Phase 2) |
 | `gtd.project.create` | ProjectHandler | Create project |
 | `gtd.project.update` | ProjectHandler | Update project |
 | `llm.response.parsed` | InboxParsingHandler | Receive parsed inbox text (Phase 1) |
+| `llm.chain.completed` | DecompositionHandler | Receive decomposition chain results (Phase 2) |
 
 ### Outgoing Messages
 
@@ -48,9 +50,11 @@ mix credo                        # Linting
 | `gtd.task.created` | InboxParsingHandler / TaskHandler | Created task (structured if from inbox parsing) |
 | `gtd.task.updated` | TaskHandler | Updated task |
 | `gtd.task.completed` | TaskHandler | Task marked complete |
+| `gtd.decomposition.completed` | DecompositionHandler | Task decomposition completed with subtasks (Phase 2) |
 | `gtd.project.created` | ProjectHandler | Created project |
 | `gtd.project.updated` | ProjectHandler | Updated project |
 | `gtd.error` | Any handler | Error during processing |
+| `llm.inference.chain` | DecompositionHandler | Request LLM bot for multi-step chain inference (Phase 2) |
 
 ## Architecture
 
@@ -77,6 +81,33 @@ InboxParsingHandler
   └── Publish gtd.task.created
 ```
 
+### Request Flow (Phase 2: Task Decomposition)
+
+```
+Complex task (from Phase 1 or manual creation)
+  ↓
+gtd.task.decompose
+  ↓
+DecompositionHandler
+  ├── Validate payload and fetch task
+  └── Publish llm.inference.chain with 3 steps:
+      1. Break task into 3-5 subtasks
+      2. Estimate effort for each subtask
+      3. Identify dependencies between subtasks
+        ↓ [async via NATS]
+  LLM bot InferenceHandler
+  ├── Execute 3-step chain
+  ├── Collect step outputs
+  └── Publish llm.chain.completed
+        ↓
+GTD Consumer
+  ↓
+DecompositionHandler.handle_chain_completed
+  ├── Parse decomposition results
+  ├── Store in DecompositionStore (with FSRS fields for Phase 3+)
+  └── Publish gtd.decomposition.completed
+```
+
 ### Key Modules
 
 - **BotArmyGtd.NATS.Consumer** - Routes messages to handlers
@@ -84,7 +115,8 @@ InboxParsingHandler
 - **BotArmyGtd.Handlers.InboxParsingHandler** - Creates tasks from parsed text (v0.2.0+)
 - **BotArmyGtd.Handlers.TaskHandler** - Task creation/updates
 - **BotArmyGtd.Handlers.ProjectHandler** - Project management
-- **BotArmyGtd.{TaskStore, ProjectStore, InboxItemStore}** - GenServer-based persistence with DB fallback
+- **BotArmyGtd.Handlers.DecompositionHandler** - Multi-step task decomposition (Phase 2)
+- **BotArmyGtd.{TaskStore, ProjectStore, InboxItemStore, DecompositionStore}** - GenServer-based persistence with DB fallback
 
 ## Phase Progress
 
@@ -94,15 +126,28 @@ InboxParsingHandler
 - Request correlation via inbox_item_id
 - 8 comprehensive tests for InboxParsingHandler
 
-### Phase 2: Task Decomposition 🔄 PLANNED (v0.3.0)
-- Multi-step breakdown of complex tasks
-- Uses llm.inference.chain for step-by-step refinement
-- Creates sub-task relationships with dependencies
+### Phase 2: Task Decomposition 🔄 IN PROGRESS (v0.3.0)
+- Multi-step breakdown of complex tasks via llm.inference.chain
+- DecompositionStore with FSRS fields (baked in for Phase 3+ learning)
+- Predicted vs actual effort tracking
+- 9 comprehensive tests for DecompositionHandler
+- NATS interface: gtd.task.decompose → llm.chain.completed → gtd.decomposition.completed
 
-### Phase 3: Task Clarification 🔄 PLANNED (v0.4.0)
-- Multi-turn conversation for ambiguous tasks
-- Uses llm.inference.converse for interactive clarification
-- Maintains conversation history per task
+### Phase 3: Decomposition Review Queue 🔄 PLANNED (v0.4.0)
+- User review of decomposition suggestions before task creation
+- 1-5 star rating feedback collection
+- Accuracy tracking by task type and complexity
+- Learning system setup (metrics collection)
+
+### Phase 4: Learning System 🔄 FUTURE (v1.0)
+- Unified learning from decomposition feedback
+- Personalized prompt adjustment based on accuracy history
+- Cross-domain pattern detection
+
+### Phase 5: Learning Bot Integration 🔄 FUTURE
+- DecompositionCard scoring feeds Learning Bot
+- Surface decomposition as learnable skill
+- Tease model for decomposition improvement
 
 ## Expected Traffic
 

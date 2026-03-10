@@ -85,12 +85,14 @@ mix deps.get
 mix test
 ```
 
-### Key Modules to Implement
+### Key Modules
 
 1. **BotArmyGtd.NATS.Consumer** - Subscribe to NATS subjects
 2. **BotArmyGtd.Handlers.InboxHandler** - Process inbox messages
 3. **BotArmyGtd.Handlers.TaskHandler** - Handle task operations
 4. **BotArmyGtd.Handlers.ProjectHandler** - Manage projects
+5. **BotArmyGtd.Handlers.DecompositionHandler** - Multi-step task decomposition (Phase 2)
+6. **BotArmyGtd.DecompositionStore** - Store decomposition results with FSRS fields
 
 ### Message Subjects
 

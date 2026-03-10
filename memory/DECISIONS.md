@@ -270,3 +270,67 @@ Implement asynchronous inbox text parsing using LLM bot:
 - bot_army_llm v0.5.2 - Must deploy before this
 - memory/GTD_LLM_INTEGRATION.md (overall roadmap)
 
+---
+
+## Decision: Phase 2 Multi-Step Task Decomposition (v0.3.0)
+
+**Date:** 2026-03-10
+**Status:** Implemented
+**Modules:** DecompositionHandler, DecompositionStore, DecompositionStoreBehaviour
+**Version:** 0.3.0
+
+**Problem:**
+Complex tasks (e.g., "Implement authentication system") captured as single inbox items remain monolithic. No breakdown into subtasks, effort estimates, or dependency tracking. Blocks realistic system traffic generation and testing of multi-step LLM workflows.
+
+**Decision:**
+Implement multi-step task decomposition using llm.inference.chain:
+
+1. **DecompositionHandler** (gtd.task.decompose):
+   - Accepts decomposition requests for complex tasks
+   - Orchestrates 3-step LLM chain: break down → estimate effort → identify dependencies
+   - Publishes llm.inference.chain request to LLM bot
+
+2. **Handle Chain Completion** (llm.chain.completed):
+   - Parses multi-step outputs from LLM chain
+   - Extracts subtasks, effort estimates, dependencies
+   - Stores in DecompositionStore with FSRS fields (Phase 3+ ready)
+   - Publishes gtd.decomposition.completed event
+
+3. **Schema Design** - Bake in Phase 3+ extensibility:
+   - FSRS fields: stability, difficulty, due_at, review_count, last_grade
+   - Predicted vs actual: predicted_subtask_count, predicted_effort, actual_*, missing_subtasks
+   - User feedback: user_rating (1-5), user_feedback, confidence_grade
+   - Metadata: source_domain, source_complexity_estimate
+
+**Rationale:**
+- Multi-step chain is foundation for future learning (Phase 3+)
+- FSRS schema mirrors Learning Bot design, enabling seamless integration Phase 5+
+- Baking in learning fields now prevents refactoring when Learning Bot built
+- Generates 25 llm.inference.chain calls/week (realistic traffic for bot_army_llm testing)
+
+**Alternatives Considered:**
+- Single-step LLM call - rejected: loses chain refinement, no learning foundation
+- Delay FSRS fields to Phase 3 - rejected: causes refactoring when learning added
+
+**Schema Fields (Baked In):**
+- Predicted: subtask_count, total_effort_hours, dependencies list
+- Actual: subtask_count, total_effort_hours, missing_subtasks, extra_subtasks
+- FSRS: stability, difficulty, due_at, review_count, last_grade
+- Feedback: user_rating (1-5), user_feedback, confidence_grade
+- Phase 3+: review_queue_id, decomposition_timestamp
+
+**Testing:**
+- 9 comprehensive DecompositionHandler tests
+- Mox for store mocking, Mox for dependency injection
+- Covers: happy path, JSON parsing errors, task not found, validation failures
+
+**Future Phases:**
+- Phase 3 (v0.4.0): Review queue (user approves/edits before subtask creation)
+- Phase 4 (v1.0): Learning system (accuracy tracking, personalized prompts)
+- Phase 5 (future): Learning Bot integration (decomposition as learnable skill)
+
+**Related:**
+- memory/LEARNING_BOT_INTEGRATION_VISION.md - Full decomposition learning roadmap
+- memory/PHASE2_PLAN_WITH_DOTFILES_VISION.md - Phase 2 design with extensibility
+- memory/DOTFILES_GTD_LEARNINGS.md - Patterns from 2+ years of production GTD
+
