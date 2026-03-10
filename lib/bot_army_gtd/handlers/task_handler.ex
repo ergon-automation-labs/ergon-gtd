@@ -229,7 +229,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     }
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
-      :ok -> Logger.debug("Published event: #{event_type}")
+      {:ok, _subject} -> Logger.debug("Published event: #{event_type}")
       {:error, reason} -> Logger.error("Failed to publish event: #{inspect(reason)}")
     end
   end
@@ -251,7 +251,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     }
 
     case BotArmyGtd.NATS.Publisher.publish(error_event) do
-      :ok -> Logger.debug("Published error event")
+      {:ok, _subject} -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
   end

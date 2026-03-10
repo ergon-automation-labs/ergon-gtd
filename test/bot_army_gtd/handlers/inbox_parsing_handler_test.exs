@@ -30,10 +30,11 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandlerTest do
   end
 
   setup do
+    original_store = Application.get_env(:bot_army_gtd, :task_store)
     Application.put_env(:bot_army_gtd, :task_store, TestTaskStoreMock)
 
     on_exit(fn ->
-      Application.put_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+      Application.put_env(:bot_army_gtd, :task_store, original_store)
     end)
 
     :ok
