@@ -71,6 +71,72 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
+  @doc """
+  Handle decomposition approval - creates subtasks from approved decomposition.
+
+  Validates the request, fetches the decomposition, creates subtasks in
+  TaskStore for each item in subtask_list, and publishes completion event.
+
+  Returns `:ok` if successful.
+  """
+  def handle_approve(message) do
+    event_id = message["event_id"]
+    payload = message["payload"]
+
+    case validate_approve_payload(payload) do
+      :ok ->
+        process_approve(payload, event_id, message)
+
+      {:error, reason} ->
+        Logger.warning("Invalid approval payload: #{inspect(reason)}")
+        publish_error(event_id, reason, "Invalid decomposition approval")
+    end
+  end
+
+  @doc """
+  Handle decomposition rejection - marks as reviewed with grade 0.
+
+  Validates the request, fetches the decomposition, updates status to "reviewed"
+  and sets last_grade to 0 (FSRS "again" grade).
+
+  Returns `:ok` if successful.
+  """
+  def handle_reject(message) do
+    event_id = message["event_id"]
+    payload = message["payload"]
+
+    case validate_reject_payload(payload) do
+      :ok ->
+        process_reject(payload, event_id, message)
+
+      {:error, reason} ->
+        Logger.warning("Invalid rejection payload: #{inspect(reason)}")
+        publish_error(event_id, reason, "Invalid decomposition rejection")
+    end
+  end
+
+  @doc """
+  Handle decomposition review with user rating and feedback.
+
+  Validates the request, fetches the decomposition, calculates FSRS grade
+  based on user rating and accuracy delta, and publishes reviewed event.
+
+  Returns `:ok` if successful.
+  """
+  def handle_review(message) do
+    event_id = message["event_id"]
+    payload = message["payload"]
+
+    case validate_review_payload(payload) do
+      :ok ->
+        process_review(payload, event_id, message)
+
+      {:error, reason} ->
+        Logger.warning("Invalid review payload: #{inspect(reason)}")
+        publish_error(event_id, reason, "Invalid decomposition review")
+    end
+  end
+
   # Private validation
 
   defp validate_decompose_payload(payload) when is_map(payload) do
@@ -92,6 +158,35 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp validate_chain_completed_payload(_), do: {:error, :invalid_payload}
+
+  defp validate_approve_payload(payload) when is_map(payload) do
+    with :ok <- require_field(payload, "decomposition_id") do
+      :ok
+    end
+  end
+
+  defp validate_approve_payload(_), do: {:error, :invalid_payload}
+
+  defp validate_reject_payload(payload) when is_map(payload) do
+    with :ok <- require_field(payload, "decomposition_id") do
+      :ok
+    end
+  end
+
+  defp validate_reject_payload(_), do: {:error, :invalid_payload}
+
+  defp validate_review_payload(payload) when is_map(payload) do
+    with :ok <- require_field(payload, "decomposition_id"),
+         :ok <- require_field(payload, "rating") do
+      # Validate rating is integer 1-5
+      case payload do
+        %{"rating" => rating} when is_integer(rating) and rating >= 1 and rating <= 5 -> :ok
+        _ -> {:error, :invalid_rating}
+      end
+    end
+  end
+
+  defp validate_review_payload(_), do: {:error, :invalid_payload}
 
   defp require_field(payload, field) do
     case payload do
@@ -159,6 +254,130 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       {:error, reason} ->
         Logger.error("Failed to parse decomposition steps: #{inspect(reason)}")
         publish_error(event_id, reason, "Failed to parse decomposition results")
+    end
+  end
+
+  defp process_approve(payload, event_id, _message) do
+    decomposition_id = payload["decomposition_id"]
+
+    case decomposition_store().get(decomposition_id) do
+      {:ok, decomposition} ->
+        subtask_list = get_subtask_list(decomposition)
+
+        # Create subtasks in TaskStore for each item in subtask_list
+        parent_task_id = decomposition["parent_task_id"]
+
+        created_subtasks =
+          Enum.map(subtask_list, fn subtask ->
+            subtask_payload = %{
+              "title" => subtask["title"],
+              "description" => subtask["description"],
+              "parent_task_id" => parent_task_id,
+              "status" => "inbox",
+              "estimated_hours" => subtask["estimated_hours"]
+            }
+
+            case task_store().create(subtask_payload) do
+              {:ok, task} ->
+                publish_task_created(task, event_id)
+                {:ok, task}
+
+              {:error, reason} ->
+                Logger.warning("Failed to create subtask: #{inspect(reason)}")
+                {:error, reason}
+            end
+          end)
+
+        # Count successful creates
+        successful_count =
+          Enum.count(created_subtasks, fn result -> match?({:ok, _}, result) end)
+
+        # Update decomposition
+        updated_decomposition =
+          decomposition
+          |> Map.put("actual_subtask_count", successful_count)
+          |> Map.put("status", "reviewed")
+
+        case decomposition_store().update(decomposition_id, updated_decomposition) do
+          {:ok, updated} ->
+            Logger.info("Decomposition approved: decomposition_id=#{decomposition_id}, created #{successful_count} subtasks")
+            publish_decomposition_approved(updated, event_id)
+
+          {:error, reason} ->
+            Logger.error("Failed to update decomposition: #{inspect(reason)}")
+            publish_error(event_id, reason, "Failed to update decomposition after approval")
+        end
+
+      {:error, :not_found} ->
+        Logger.warning("Decomposition not found for approval: #{decomposition_id}")
+        publish_error(event_id, :not_found, "Decomposition not found")
+    end
+  end
+
+  defp process_reject(payload, event_id, _message) do
+    decomposition_id = payload["decomposition_id"]
+
+    case decomposition_store().get(decomposition_id) do
+      {:ok, decomposition} ->
+        # Update with last_grade=0 (FSRS "again") and status="reviewed"
+        updated_decomposition =
+          decomposition
+          |> Map.put("last_grade", 0)
+          |> Map.put("status", "reviewed")
+
+        case decomposition_store().update(decomposition_id, updated_decomposition) do
+          {:ok, updated} ->
+            Logger.info("Decomposition rejected: decomposition_id=#{decomposition_id}")
+            publish_decomposition_reviewed(updated, event_id)
+
+          {:error, reason} ->
+            Logger.error("Failed to update decomposition on rejection: #{inspect(reason)}")
+            publish_error(event_id, reason, "Failed to update decomposition on rejection")
+        end
+
+      {:error, :not_found} ->
+        Logger.warning("Decomposition not found for rejection: #{decomposition_id}")
+        publish_error(event_id, :not_found, "Decomposition not found")
+    end
+  end
+
+  defp process_review(payload, event_id, _message) do
+    decomposition_id = payload["decomposition_id"]
+    rating = payload["rating"]
+    user_feedback = Map.get(payload, "feedback", "")
+
+    case decomposition_store().get(decomposition_id) do
+      {:ok, decomposition} ->
+        predicted_count = decomposition["predicted_subtask_count"]
+        actual_count = decomposition["actual_subtask_count"]
+        review_count = Map.get(decomposition, "review_count", 0)
+
+        # Calculate accuracy delta and FSRS grade
+        delta = calculate_accuracy_delta(predicted_count, actual_count)
+        fsrs_grade = calculate_fsrs_grade(rating, delta)
+
+        # Update decomposition with review data
+        updated_decomposition =
+          decomposition
+          |> Map.put("user_rating", rating)
+          |> Map.put("user_feedback", user_feedback)
+          |> Map.put("confidence_grade", delta)
+          |> Map.put("last_grade", fsrs_grade)
+          |> Map.put("review_count", review_count + 1)
+
+        case decomposition_store().update(decomposition_id, updated_decomposition) do
+          {:ok, updated} ->
+            Logger.info("Decomposition reviewed: decomposition_id=#{decomposition_id}, rating=#{rating}, grade=#{fsrs_grade}")
+            publish_decomposition_reviewed(updated, event_id)
+
+          {:error, reason} ->
+            Logger.error("Failed to update decomposition on review: #{inspect(reason)}")
+            publish_error(event_id, reason, "Failed to update decomposition on review")
+        end
+
+      {:error, :not_found} ->
+        Logger.warning("Decomposition not found for review: #{decomposition_id}")
+        publish_error(event_id, :not_found, "Decomposition not found")
     end
   end
 
@@ -277,6 +496,33 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
   defp sum_effort(_), do: 0.0
 
+  # FSRS and approval helpers
+
+  defp get_subtask_list(decomposition) do
+    case decomposition["subtask_list"] do
+      list when is_list(list) -> list
+      _ -> []
+    end
+  end
+
+  defp calculate_accuracy_delta(nil, _), do: 0.0
+  defp calculate_accuracy_delta(_, nil), do: 0.0
+  defp calculate_accuracy_delta(0, _), do: 0.0
+
+  defp calculate_accuracy_delta(predicted, actual) do
+    (abs(predicted - actual) / predicted)
+  end
+
+  defp calculate_fsrs_grade(rating, delta) do
+    cond do
+      rating < 3 or delta > 0.3 -> 0
+      rating == 3 and delta > 0.2 -> 1
+      rating == 4 and delta < 0.2 -> 2
+      rating == 5 and delta < 0.1 -> 3
+      true -> 2
+    end
+  end
+
   defp publish_chain_request(chain_id, steps, model, task_id, event_id) do
     event_data = %{
       "event" => "llm.inference.chain",
@@ -322,6 +568,69 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published decomposition.completed event")
       {:error, reason} -> Logger.error("Failed to publish decomposition event: #{inspect(reason)}")
+    end
+  end
+
+  defp publish_task_created(task, event_id) do
+    event_data = %{
+      "event" => "gtd.task.created",
+      "event_id" => UUID.uuid4(),
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => "bot_army_gtd",
+      "source_node" => get_node_name(),
+      "triggered_by" => "gtd.bot",
+      "schema_version" => "1.0",
+      "payload" => %{
+        "task" => task,
+        "triggered_by_event_id" => event_id
+      }
+    }
+
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+      {:ok, _subject} -> Logger.debug("Published task.created event for task #{task["id"]}")
+      {:error, reason} -> Logger.error("Failed to publish task.created event: #{inspect(reason)}")
+    end
+  end
+
+  defp publish_decomposition_approved(decomposition, event_id) do
+    event_data = %{
+      "event" => "gtd.decomposition.approved",
+      "event_id" => UUID.uuid4(),
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => "bot_army_gtd",
+      "source_node" => get_node_name(),
+      "triggered_by" => "gtd.bot",
+      "schema_version" => "1.0",
+      "payload" => %{
+        "decomposition" => decomposition,
+        "triggered_by_event_id" => event_id
+      }
+    }
+
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+      {:ok, _subject} -> Logger.debug("Published decomposition.approved event")
+      {:error, reason} -> Logger.error("Failed to publish decomposition.approved event: #{inspect(reason)}")
+    end
+  end
+
+  defp publish_decomposition_reviewed(decomposition, event_id) do
+    event_data = %{
+      "event" => "gtd.decomposition.reviewed",
+      "event_id" => UUID.uuid4(),
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => "bot_army_gtd",
+      "source_node" => get_node_name(),
+      "triggered_by" => "gtd.bot",
+      "schema_version" => "1.0",
+      "payload" => %{
+        "decomposition" => decomposition,
+        "triggered_by_event_id" => event_id
+      }
+    }
+
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+      {:ok, _subject} -> Logger.debug("Published decomposition.reviewed event")
+      {:error, reason} -> Logger.error("Failed to publish decomposition.reviewed event: #{inspect(reason)}")
     end
   end
 

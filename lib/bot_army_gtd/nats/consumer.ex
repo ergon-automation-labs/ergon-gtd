@@ -57,6 +57,9 @@ defmodule BotArmyGtd.NATS.Consumer do
       "gtd.task.command.defer" -> BotArmyGtd.Handlers.TaskHandler.handle_defer(message)
       "gtd.task.command.delete" -> BotArmyGtd.Handlers.TaskHandler.handle_delete(message)
       "gtd.task.decompose" -> BotArmyGtd.Handlers.DecompositionHandler.handle_decompose(message)
+      "gtd.decomposition.approve" -> BotArmyGtd.Handlers.DecompositionHandler.handle_approve(message)
+      "gtd.decomposition.reject" -> BotArmyGtd.Handlers.DecompositionHandler.handle_reject(message)
+      "gtd.decomposition.review" -> BotArmyGtd.Handlers.DecompositionHandler.handle_review(message)
       "gtd.project.create" -> BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
       "gtd.project.update" -> BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
       "llm.response.parsed" -> BotArmyGtd.Handlers.InboxParsingHandler.handle_parse(message)
@@ -95,6 +98,9 @@ defmodule BotArmyGtd.NATS.Consumer do
             "gtd.task.command.defer",
             "gtd.task.command.delete",
             "gtd.task.decompose",
+            "gtd.decomposition.approve",
+            "gtd.decomposition.reject",
+            "gtd.decomposition.review",
             "gtd.project.create",
             "gtd.project.update",
             "llm.response.parsed",
