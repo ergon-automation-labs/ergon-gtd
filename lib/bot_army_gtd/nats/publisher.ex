@@ -41,9 +41,13 @@ defmodule BotArmyGtd.NATS.Publisher do
       body = Jason.encode!(event)
 
       case do_publish(subject, body) do
+        {:ok, _subject} ->
+          Logger.debug("Published event to #{subject}")
+          {:ok, subject}
+
         :ok ->
           Logger.debug("Published event to #{subject}")
-          :ok
+          {:ok, subject}
 
         {:error, reason} ->
           Logger.error("Failed to publish to #{subject}: #{inspect(reason)}")
@@ -76,9 +80,11 @@ defmodule BotArmyGtd.NATS.Publisher do
   defp derive_subject(event_type) when is_binary(event_type) do
     # Map internal event types to NATS subject
     case event_type do
+      "gtd.inbox.item.added" -> "events.gtd.inbox.item.added"
       "gtd.task.created" -> "events.gtd.task.created"
       "gtd.task.updated" -> "events.gtd.task.updated"
       "gtd.task.completed" -> "events.gtd.task.completed"
+      "gtd.decomposition.completed" -> "events.gtd.decomposition.completed"
       "gtd.project.created" -> "events.gtd.project.created"
       "gtd.project.updated" -> "events.gtd.project.updated"
       "gtd.error" -> "events.gtd.error"

@@ -56,9 +56,11 @@ defmodule BotArmyGtd.NATS.Consumer do
       "gtd.task.complete" -> BotArmyGtd.Handlers.TaskHandler.handle_complete(message)
       "gtd.task.command.defer" -> BotArmyGtd.Handlers.TaskHandler.handle_defer(message)
       "gtd.task.command.delete" -> BotArmyGtd.Handlers.TaskHandler.handle_delete(message)
+      "gtd.task.decompose" -> BotArmyGtd.Handlers.DecompositionHandler.handle_decompose(message)
       "gtd.project.create" -> BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
       "gtd.project.update" -> BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
       "llm.response.parsed" -> BotArmyGtd.Handlers.InboxParsingHandler.handle_parse(message)
+      "llm.chain.completed" -> BotArmyGtd.Handlers.DecompositionHandler.handle_chain_completed(message)
       _ -> Logger.debug("Unknown event type: #{event}")
     end
   end
@@ -92,9 +94,11 @@ defmodule BotArmyGtd.NATS.Consumer do
             "gtd.task.complete",
             "gtd.task.command.defer",
             "gtd.task.command.delete",
+            "gtd.task.decompose",
             "gtd.project.create",
             "gtd.project.update",
-            "llm.response.parsed"
+            "llm.response.parsed",
+            "llm.chain.completed"
           ]
           |> Enum.map(fn subject ->
             case Gnat.sub(conn, self(), subject) do

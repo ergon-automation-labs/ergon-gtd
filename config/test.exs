@@ -4,6 +4,7 @@ import Config
 config :bot_army_gtd, :task_store, BotArmyGtd.TaskStoreMock
 config :bot_army_gtd, :project_store, BotArmyGtd.ProjectStoreMock
 config :bot_army_gtd, :inbox_item_store, BotArmyGtd.InboxItemStoreMock
+config :bot_army_gtd, :decomposition_store, BotArmyGtd.DecompositionStoreMock
 
 # Test against Kubernetes PostgreSQL (via NodePort)
 # Uses same configuration as production, just with test database

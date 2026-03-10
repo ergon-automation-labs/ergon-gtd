@@ -18,6 +18,7 @@ defmodule BotArmyGtd.Application do
     |> maybe_add_task_store()
     |> maybe_add_project_store()
     |> maybe_add_inbox_item_store()
+    |> maybe_add_decomposition_store()
     |> maybe_add_consumer()
 
     opts = [strategy: :one_for_one, name: BotArmyGtd.Supervisor]
@@ -51,6 +52,14 @@ defmodule BotArmyGtd.Application do
   defp maybe_add_inbox_item_store(children) do
     if Application.get_env(:bot_army_gtd, :inbox_item_store) == BotArmyGtd.InboxItemStore do
       [{BotArmyGtd.InboxItemStore, []} | children]
+    else
+      children
+    end
+  end
+
+  defp maybe_add_decomposition_store(children) do
+    if Application.get_env(:bot_army_gtd, :decomposition_store) == BotArmyGtd.DecompositionStore do
+      [{BotArmyGtd.DecompositionStore, []} | children]
     else
       children
     end
