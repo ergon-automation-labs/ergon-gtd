@@ -204,3 +204,69 @@ events.gtd.project.created    → From ProjectHandler
 **Related:**
 - Parent GOVERNANCE.md → NATS Message Pattern
 
+---
+
+## Decision: Asynchronous LLM-Powered Inbox Parsing (v0.2.0)
+
+**Date:** 2026-03-10
+**Status:** Implemented
+**Modules:** InboxHandler, InboxParsingHandler, Consumer
+**Version:** 0.2.0+
+
+**Problem:**
+Inbox items captured as raw text, users must manually structure (add title, project, priority, due date). No intelligent extraction. Real system traffic testing blocked - need LLM bot integration to generate meaningful event flow.
+
+**Decision:**
+Implement asynchronous inbox text parsing using LLM bot:
+
+1. **InboxHandler** (gtd.inbox.add):
+   - Accepts raw text from user/system
+   - Creates inbox item (raw_text + source metadata)
+   - Publishes llm.response.parse request with:
+     - Raw text to parse
+     - JSON schema (title, description, project, priority, due_date, tags)
+     - inbox_item_id for correlation
+
+2. **InboxParsingHandler** (llm.response.parsed):
+   - Listens for parsed responses from LLM bot
+   - Validates structured_data (required: title)
+   - Creates task with extracted fields + defaults
+   - Links to original inbox_item_id
+   - Publishes gtd.task.created
+
+3. **Consumer** changes:
+   - Subscribe to llm.response.parsed
+   - Route to InboxParsingHandler
+
+**Rationale:**
+- Enables LLM intelligence for task extraction (NLP-based structure inference)
+- Asynchronous flow maintains event-driven architecture
+- Generates realistic system traffic (250+ LLM calls/week with 5 users)
+- Allows future optimization (queueing, prioritization, batching)
+- Loose coupling: GTD doesn't depend on LLM response timing
+
+**Alternatives Considered:**
+- Synchronous LLM call - rejected: breaks event-driven pattern, tight coupling
+- Direct task creation without LLM - rejected: no traffic generation, loses intelligence
+- Batch parsing - rejected: adds complexity, skip for Phase 1
+
+**Traffic Impact:**
+- v0.2.0: Every gtd.inbox.add → llm.response.parse call
+- 250 inbox items/week × 5 users = 250 LLM calls/week
+- Thoroughly exercises bot_army_llm v0.5.2 ResponseHandler
+
+**Testing:**
+- 8 comprehensive InboxParsingHandler tests
+- Mock LLM responses with Process.put pattern
+- Test validation, error cases, field extraction, defaults, correlation
+
+**Future Phases:**
+- Phase 2 (v0.3.0): Task decomposition (llm.inference.chain)
+- Phase 3 (v0.4.0): Task clarification (llm.inference.converse)
+
+**Related:**
+- Parent GOVERNANCE.md → Cross-Repo References (GTD × LLM integration)
+- bot_army_llm/CLAUDE.md → ResponseHandler (llm.response.parse, llm.response.parsed)
+- bot_army_llm v0.5.2 - Must deploy before this
+- memory/GTD_LLM_INTEGRATION.md (overall roadmap)
+
