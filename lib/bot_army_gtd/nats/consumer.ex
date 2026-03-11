@@ -77,6 +77,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     state = %{
       subscriptions: [],
       reconnect_attempt: 0,
+      conn: nil,
       opts: opts
     }
 
@@ -104,7 +105,8 @@ defmodule BotArmyGtd.NATS.Consumer do
             "gtd.project.create",
             "gtd.project.update",
             "llm.response.parsed",
-            "llm.chain.completed"
+            "llm.chain.completed",
+            "gtd.task.list"
           ]
           |> Enum.map(fn subject ->
             case Gnat.sub(conn, self(), subject) do
@@ -119,7 +121,7 @@ defmodule BotArmyGtd.NATS.Consumer do
           end)
           |> Enum.filter(&(not is_nil(&1)))
 
-        {:noreply, %{state | subscriptions: subscriptions}}
+        {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
       {:error, _reason} ->
         Logger.warning("NATS connection not ready, will retry")
@@ -131,6 +133,27 @@ defmodule BotArmyGtd.NATS.Consumer do
   @impl true
   def handle_info(:connect_retry, state) do
     {:noreply, state, {:continue, :connect}}
+  end
+
+  @impl true
+  def handle_info({:msg, %{topic: "gtd.task.list", reply_to: reply_to} = _msg}, state)
+      when is_binary(reply_to) and reply_to != "" do
+    task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+
+    response =
+      case task_store.list() do
+        {:ok, tasks} ->
+          Jason.encode!(%{tasks: tasks})
+
+        {:error, reason} ->
+          Jason.encode!(%{error: inspect(reason), tasks: []})
+      end
+
+    if state.conn do
+      Gnat.pub(state.conn, reply_to, response)
+    end
+
+    {:noreply, state}
   end
 
   @impl true
