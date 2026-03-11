@@ -84,6 +84,7 @@ defmodule BotArmyGtd.NATS.Publisher do
       "gtd.task.created" -> "events.gtd.task.created"
       "gtd.task.updated" -> "events.gtd.task.updated"
       "gtd.task.completed" -> "events.gtd.task.completed"
+      "gtd.task.state.updated" -> "events.gtd.task.state.updated"
       "gtd.decomposition.completed" -> "events.gtd.decomposition.completed"
       "gtd.decomposition.reviewed" -> "events.gtd.decomposition.reviewed"
       "gtd.decomposition.approved" -> "events.gtd.decomposition.approved"
