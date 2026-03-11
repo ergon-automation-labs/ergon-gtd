@@ -242,7 +242,7 @@ defmodule BotArmyGtd.TaskStore do
 
   @impl true
   def handle_call(:list, _from, state) do
-    tasks = Map.values(state)
+    tasks = state |> Map.values() |> Enum.reject(&(&1["status"] in ["deleted", "completed"]))
     {:reply, {:ok, tasks}, state}
   end
 
