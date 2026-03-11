@@ -113,7 +113,7 @@ pipeline {
           echo "==============================================="
 
           # Get the release binary path
-          RELEASE_BIN="${RELEASE_DIR}/current/bot_army_gtd/bin/bot_army_gtd"
+          RELEASE_BIN="${RELEASE_DIR}/current/gtd_bot/bin/gtd_bot"
 
           if [ ! -f "$RELEASE_BIN" ]; then
             echo "⚠️  Release binary not found at $RELEASE_BIN"
@@ -123,9 +123,9 @@ pipeline {
 
           # Run migrations using the release
           # The release has database config from launchd environment
-          echo "Running: $RELEASE_BIN eval 'BotArmyGtd.Release.migrate()'"
+          echo "Running: $RELEASE_BIN eval 'GtdBot.Release.migrate()'"
 
-          $RELEASE_BIN eval 'BotArmyGtd.Release.migrate()' || {
+          $RELEASE_BIN eval 'GtdBot.Release.migrate()' || {
             echo "⚠️  Migration failed or Release module not found"
             echo "Continuing with deployment (manual migration may be needed)"
           }
@@ -140,11 +140,13 @@ pipeline {
   post {
     success {
       sh '''
-        # Extract version from the deployed release
-        if [ -f ./release-artifact/bot_army_gtd/releases/start_erl.data ]; then
-          VERSION=$(awk '{print $2}' ./release-artifact/bot_army_gtd/releases/start_erl.data)
+        # Extract version from the deployed release (not workspace - may be cleaned)
+        START_ERL="${RELEASE_DIR}/current/${BOT_NAME}/releases/start_erl.data"
+        if [ -f "$START_ERL" ]; then
+          VERSION=$(awk '{print $2}' "$START_ERL")
+        else
+          VERSION="unknown"
         fi
-        VERSION=${VERSION:-"0.1.0"}
 
         # Extract release timestamp and git SHA
         TIMESTAMP=$(basename $(readlink "${RELEASE_DIR}/current"))
