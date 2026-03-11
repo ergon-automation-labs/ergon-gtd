@@ -10,6 +10,8 @@ defmodule BotArmyGtd.Application do
 
   use Application
 
+  @env Mix.env()
+
   @impl true
   def start(_type, _args) do
     children = []
@@ -26,11 +28,11 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_repo(children) do
-    if Mix.env() == :test, do: children, else: [BotArmyGtd.Repo | children]
+    if @env == :test, do: children, else: [BotArmyGtd.Repo | children]
   end
 
   defp maybe_add_nats_connection(children) do
-    if Mix.env() == :test, do: children, else: [{BotArmyRuntime.NATS.Connection, []} | children]
+    if @env == :test, do: children, else: [{BotArmyRuntime.NATS.Connection, []} | children]
   end
 
   defp maybe_add_task_store(children) do
@@ -66,6 +68,6 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_consumer(children) do
-    if Mix.env() == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
+    if @env == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
   end
 end
