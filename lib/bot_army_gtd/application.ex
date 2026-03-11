@@ -31,35 +31,19 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_task_store(children) do
-    if Application.get_env(:bot_army_gtd, :task_store) == BotArmyGtd.TaskStore do
-      [{BotArmyGtd.TaskStore, []} | children]
-    else
-      children
-    end
+    if @env == :test, do: children, else: [{BotArmyGtd.TaskStore, []} | children]
   end
 
   defp maybe_add_project_store(children) do
-    if Application.get_env(:bot_army_gtd, :project_store) == BotArmyGtd.ProjectStore do
-      [{BotArmyGtd.ProjectStore, []} | children]
-    else
-      children
-    end
+    if @env == :test, do: children, else: [{BotArmyGtd.ProjectStore, []} | children]
   end
 
   defp maybe_add_inbox_item_store(children) do
-    if Application.get_env(:bot_army_gtd, :inbox_item_store) == BotArmyGtd.InboxItemStore do
-      [{BotArmyGtd.InboxItemStore, []} | children]
-    else
-      children
-    end
+    if @env == :test, do: children, else: [{BotArmyGtd.InboxItemStore, []} | children]
   end
 
   defp maybe_add_decomposition_store(children) do
-    if Application.get_env(:bot_army_gtd, :decomposition_store) == BotArmyGtd.DecompositionStore do
-      [{BotArmyGtd.DecompositionStore, []} | children]
-    else
-      children
-    end
+    if @env == :test, do: children, else: [{BotArmyGtd.DecompositionStore, []} | children]
   end
 
   defp maybe_add_consumer(children) do
