@@ -16,7 +16,6 @@ defmodule BotArmyGtd.Application do
   def start(_type, _args) do
     children = []
     |> maybe_add_repo()
-    |> maybe_add_nats_connection()
     |> maybe_add_task_store()
     |> maybe_add_project_store()
     |> maybe_add_inbox_item_store()
@@ -29,10 +28,6 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_repo(children) do
     if @env == :test, do: children, else: [BotArmyGtd.Repo | children]
-  end
-
-  defp maybe_add_nats_connection(children) do
-    if @env == :test, do: children, else: [{BotArmyRuntime.NATS.Connection, []} | children]
   end
 
   defp maybe_add_task_store(children) do
