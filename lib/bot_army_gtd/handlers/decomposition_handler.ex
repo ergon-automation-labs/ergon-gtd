@@ -210,9 +210,10 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
         # Build the multi-step decomposition chain
         steps = build_decomposition_chain(title, description)
+        initial_input = "#{title}\n#{if description != "", do: description, else: ""}"
 
         # Request LLM bot to run the inference chain
-        publish_chain_request(chain_id, steps, model, task_id, event_id)
+        publish_chain_request(chain_id, steps, initial_input, model, task_id, event_id)
 
       {:error, :not_found} ->
         Logger.warning("Task not found for decomposition: #{task_id}")
@@ -523,7 +524,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp publish_chain_request(chain_id, steps, model, task_id, event_id) do
+  defp publish_chain_request(chain_id, steps, initial_input, model, task_id, event_id) do
     event_data = %{
       "event" => "llm.inference.chain",
       "event_id" => UUID.uuid4(),
@@ -535,6 +536,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       "payload" => %{
         "chain_id" => chain_id,
         "steps" => steps,
+        "initial_input" => initial_input,
         "model" => model,
         "metadata" => %{
           "task_id" => task_id,

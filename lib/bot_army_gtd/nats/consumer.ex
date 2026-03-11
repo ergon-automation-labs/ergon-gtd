@@ -104,8 +104,8 @@ defmodule BotArmyGtd.NATS.Consumer do
             "gtd.decomposition.review",
             "gtd.project.create",
             "gtd.project.update",
-            "llm.response.parsed",
-            "llm.chain.completed",
+            "events.llm.response.parsed",
+            "events.llm.chain.completed",
             "gtd.task.list"
           ]
           |> Enum.map(fn subject ->
