@@ -230,7 +230,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     # Parse step outputs
     case parse_decomposition_steps(steps) do
       {:ok, parsed} ->
-        # Create decomposition record
+        # Initialize FSRS schedule for new decomposition
+        {initial_stability, initial_difficulty, initial_due_at} =
+          BotArmyGtd.FSRSScheduler.initial_schedule()
+
+        # Create decomposition record with FSRS fields
         decomposition_payload = %{
           "parent_task_id" => task_id,
           "status" => "completed",
@@ -239,12 +243,17 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
           "effort_estimates" => parsed["effort"],
           "dependencies" => parsed["dependencies"],
           "predicted_subtask_count" => length(parsed["subtasks"] || []),
-          "predicted_total_effort_hours" => parsed["total_hours"]
+          "predicted_total_effort_hours" => parsed["total_hours"],
+          "stability" => initial_stability,
+          "difficulty" => initial_difficulty,
+          "due_at" => initial_due_at,
+          "review_count" => 0,
+          "decomposition_timestamp" => DateTime.utc_now()
         }
 
         case decomposition_store().create(decomposition_payload) do
           {:ok, decomposition} ->
-            Logger.info("Decomposition created: decomposition_id=#{decomposition["id"]}, task_id=#{task_id}")
+            Logger.info("Decomposition created: decomposition_id=#{decomposition["id"]}, task_id=#{task_id}, first review in #{BotArmyGtd.FSRSScheduler.format_interval(initial_due_at)}")
             publish_decomposition_completed(decomposition, event_id)
 
           {:error, reason} ->
@@ -320,15 +329,23 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
     case decomposition_store().get(decomposition_id) do
       {:ok, decomposition} ->
-        # Update with last_grade=0 (FSRS "again") and status="reviewed"
+        # Use FSRS grade 1 (again) for rejection
+        {new_stability, new_difficulty, new_due_at} =
+          BotArmyGtd.FSRSScheduler.schedule_next_review(decomposition, 1)
+
+        # Update with FSRS parameters and status="reviewed"
         updated_decomposition =
           decomposition
-          |> Map.put("last_grade", 0)
+          |> Map.put("last_grade", 1)
           |> Map.put("status", "reviewed")
+          |> Map.put("stability", new_stability)
+          |> Map.put("difficulty", new_difficulty)
+          |> Map.put("due_at", new_due_at)
+          |> Map.put("review_count", (decomposition["review_count"] || 0) + 1)
 
         case decomposition_store().update(decomposition_id, updated_decomposition) do
           {:ok, updated} ->
-            Logger.info("Decomposition rejected: decomposition_id=#{decomposition_id}")
+            Logger.info("Decomposition rejected: decomposition_id=#{decomposition_id}, next review in #{BotArmyGtd.FSRSScheduler.format_interval(new_due_at)}")
             publish_decomposition_reviewed(updated, event_id)
 
           {:error, reason} ->
@@ -357,7 +374,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
         delta = calculate_accuracy_delta(predicted_count, actual_count)
         fsrs_grade = calculate_fsrs_grade(rating, delta)
 
-        # Update decomposition with review data
+        # Calculate FSRS next review timing (1-4 grade)
+        {new_stability, new_difficulty, new_due_at} =
+          BotArmyGtd.FSRSScheduler.schedule_next_review(decomposition, fsrs_grade + 1)
+
+        # Update decomposition with review data and FSRS parameters
         updated_decomposition =
           decomposition
           |> Map.put("user_rating", rating)
@@ -365,10 +386,14 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
           |> Map.put("confidence_grade", delta)
           |> Map.put("last_grade", fsrs_grade)
           |> Map.put("review_count", review_count + 1)
+          |> Map.put("stability", new_stability)
+          |> Map.put("difficulty", new_difficulty)
+          |> Map.put("due_at", new_due_at)
+          |> Map.put("status", "reviewed")
 
         case decomposition_store().update(decomposition_id, updated_decomposition) do
           {:ok, updated} ->
-            Logger.info("Decomposition reviewed: decomposition_id=#{decomposition_id}, rating=#{rating}, grade=#{fsrs_grade}")
+            Logger.info("Decomposition reviewed: decomposition_id=#{decomposition_id}, rating=#{rating}, grade=#{fsrs_grade}, next review in #{BotArmyGtd.FSRSScheduler.format_interval(new_due_at)}")
             publish_decomposition_reviewed(updated, event_id)
 
           {:error, reason} ->
