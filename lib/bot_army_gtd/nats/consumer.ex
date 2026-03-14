@@ -63,7 +63,12 @@ defmodule BotArmyGtd.NATS.Consumer do
       "gtd.decomposition.request_review" -> BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
       "gtd.project.create" -> BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
       "gtd.project.update" -> BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
-      "llm.response.parsed" -> BotArmyGtd.Handlers.InboxParsingHandler.handle_parse(message)
+      "gtd.log.create" -> BotArmyGtd.Handlers.LogEntryHandler.handle_create(message)
+      "llm.response.parsed" ->
+        case get_in(message, ["payload", "enrichment_source"]) do
+          "log_enrichment" -> BotArmyGtd.Handlers.LogEnrichmentHandler.handle_enriched(message)
+          _ -> BotArmyGtd.Handlers.InboxParsingHandler.handle_parse(message)
+        end
       "llm.chain.completed" -> BotArmyGtd.Handlers.DecompositionHandler.handle_chain_completed(message)
       _ -> Logger.debug("Unknown event type: #{event}")
     end
@@ -106,9 +111,11 @@ defmodule BotArmyGtd.NATS.Consumer do
             "gtd.decomposition.request_review",
             "gtd.project.create",
             "gtd.project.update",
+            "gtd.log.create",
             "events.llm.response.parsed",
             "events.llm.chain.completed",
-            "gtd.task.list"
+            "gtd.task.list",
+            "gtd.decomposition.list_due"
           ]
           |> Enum.map(fn subject ->
             case Gnat.sub(conn, self(), subject) do
@@ -149,6 +156,39 @@ defmodule BotArmyGtd.NATS.Consumer do
 
         {:error, reason} ->
           Jason.encode!(%{error: inspect(reason), tasks: []})
+      end
+
+    if state.conn do
+      Gnat.pub(state.conn, reply_to, response)
+    end
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:msg, %{topic: "gtd.decomposition.list_due", reply_to: reply_to} = _msg}, state)
+      when is_binary(reply_to) and reply_to != "" do
+    decomposition_store = Application.get_env(:bot_army_gtd, :decomposition_store, BotArmyGtd.DecompositionStore)
+    now = DateTime.utc_now()
+
+    response =
+      case decomposition_store.list() do
+        {:ok, decompositions} ->
+          due =
+            decompositions
+            |> Enum.filter(fn d ->
+              d["status"] in ["completed", "reviewed"] and d["due_at"] != nil
+            end)
+            |> Enum.filter(fn d ->
+              case DateTime.from_iso8601(d["due_at"]) do
+                {:ok, due_at, _} -> DateTime.compare(due_at, now) in [:lt, :eq]
+                _ -> false
+              end
+            end)
+            |> Enum.sort_by(fn d -> d["due_at"] end)
+          Jason.encode!(%{decompositions: due})
+        {:error, reason} ->
+          Jason.encode!(%{error: inspect(reason), decompositions: []})
       end
 
     if state.conn do
