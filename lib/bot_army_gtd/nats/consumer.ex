@@ -60,6 +60,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       "gtd.decomposition.approve" -> BotArmyGtd.Handlers.DecompositionHandler.handle_approve(message)
       "gtd.decomposition.reject" -> BotArmyGtd.Handlers.DecompositionHandler.handle_reject(message)
       "gtd.decomposition.review" -> BotArmyGtd.Handlers.DecompositionHandler.handle_review(message)
+      "gtd.decomposition.request_review" -> BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
       "gtd.project.create" -> BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
       "gtd.project.update" -> BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
       "llm.response.parsed" -> BotArmyGtd.Handlers.InboxParsingHandler.handle_parse(message)
@@ -102,6 +103,7 @@ defmodule BotArmyGtd.NATS.Consumer do
             "gtd.decomposition.approve",
             "gtd.decomposition.reject",
             "gtd.decomposition.review",
+            "gtd.decomposition.request_review",
             "gtd.project.create",
             "gtd.project.update",
             "events.llm.response.parsed",

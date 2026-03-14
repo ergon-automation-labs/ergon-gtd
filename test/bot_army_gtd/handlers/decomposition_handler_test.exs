@@ -610,4 +610,116 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       assert true
     end
   end
+
+  describe "handle_request_review/1" do
+    test "handles decomposition ready for review" do
+      decomposition_id = UUID.uuid4()
+      event_id = UUID.uuid4()
+      now = DateTime.utc_now()
+
+      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^decomposition_id ->
+        {:ok, %{
+          "id" => decomposition_id,
+          "status" => "completed",
+          "due_at" => DateTime.add(now, -1, :day) |> DateTime.to_iso8601(),
+          "predicted_subtask_count" => 5,
+          "actual_subtask_count" => 4
+        }}
+      end)
+
+      message = %{
+        "event" => "gtd.decomposition.request_review",
+        "event_id" => event_id,
+        "payload" => %{
+          "decomposition_id" => decomposition_id
+        }
+      }
+
+      BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
+      assert true
+    end
+
+    test "handles decomposition not due yet" do
+      decomposition_id = UUID.uuid4()
+      event_id = UUID.uuid4()
+      now = DateTime.utc_now()
+
+      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^decomposition_id ->
+        {:ok, %{
+          "id" => decomposition_id,
+          "status" => "completed",
+          "due_at" => DateTime.add(now, 1, :day) |> DateTime.to_iso8601()
+        }}
+      end)
+
+      message = %{
+        "event" => "gtd.decomposition.request_review",
+        "event_id" => event_id,
+        "payload" => %{
+          "decomposition_id" => decomposition_id
+        }
+      }
+
+      BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
+      assert true
+    end
+
+    test "handles decomposition with wrong status" do
+      decomposition_id = UUID.uuid4()
+      event_id = UUID.uuid4()
+      now = DateTime.utc_now()
+
+      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^decomposition_id ->
+        {:ok, %{
+          "id" => decomposition_id,
+          "status" => "in_progress",
+          "due_at" => DateTime.add(now, -1, :day) |> DateTime.to_iso8601()
+        }}
+      end)
+
+      message = %{
+        "event" => "gtd.decomposition.request_review",
+        "event_id" => event_id,
+        "payload" => %{
+          "decomposition_id" => decomposition_id
+        }
+      }
+
+      BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
+      assert true
+    end
+
+    test "handles decomposition not found" do
+      decomposition_id = UUID.uuid4()
+      event_id = UUID.uuid4()
+
+      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^decomposition_id ->
+        {:error, :not_found}
+      end)
+
+      message = %{
+        "event" => "gtd.decomposition.request_review",
+        "event_id" => event_id,
+        "payload" => %{
+          "decomposition_id" => decomposition_id
+        }
+      }
+
+      BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
+      assert true
+    end
+
+    test "handles missing decomposition_id in payload" do
+      event_id = UUID.uuid4()
+
+      message = %{
+        "event" => "gtd.decomposition.request_review",
+        "event_id" => event_id,
+        "payload" => %{}
+      }
+
+      BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
+      assert true
+    end
+  end
 end

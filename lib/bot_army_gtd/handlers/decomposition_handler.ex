@@ -137,6 +137,30 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
+  @doc """
+  Handle decomposition review request - checks if decomposition is due for review.
+
+  Validates the decomposition exists, checks if it's ready for review (status="completed"
+  and due_at <= now), and publishes ready_for_review event with decomposition data.
+
+  This allows the TUI/frontend to trigger review discovery on-demand.
+
+  Returns `:ok` if successful.
+  """
+  def handle_request_review(message) do
+    event_id = message["event_id"]
+    payload = message["payload"]
+
+    case validate_request_review_payload(payload) do
+      :ok ->
+        process_request_review(payload, event_id, message)
+
+      {:error, reason} ->
+        Logger.warning("Invalid review request payload: #{inspect(reason)}")
+        publish_error(event_id, reason, "Invalid decomposition review request")
+    end
+  end
+
   # Private validation
 
   defp validate_decompose_payload(payload) when is_map(payload) do
@@ -187,6 +211,14 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp validate_review_payload(_), do: {:error, :invalid_payload}
+
+  defp validate_request_review_payload(payload) when is_map(payload) do
+    with :ok <- require_field(payload, "decomposition_id") do
+      :ok
+    end
+  end
+
+  defp validate_request_review_payload(_), do: {:error, :invalid_payload}
 
   defp require_field(payload, field) do
     case payload do
@@ -420,6 +452,31 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
+  defp process_request_review(payload, event_id, _message) do
+    decomposition_id = payload["decomposition_id"]
+
+    case decomposition_store().get(decomposition_id) do
+      {:ok, decomposition} ->
+        status = decomposition["status"]
+        due_at_str = decomposition["due_at"]
+
+        # Check if decomposition is ready for review
+        is_due = check_if_due(status, due_at_str)
+
+        if is_due do
+          Logger.info("Decomposition ready for review: decomposition_id=#{decomposition_id}")
+          publish_decomposition_ready_for_review(decomposition, event_id)
+        else
+          Logger.warning("Decomposition not ready for review: decomposition_id=#{decomposition_id}, status=#{status}, due_at=#{due_at_str}")
+          publish_error(event_id, :not_ready, "Decomposition is not ready for review (status=#{status})")
+        end
+
+      {:error, :not_found} ->
+        Logger.warning("Decomposition not found for review request: #{decomposition_id}")
+        publish_error(event_id, :not_found, "Decomposition not found")
+    end
+  end
+
   # Private helpers
 
   defp build_decomposition_chain(task_title, description) do
@@ -580,6 +637,23 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
+  defp check_if_due(status, due_at_str) do
+    status == "completed" and due_at_str && is_due_now(due_at_str)
+  end
+
+  defp is_due_now(due_at_str) when is_binary(due_at_str) do
+    case DateTime.from_iso8601(due_at_str) do
+      {:ok, due_at, _offset} ->
+        now = DateTime.utc_now()
+        DateTime.compare(due_at, now) in [:lt, :eq]
+
+      {:error, _} ->
+        false
+    end
+  end
+
+  defp is_due_now(_), do: false
+
   defp publish_chain_request(chain_id, steps, initial_input, model, task_id, event_id) do
     event_data = %{
       "event" => "llm.inference.chain",
@@ -689,6 +763,27 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published decomposition.reviewed event")
       {:error, reason} -> Logger.error("Failed to publish decomposition.reviewed event: #{inspect(reason)}")
+    end
+  end
+
+  defp publish_decomposition_ready_for_review(decomposition, event_id) do
+    event_data = %{
+      "event" => "gtd.decomposition.ready_for_review",
+      "event_id" => UUID.uuid4(),
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => "bot_army_gtd",
+      "source_node" => get_node_name(),
+      "triggered_by" => "gtd.bot",
+      "schema_version" => "1.0",
+      "payload" => %{
+        "decomposition" => decomposition,
+        "triggered_by_event_id" => event_id
+      }
+    }
+
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+      {:ok, _subject} -> Logger.debug("Published decomposition.ready_for_review event")
+      {:error, reason} -> Logger.error("Failed to publish ready_for_review event: #{inspect(reason)}")
     end
   end
 
