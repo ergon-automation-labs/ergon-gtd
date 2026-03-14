@@ -355,7 +355,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
         case decomposition_store().update(decomposition_id, updated_decomposition) do
           {:ok, updated} ->
-            Logger.info("Decomposition approved: decomposition_id=#{decomposition_id}, created #{successful_count} subtasks, next review in #{BotArmyGtd.FSRSScheduler.format_interval(new_due_at)}")
+            Logger.info("Decomposition approved", %{
+              decomposition_id: decomposition_id,
+              parent_task_id: decomposition["parent_task_id"],
+              subtasks_created: successful_count,
+              fsrs_grade: fsrs_grade,
+              next_review_in: BotArmyGtd.FSRSScheduler.format_interval(new_due_at),
+              review_count: (decomposition["review_count"] || 0) + 1
+            })
+
             publish_decomposition_approved(updated, event_id)
 
           {:error, reason} ->
@@ -438,7 +446,16 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
         case decomposition_store().update(decomposition_id, updated_decomposition) do
           {:ok, updated} ->
-            Logger.info("Decomposition reviewed: decomposition_id=#{decomposition_id}, rating=#{rating}, grade=#{fsrs_grade}, next review in #{BotArmyGtd.FSRSScheduler.format_interval(new_due_at)}")
+            Logger.info("Decomposition reviewed", %{
+              decomposition_id: decomposition_id,
+              parent_task_id: decomposition["parent_task_id"],
+              user_rating: rating,
+              fsrs_grade: fsrs_grade,
+              accuracy_delta: delta,
+              review_count: review_count + 1,
+              next_review_in: BotArmyGtd.FSRSScheduler.format_interval(new_due_at)
+            })
+
             publish_decomposition_reviewed(updated, event_id)
 
           {:error, reason} ->
@@ -464,10 +481,24 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
         is_due = check_if_due(status, due_at_str)
 
         if is_due do
-          Logger.info("Decomposition ready for review: decomposition_id=#{decomposition_id}")
+          Logger.info("Decomposition ready for review", %{
+            decomposition_id: decomposition_id,
+            parent_task_id: decomposition["parent_task_id"],
+            status: status,
+            review_count: decomposition["review_count"],
+            due_at: due_at_str
+          })
+
           publish_decomposition_ready_for_review(decomposition, event_id)
         else
-          Logger.warning("Decomposition not ready for review: decomposition_id=#{decomposition_id}, status=#{status}, due_at=#{due_at_str}")
+          Logger.warning("Decomposition not ready for review", %{
+            decomposition_id: decomposition_id,
+            parent_task_id: decomposition["parent_task_id"],
+            status: status,
+            due_at: due_at_str,
+            reason: "status or due_at mismatch"
+          })
+
           publish_error(event_id, :not_ready, "Decomposition is not ready for review (status=#{status})")
         end
 
@@ -638,7 +669,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp check_if_due(status, due_at_str) do
-    status == "completed" and due_at_str && is_due_now(due_at_str)
+    status in ["completed", "reviewed"] and due_at_str && is_due_now(due_at_str)
   end
 
   defp is_due_now(due_at_str) when is_binary(due_at_str) do

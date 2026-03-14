@@ -72,7 +72,7 @@ defmodule BotArmyGtd.ReviewScheduler do
         |> Enum.filter(fn d ->
           status = Map.get(d, "status")
           due_at_str = Map.get(d, "due_at")
-          status == "completed" and due_at_str != nil
+          status in ["completed", "reviewed"] and due_at_str != nil
         end)
         |> Enum.filter(fn d ->
           due_at = parse_datetime(Map.get(d, "due_at"))
@@ -99,7 +99,7 @@ defmodule BotArmyGtd.ReviewScheduler do
         |> Enum.filter(fn d ->
           status = Map.get(d, "status")
           due_at_str = Map.get(d, "due_at")
-          status == "completed" and due_at_str != nil
+          status in ["completed", "reviewed"] and due_at_str != nil
         end)
         |> Enum.filter(fn d ->
           due_at = parse_datetime(Map.get(d, "due_at"))
@@ -123,19 +123,26 @@ defmodule BotArmyGtd.ReviewScheduler do
   defp discover_due_decompositions do
     case get_due() do
       {:ok, due_decompositions} ->
-        if Enum.empty?(due_decompositions) do
-          Logger.debug("ReviewScheduler: No decompositions due for review")
+        count = length(due_decompositions)
+
+        if count == 0 do
+          Logger.debug("ReviewScheduler: No decompositions due for review", %{count: 0})
         else
+          Logger.info("ReviewScheduler: Discovered decompositions due for review", %{
+            count: count,
+            decomposition_ids: Enum.map(due_decompositions, &Map.get(&1, "id"))
+          })
+
           Enum.each(due_decompositions, fn decomposition ->
             log_due_decomposition(decomposition)
             publish_due_event(decomposition)
           end)
-
-          Logger.info("ReviewScheduler: Found #{length(due_decompositions)} decompositions due for review")
         end
 
       {:error, reason} ->
-        Logger.error("ReviewScheduler: Failed to list decompositions: #{inspect(reason)}")
+        Logger.error("ReviewScheduler: Failed to list decompositions", %{
+          reason: inspect(reason)
+        })
     end
   end
 
@@ -143,13 +150,23 @@ defmodule BotArmyGtd.ReviewScheduler do
     id = Map.get(decomposition, "id")
     parent_task_id = Map.get(decomposition, "parent_task_id")
     due_at = Map.get(decomposition, "due_at")
+    review_count = Map.get(decomposition, "review_count", 0)
 
     Logger.debug(
-      "ReviewScheduler: Due decomposition: id=#{id}, parent_task_id=#{parent_task_id}, due_at=#{due_at}"
+      "ReviewScheduler: Decomposition due for review",
+      %{
+        decomposition_id: id,
+        parent_task_id: parent_task_id,
+        due_at: due_at,
+        review_count: review_count
+      }
     )
   end
 
   defp publish_due_event(decomposition) do
+    decomposition_id = Map.get(decomposition, "id")
+    parent_task_id = Map.get(decomposition, "parent_task_id")
+
     event_data = %{
       "event" => "gtd.decomposition.due_for_review",
       "event_id" => UUID.uuid4(),
@@ -159,8 +176,8 @@ defmodule BotArmyGtd.ReviewScheduler do
       "triggered_by" => "gtd.review_scheduler",
       "schema_version" => "1.0",
       "payload" => %{
-        "decomposition_id" => Map.get(decomposition, "id"),
-        "parent_task_id" => Map.get(decomposition, "parent_task_id"),
+        "decomposition_id" => decomposition_id,
+        "parent_task_id" => parent_task_id,
         "due_at" => Map.get(decomposition, "due_at"),
         "review_count" => Map.get(decomposition, "review_count")
       }
@@ -168,10 +185,16 @@ defmodule BotArmyGtd.ReviewScheduler do
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} ->
-        Logger.debug("ReviewScheduler: Published decomposition.due_for_review event")
+        Logger.debug(
+          "ReviewScheduler: Published decomposition due for review event",
+          %{decomposition_id: decomposition_id, parent_task_id: parent_task_id}
+        )
 
       {:error, reason} ->
-        Logger.error("ReviewScheduler: Failed to publish event: #{inspect(reason)}")
+        Logger.error(
+          "ReviewScheduler: Failed to publish decomposition due event",
+          %{decomposition_id: decomposition_id, reason: inspect(reason)}
+        )
     end
   end
 
