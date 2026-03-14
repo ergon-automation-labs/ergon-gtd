@@ -302,15 +302,28 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
         successful_count =
           Enum.count(created_subtasks, fn result -> match?({:ok, _}, result) end)
 
-        # Update decomposition
+        # Determine FSRS grade based on accuracy of prediction vs actual
+        predicted_count = decomposition["predicted_subtask_count"]
+        fsrs_grade = calculate_approval_grade(predicted_count, successful_count)
+
+        # Schedule next review with FSRS algorithm
+        {new_stability, new_difficulty, new_due_at} =
+          BotArmyGtd.FSRSScheduler.schedule_next_review(decomposition, fsrs_grade)
+
+        # Update decomposition with actual count and FSRS parameters
         updated_decomposition =
           decomposition
           |> Map.put("actual_subtask_count", successful_count)
           |> Map.put("status", "reviewed")
+          |> Map.put("last_grade", fsrs_grade)
+          |> Map.put("stability", new_stability)
+          |> Map.put("difficulty", new_difficulty)
+          |> Map.put("due_at", new_due_at)
+          |> Map.put("review_count", (decomposition["review_count"] || 0) + 1)
 
         case decomposition_store().update(decomposition_id, updated_decomposition) do
           {:ok, updated} ->
-            Logger.info("Decomposition approved: decomposition_id=#{decomposition_id}, created #{successful_count} subtasks")
+            Logger.info("Decomposition approved: decomposition_id=#{decomposition_id}, created #{successful_count} subtasks, next review in #{BotArmyGtd.FSRSScheduler.format_interval(new_due_at)}")
             publish_decomposition_approved(updated, event_id)
 
           {:error, reason} ->
@@ -546,6 +559,24 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       rating == 4 and delta < 0.2 -> 2
       rating == 5 and delta < 0.1 -> 3
       true -> 2
+    end
+  end
+
+  defp calculate_approval_grade(nil, _), do: 3  # No prediction, assume "Good"
+  defp calculate_approval_grade(_, nil), do: 3
+
+  defp calculate_approval_grade(predicted, actual) do
+    # Grade based on how well actual subtask count matches prediction
+    # FSRS grades: 1 (Again), 2 (Hard), 3 (Good), 4 (Easy)
+    diff = abs(predicted - actual)
+
+    cond do
+      # Perfect or near-perfect match: "Good"
+      diff == 0 -> 3
+      diff == 1 -> 3
+
+      # Off by 2+: "Hard" (prediction was off)
+      diff >= 2 -> 2
     end
   end
 

@@ -17,6 +17,11 @@ end
 # Ecto repositories for migrations
 config :bot_army_gtd, ecto_repos: [BotArmyGtd.Repo]
 
+# ReviewScheduler: Periodic discovery of decompositions due for review
+config :bot_army_gtd, BotArmyGtd.ReviewScheduler,
+  enabled: true,
+  interval_seconds: 300  # Every 5 minutes
+
 # Database configuration
 # Priority: BOT_ARMY_GTD_DB_* (set by Salt/Jenkins) > DATABASE_* (from .env for local dev) > defaults
 config :bot_army_gtd, BotArmyGtd.Repo,

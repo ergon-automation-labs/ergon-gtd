@@ -191,8 +191,10 @@ defmodule BotArmyGtd.DecompositionStore do
               "dependencies" => Map.get(payload, "dependencies", db_decomposition.dependencies),
               "stability" => Map.get(payload, "stability", db_decomposition.stability),
               "difficulty" => Map.get(payload, "difficulty", db_decomposition.difficulty),
+              "due_at" => parse_due_at(Map.get(payload, "due_at", db_decomposition.due_at)),
               "review_count" => Map.get(payload, "review_count", db_decomposition.review_count),
               "last_grade" => Map.get(payload, "last_grade", db_decomposition.last_grade),
+              "actual_subtask_count" => Map.get(payload, "actual_subtask_count", db_decomposition.actual_subtask_count),
               "user_rating" => Map.get(payload, "user_rating", db_decomposition.user_rating),
               "user_feedback" => Map.get(payload, "user_feedback", db_decomposition.user_feedback),
               "confidence_grade" => Map.get(payload, "confidence_grade", db_decomposition.confidence_grade)
@@ -239,6 +241,19 @@ defmodule BotArmyGtd.DecompositionStore do
     BotArmyGtd.Repo.delete_all(BotArmyGtd.Schemas.Decomposition)
     {:reply, :ok, %{}}
   end
+
+  # Helper to parse due_at which might be a DateTime or ISO8601 string
+  defp parse_due_at(nil), do: nil
+  defp parse_due_at(%DateTime{} = dt), do: dt
+
+  defp parse_due_at(str) when is_binary(str) do
+    case DateTime.from_iso8601(str) do
+      {:ok, datetime, _offset} -> datetime
+      {:error, _} -> nil
+    end
+  end
+
+  defp parse_due_at(val), do: val
 
   # Helper function to convert Ecto schema to map for GenServer state
   defp schema_to_map(%BotArmyGtd.Schemas.Decomposition{} = decomposition) do
