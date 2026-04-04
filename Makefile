@@ -1,4 +1,6 @@
-.PHONY: setup help deps test credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db
+SCRIPTS_DIRECTORY ?= $(abspath $(CURDIR)/../scripts)
+
+.PHONY: setup help deps test credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db logs
 
 help:
 	@echo "BotArmyGtd - GTD Bot"
@@ -17,6 +19,9 @@ help:
 	@echo "  make check           - Run all checks (test, credo, dialyzer)"
 	@echo "  make format          - Format Elixir code"
 	@echo "  make clean           - Clean build artifacts"
+	@echo ""
+	@echo "Operations (deployed server logs):"
+	@echo "  make logs            - Tail gtd_bot log with grc (brew install grc; make -C .. install-grc)"
 	@echo ""
 	@echo "Release commands (normally automatic via git hook):"
 	@echo "  make release         - Build OTP release locally (manual, if needed)"
@@ -119,3 +124,7 @@ publish-release: release
 	echo "2. Trigger deployment in Jenkins UI or wait for auto-deployment"; \
 	echo "3. Check deployment status: make jenkins-logs"; \
 	echo ""
+
+## Tail production log with grc (paths: $(SCRIPTS_DIRECTORY)/tail_bot_log.sh)
+logs:
+	@$(SCRIPTS_DIRECTORY)/tail_bot_log.sh

@@ -5,6 +5,8 @@ config :bot_army_gtd, :task_store, BotArmyGtd.TaskStoreMock
 config :bot_army_gtd, :project_store, BotArmyGtd.ProjectStoreMock
 config :bot_army_gtd, :inbox_item_store, BotArmyGtd.InboxItemStoreMock
 config :bot_army_gtd, :decomposition_store, BotArmyGtd.DecompositionStoreMock
+config :bot_army_gtd, :log_entry_store, BotArmyGtd.MockLogEntryStore
+config :bot_army_gtd, :daily_log_dir, "/tmp/test_daily_logs"
 
 # Test against Kubernetes PostgreSQL (via NodePort)
 # Uses same configuration as production, just with test database

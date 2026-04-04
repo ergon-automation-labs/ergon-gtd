@@ -43,7 +43,7 @@ defmodule BotArmyGtd.Schemas.Task do
       :tenant_id,
       :user_id
     ])
-    |> validate_required([:title])
+    |> validate_required([:title, :tenant_id])
     |> validate_inclusion(:status, [
       "inbox",
       "next_action",

@@ -26,7 +26,7 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   @doc """
-  Create a new task from payload.
+  Create a new task from payload, stamped with tenant_id.
 
   Returns `{:ok, task}` with the created task, or `{:error, reason}`.
   """
@@ -53,21 +53,21 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   @doc """
-  Retrieve a task by ID.
+  Retrieve a task by ID, scoped to a tenant.
 
   Returns `{:ok, task}` or `{:error, :not_found}`.
   """
-  def get(task_id) when is_binary(task_id) do
-    GenServer.call(@server, {:get, task_id})
+  def get(tenant_id, task_id) when is_binary(tenant_id) and is_binary(task_id) do
+    GenServer.call(@server, {:get, tenant_id, task_id})
   end
 
   @doc """
-  List all tasks.
+  List all tasks for a tenant.
 
   Returns `{:ok, tasks}`.
   """
-  def list do
-    GenServer.call(@server, :list)
+  def list(tenant_id) when is_binary(tenant_id) do
+    GenServer.call(@server, {:list, tenant_id})
   end
 
   @doc """
@@ -118,6 +118,8 @@ defmodule BotArmyGtd.TaskStore do
     changeset = BotArmyGtd.Schemas.Task.changeset(
       %BotArmyGtd.Schemas.Task{id: task_id},
       %{
+        "tenant_id" => payload["tenant_id"],
+        "user_id" => Map.get(payload, "user_id"),
         "title" => payload["title"],
         "project_id" => payload["project_id"],
         "description" => Map.get(payload, "description"),
@@ -233,16 +235,29 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   @impl true
-  def handle_call({:get, task_id}, _from, state) do
+  def handle_call({:get, tenant_id, task_id}, _from, state) do
     case Map.get(state, task_id) do
-      nil -> {:reply, {:error, :not_found}, state}
-      task -> {:reply, {:ok, task}, state}
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      task ->
+        # Verify tenant_id matches
+        if task["tenant_id"] == tenant_id do
+          {:reply, {:ok, task}, state}
+        else
+          {:reply, {:error, :not_found}, state}
+        end
     end
   end
 
   @impl true
-  def handle_call(:list, _from, state) do
-    tasks = state |> Map.values() |> Enum.reject(&(&1["status"] in ["deleted", "completed"]))
+  def handle_call({:list, tenant_id}, _from, state) do
+    tasks =
+      state
+      |> Map.values()
+      |> Enum.filter(&(&1["tenant_id"] == tenant_id))
+      |> Enum.reject(&(&1["status"] in ["deleted", "completed"]))
+
     {:reply, {:ok, tasks}, state}
   end
 
@@ -258,6 +273,8 @@ defmodule BotArmyGtd.TaskStore do
   defp schema_to_map(%BotArmyGtd.Schemas.Task{} = task) do
     %{
       "id" => Ecto.UUID.cast!(task.id) |> to_string(),
+      "tenant_id" => task.tenant_id |> to_string(),
+      "user_id" => if(task.user_id, do: task.user_id |> to_string(), else: nil),
       "title" => task.title,
       "description" => task.description,
       "status" => task.status,

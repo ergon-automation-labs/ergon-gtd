@@ -20,6 +20,7 @@ defmodule BotArmyGtd.Application do
     |> maybe_add_project_store()
     |> maybe_add_inbox_item_store()
     |> maybe_add_decomposition_store()
+    |> maybe_add_log_entry_store()
     |> maybe_add_review_scheduler()
     |> maybe_add_consumer()
 
@@ -45,6 +46,10 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_decomposition_store(children) do
     if @env == :test, do: children, else: [{BotArmyGtd.DecompositionStore, []} | children]
+  end
+
+  defp maybe_add_log_entry_store(children) do
+    if @env == :test, do: children, else: [{BotArmyGtd.LogEntryStore, []} | children]
   end
 
   defp maybe_add_review_scheduler(children) do
