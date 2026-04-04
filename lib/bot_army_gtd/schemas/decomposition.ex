@@ -15,6 +15,8 @@ defmodule BotArmyGtd.Schemas.Decomposition do
   schema "decompositions" do
     field :parent_task_id, Ecto.UUID
     field :status, :string, default: "in_progress"
+    field :tenant_id, Ecto.UUID
+    field :user_id, Ecto.UUID
 
     # Steps and outputs (Phase 2)
     field :step_outputs, {:array, :map}, default: []
@@ -59,6 +61,8 @@ defmodule BotArmyGtd.Schemas.Decomposition do
     |> cast(attrs, [
       :parent_task_id,
       :status,
+      :tenant_id,
+      :user_id,
       :step_outputs,
       :subtask_list,
       :effort_estimates,

@@ -14,6 +14,8 @@ defmodule BotArmyGtd.Schemas.Project do
     field :description, :string
     field :status, :string, default: "active"
     field :area, :string
+    field :tenant_id, Ecto.UUID
+    field :user_id, Ecto.UUID
 
     has_many :tasks, BotArmyGtd.Schemas.Task
 
@@ -23,7 +25,7 @@ defmodule BotArmyGtd.Schemas.Project do
   @doc false
   def changeset(project, attrs) do
     project
-    |> cast(attrs, [:name, :description, :status, :area])
+    |> cast(attrs, [:name, :description, :status, :area, :tenant_id, :user_id])
     |> validate_required([:name])
     |> validate_inclusion(:status, ["active", "archived", "completed"])
   end

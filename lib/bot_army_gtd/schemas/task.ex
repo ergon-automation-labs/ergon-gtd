@@ -20,6 +20,8 @@ defmodule BotArmyGtd.Schemas.Task do
     field :due_date, :date
     field :completed_at, :naive_datetime
     field :project_id, :string
+    field :tenant_id, Ecto.UUID
+    field :user_id, Ecto.UUID
 
     timestamps()
   end
@@ -37,7 +39,9 @@ defmodule BotArmyGtd.Schemas.Task do
       :source_metadata,
       :due_date,
       :completed_at,
-      :project_id
+      :project_id,
+      :tenant_id,
+      :user_id
     ])
     |> validate_required([:title])
     |> validate_inclusion(:status, [
