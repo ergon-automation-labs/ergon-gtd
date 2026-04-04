@@ -22,6 +22,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
   describe "complete decomposition lifecycle" do
     test "full cycle: create → approve → discover → request_review → review" do
       # ===== STEP 1: Create Decomposition =====
+      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
       decomposition_id = UUID.uuid4()
       parent_task_id = UUID.uuid4()
       event_id = UUID.uuid4()
@@ -30,6 +31,8 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       create_message = %{
         "event" => "llm.chain.completed",
         "event_id" => event_id,
+        "tenant_id" => default_tenant_id,
+        "user_id" => nil,
         "payload" => %{
           "chain_id" => UUID.uuid4(),
           "steps" => [
@@ -90,12 +93,14 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       approval_message = %{
         "event" => "gtd.decomposition.approve",
         "event_id" => approve_event_id,
+        "tenant_id" => default_tenant_id,
+        "user_id" => nil,
         "payload" => %{
           "decomposition_id" => decomposition_id
         }
       }
 
-      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^decomposition_id ->
+      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok, %{
           "id" => decomposition_id,
           "status" => "completed",
@@ -148,7 +153,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
         "predicted_subtask_count" => 2
       }
 
-      expect(BotArmyGtd.DecompositionStoreMock, :list, fn ->
+      expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:ok, [approval_decomp]}
       end)
 
@@ -162,12 +167,14 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       request_message = %{
         "event" => "gtd.decomposition.request_review",
         "event_id" => request_event_id,
+        "tenant_id" => default_tenant_id,
+        "user_id" => nil,
         "payload" => %{
           "decomposition_id" => decomposition_id
         }
       }
 
-      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^decomposition_id ->
+      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok, approval_decomp}
       end)
 
@@ -180,6 +187,8 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       review_message = %{
         "event" => "gtd.decomposition.review",
         "event_id" => review_event_id,
+        "tenant_id" => default_tenant_id,
+        "user_id" => nil,
         "payload" => %{
           "decomposition_id" => decomposition_id,
           "rating" => 4,  # Good rating
@@ -187,7 +196,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
         }
       }
 
-      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^decomposition_id ->
+      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok, approval_decomp}
       end)
 
@@ -216,6 +225,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
     end
 
     test "decomposition ready for review must be due" do
+      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
       decomposition_id = UUID.uuid4()
       request_event_id = UUID.uuid4()
       now = DateTime.utc_now()
@@ -224,13 +234,15 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       request_message = %{
         "event" => "gtd.decomposition.request_review",
         "event_id" => request_event_id,
+        "tenant_id" => default_tenant_id,
+        "user_id" => nil,
         "payload" => %{
           "decomposition_id" => decomposition_id
         }
       }
 
       # Decomposition is completed but not due yet
-      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^decomposition_id ->
+      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok, %{
           "id" => decomposition_id,
           "status" => "completed",
@@ -244,6 +256,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
     end
 
     test "approval grade reflects prediction accuracy" do
+      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
       decomposition_id = UUID.uuid4()
       _parent_task_id = UUID.uuid4()
       approve_event_id = UUID.uuid4()
@@ -251,7 +264,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       due_yesterday = DateTime.add(now, -1, :day) |> DateTime.to_iso8601()
 
       # Test case 1: Perfect match (grade 3)
-      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^decomposition_id ->
+      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok, %{
           "id" => decomposition_id,
           "status" => "completed",
@@ -299,6 +312,8 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       approval_message = %{
         "event" => "gtd.decomposition.approve",
         "event_id" => approve_event_id,
+        "tenant_id" => default_tenant_id,
+        "user_id" => nil,
         "payload" => %{"decomposition_id" => decomposition_id}
       }
 
@@ -307,6 +322,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
     end
 
     test "review with high accuracy increases stability" do
+      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
       decomposition_id = UUID.uuid4()
       _now = DateTime.utc_now()
       review_event_id = UUID.uuid4()
@@ -314,6 +330,8 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       review_message = %{
         "event" => "gtd.decomposition.review",
         "event_id" => review_event_id,
+        "tenant_id" => default_tenant_id,
+        "user_id" => nil,
         "payload" => %{
           "decomposition_id" => decomposition_id,
           "rating" => 5,  # Excellent rating
@@ -324,7 +342,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       original_stability = 1.2
       original_difficulty = 4.5
 
-      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^decomposition_id ->
+      expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok, %{
           "id" => decomposition_id,
           "status" => "reviewed",

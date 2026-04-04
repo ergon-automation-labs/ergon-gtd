@@ -84,14 +84,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_approve(message) do
     event_id = message["event_id"]
     payload = message["payload"]
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
     case validate_approve_payload(payload) do
       :ok ->
-        process_approve(payload, event_id, message)
+        process_approve(payload, event_id, message, tenant_id, user_id)
 
       {:error, reason} ->
         Logger.warning("Invalid approval payload: #{inspect(reason)}")
-        publish_error(event_id, reason, "Invalid decomposition approval")
+        publish_error(event_id, reason, "Invalid decomposition approval", tenant_id, user_id)
     end
   end
 
@@ -106,14 +107,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_reject(message) do
     event_id = message["event_id"]
     payload = message["payload"]
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
     case validate_reject_payload(payload) do
       :ok ->
-        process_reject(payload, event_id, message)
+        process_reject(payload, event_id, message, tenant_id, user_id)
 
       {:error, reason} ->
         Logger.warning("Invalid rejection payload: #{inspect(reason)}")
-        publish_error(event_id, reason, "Invalid decomposition rejection")
+        publish_error(event_id, reason, "Invalid decomposition rejection", tenant_id, user_id)
     end
   end
 
@@ -128,14 +130,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_review(message) do
     event_id = message["event_id"]
     payload = message["payload"]
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
     case validate_review_payload(payload) do
       :ok ->
-        process_review(payload, event_id, message)
+        process_review(payload, event_id, message, tenant_id, user_id)
 
       {:error, reason} ->
         Logger.warning("Invalid review payload: #{inspect(reason)}")
-        publish_error(event_id, reason, "Invalid decomposition review")
+        publish_error(event_id, reason, "Invalid decomposition review", tenant_id, user_id)
     end
   end
 
@@ -152,14 +155,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_request_review(message) do
     event_id = message["event_id"]
     payload = message["payload"]
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
     case validate_request_review_payload(payload) do
       :ok ->
-        process_request_review(payload, event_id, message)
+        process_request_review(payload, event_id, message, tenant_id, user_id)
 
       {:error, reason} ->
         Logger.warning("Invalid review request payload: #{inspect(reason)}")
-        publish_error(event_id, reason, "Invalid decomposition review request")
+        publish_error(event_id, reason, "Invalid decomposition review request", tenant_id, user_id)
     end
   end
 
@@ -303,10 +307,10 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp process_approve(payload, event_id, _message) do
+  defp process_approve(payload, event_id, _message, tenant_id, _user_id) do
     decomposition_id = payload["decomposition_id"]
 
-    case decomposition_store().get(decomposition_id) do
+    case decomposition_store().get(tenant_id, decomposition_id) do
       {:ok, decomposition} ->
         subtask_list = get_subtask_list(decomposition)
 
@@ -381,10 +385,10 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp process_reject(payload, event_id, _message) do
+  defp process_reject(payload, event_id, _message, tenant_id, _user_id) do
     decomposition_id = payload["decomposition_id"]
 
-    case decomposition_store().get(decomposition_id) do
+    case decomposition_store().get(tenant_id, decomposition_id) do
       {:ok, decomposition} ->
         # Use FSRS grade 1 (again) for rejection
         {new_stability, new_difficulty, new_due_at} =
@@ -416,12 +420,12 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp process_review(payload, event_id, _message) do
+  defp process_review(payload, event_id, _message, tenant_id, _user_id) do
     decomposition_id = payload["decomposition_id"]
     rating = payload["rating"]
     user_feedback = Map.get(payload, "feedback", "")
 
-    case decomposition_store().get(decomposition_id) do
+    case decomposition_store().get(tenant_id, decomposition_id) do
       {:ok, decomposition} ->
         predicted_count = decomposition["predicted_subtask_count"]
         actual_count = decomposition["actual_subtask_count"]
@@ -473,10 +477,10 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp process_request_review(payload, event_id, _message) do
+  defp process_request_review(payload, event_id, _message, tenant_id, user_id) do
     decomposition_id = payload["decomposition_id"]
 
-    case decomposition_store().get(decomposition_id) do
+    case decomposition_store().get(tenant_id, decomposition_id) do
       {:ok, decomposition} ->
         status = decomposition["status"]
         due_at_str = decomposition["due_at"]
@@ -493,7 +497,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
             due_at: due_at_str
           })
 
-          publish_decomposition_ready_for_review(decomposition, event_id)
+          publish_decomposition_ready_for_review(decomposition, event_id, tenant_id, user_id)
         else
           Logger.warning("Decomposition not ready for review", %{
             decomposition_id: decomposition_id,
@@ -503,12 +507,12 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
             reason: "status or due_at mismatch"
           })
 
-          publish_error(event_id, :not_ready, "Decomposition is not ready for review (status=#{status})")
+          publish_error(event_id, :not_ready, "Decomposition is not ready for review (status=#{status})", tenant_id, user_id)
         end
 
       {:error, :not_found} ->
         Logger.warning("Decomposition not found for review request: #{decomposition_id}")
-        publish_error(event_id, :not_found, "Decomposition not found")
+        publish_error(event_id, :not_found, "Decomposition not found", tenant_id, user_id)
     end
   end
 
@@ -803,7 +807,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp publish_decomposition_ready_for_review(decomposition, event_id) do
+  defp publish_decomposition_ready_for_review(decomposition, event_id, tenant_id, user_id) do
     event_data = %{
       "event" => "gtd.decomposition.ready_for_review",
       "event_id" => UUID.uuid4(),
@@ -812,6 +816,8 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       "source_node" => get_node_name(),
       "triggered_by" => "gtd.bot",
       "schema_version" => "1.0",
+      "tenant_id" => tenant_id,
+      "user_id" => user_id,
       "payload" => %{
         "decomposition" => decomposition,
         "triggered_by_event_id" => event_id

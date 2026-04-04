@@ -110,7 +110,8 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
     end
 
     test "returns error when store fails" do
-      Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ->
+      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:error, :database_error}
       end)
 

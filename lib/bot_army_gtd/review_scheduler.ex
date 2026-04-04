@@ -91,7 +91,8 @@ defmodule BotArmyGtd.ReviewScheduler do
   Get decompositions due for review in the next N days.
   """
   def get_upcoming(days \\ 7) do
-    with {:ok, decompositions} <- get_store().list() do
+    default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+    with {:ok, decompositions} <- get_store().list(default_tenant_id) do
       now = DateTime.utc_now()
       future = DateTime.add(now, days, :day)
 
