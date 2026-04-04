@@ -8,8 +8,9 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles valid decomposition request" do
       task_id = UUID.uuid4()
       event_id = UUID.uuid4()
+      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
-      expect(BotArmyGtd.TaskStoreMock, :get, fn ^task_id ->
+      expect(BotArmyGtd.TaskStoreMock, :get, fn ^default_tenant_id, ^task_id ->
         {:ok, %{
           "id" => task_id,
           "title" => "Implement authentication system",
@@ -20,6 +21,8 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       message = %{
         "event" => "gtd.task.decompose",
         "event_id" => event_id,
+        "tenant_id" => default_tenant_id,
+        "user_id" => nil,
         "payload" => %{
           "task_id" => task_id,
           "model" => "claude-opus-4-6"
@@ -50,14 +53,17 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles task not found" do
       task_id = UUID.uuid4()
       event_id = UUID.uuid4()
+      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
-      expect(BotArmyGtd.TaskStoreMock, :get, fn ^task_id ->
+      expect(BotArmyGtd.TaskStoreMock, :get, fn ^default_tenant_id, ^task_id ->
         {:error, :not_found}
       end)
 
       message = %{
         "event" => "gtd.task.decompose",
         "event_id" => event_id,
+        "tenant_id" => default_tenant_id,
+        "user_id" => nil,
         "payload" => %{
           "task_id" => task_id
         }
