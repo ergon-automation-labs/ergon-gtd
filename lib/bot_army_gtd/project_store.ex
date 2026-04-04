@@ -43,21 +43,21 @@ defmodule BotArmyGtd.ProjectStore do
   end
 
   @doc """
-  Retrieve a project by ID.
+  Retrieve a project by ID, scoped to a tenant.
 
   Returns `{:ok, project}` or `{:error, :not_found}`.
   """
-  def get(project_id) when is_binary(project_id) do
-    GenServer.call(@server, {:get, project_id})
+  def get(tenant_id, project_id) when is_binary(tenant_id) and is_binary(project_id) do
+    GenServer.call(@server, {:get, tenant_id, project_id})
   end
 
   @doc """
-  List all projects.
+  List all projects for a tenant.
 
   Returns `{:ok, projects}`.
   """
-  def list do
-    GenServer.call(@server, :list)
+  def list(tenant_id) when is_binary(tenant_id) do
+    GenServer.call(@server, {:list, tenant_id})
   end
 
   # Callbacks
@@ -87,6 +87,8 @@ defmodule BotArmyGtd.ProjectStore do
     changeset = BotArmyGtd.Schemas.Project.changeset(
       %BotArmyGtd.Schemas.Project{id: project_id},
       %{
+        "tenant_id" => payload["tenant_id"],
+        "user_id" => Map.get(payload, "user_id"),
         "name" => payload["name"],
         "description" => Map.get(payload, "description"),
         "status" => Map.get(payload, "status", "active"),
@@ -146,16 +148,24 @@ defmodule BotArmyGtd.ProjectStore do
   end
 
   @impl true
-  def handle_call({:get, project_id}, _from, state) do
+  def handle_call({:get, tenant_id, project_id}, _from, state) do
     case Map.get(state, project_id) do
-      nil -> {:reply, {:error, :not_found}, state}
-      project -> {:reply, {:ok, project}, state}
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      project ->
+        # Verify tenant_id matches
+        if project["tenant_id"] == tenant_id do
+          {:reply, {:ok, project}, state}
+        else
+          {:reply, {:error, :not_found}, state}
+        end
     end
   end
 
   @impl true
-  def handle_call(:list, _from, state) do
-    projects = Map.values(state)
+  def handle_call({:list, tenant_id}, _from, state) do
+    projects = state |> Map.values() |> Enum.filter(&(&1["tenant_id"] == tenant_id))
     {:reply, {:ok, projects}, state}
   end
 
@@ -163,6 +173,8 @@ defmodule BotArmyGtd.ProjectStore do
   defp schema_to_map(%BotArmyGtd.Schemas.Project{} = project) do
     %{
       "id" => project.id |> to_string(),
+      "tenant_id" => project.tenant_id |> to_string(),
+      "user_id" => if(project.user_id, do: project.user_id |> to_string(), else: nil),
       "name" => project.name,
       "description" => project.description,
       "status" => project.status,

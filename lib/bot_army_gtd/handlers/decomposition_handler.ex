@@ -38,14 +38,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_decompose(message) do
     event_id = message["event_id"]
     payload = message["payload"]
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
     case validate_decompose_payload(payload) do
       :ok ->
-        process_decompose_request(payload, event_id, message)
+        process_decompose_request(payload, event_id, message, tenant_id, user_id)
 
       {:error, reason} ->
         Logger.warning("Invalid decomposition payload: #{inspect(reason)}")
-        publish_error(event_id, reason, "Invalid decomposition request")
+        publish_error(event_id, reason, "Invalid decomposition request", tenant_id, user_id)
     end
   end
 
@@ -60,14 +61,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_chain_completed(message) do
     event_id = message["event_id"]
     payload = message["payload"]
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
     case validate_chain_completed_payload(payload) do
       :ok ->
-        process_chain_completed(payload, event_id, message)
+        process_chain_completed(payload, event_id, message, tenant_id, user_id)
 
       {:error, reason} ->
         Logger.warning("Invalid chain completed payload: #{inspect(reason)}")
-        publish_error(event_id, reason, "Invalid chain completion")
+        publish_error(event_id, reason, "Invalid chain completion", tenant_id, user_id)
     end
   end
 
@@ -229,13 +231,13 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
   # Private processing
 
-  defp process_decompose_request(payload, event_id, _message) do
+  defp process_decompose_request(payload, event_id, _message, tenant_id, user_id) do
     task_id = payload["task_id"]
     model = Map.get(payload, "model", "claude-opus-4-6")
     chain_id = Map.get(payload, "chain_id", UUID.uuid4())
 
     # Fetch task from store to get title and context
-    case task_store().get(task_id) do
+    case task_store().get(tenant_id, task_id) do
       {:ok, task} ->
         title = task["title"]
         description = Map.get(task, "description", "")
@@ -249,11 +251,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
       {:error, :not_found} ->
         Logger.warning("Task not found for decomposition: #{task_id}")
-        publish_error(event_id, :task_not_found, "Task not found for decomposition")
+        publish_error(event_id, :task_not_found, "Task not found for decomposition", tenant_id, user_id)
     end
   end
 
-  defp process_chain_completed(payload, event_id, _message) do
+  defp process_chain_completed(payload, event_id, _message, tenant_id, user_id) do
     _chain_id = payload["chain_id"]
     steps = payload["steps"]
     metadata = payload["metadata"] || %{}
@@ -268,6 +270,8 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
         # Create decomposition record with FSRS fields
         decomposition_payload = %{
+          "tenant_id" => tenant_id,
+          "user_id" => user_id,
           "parent_task_id" => task_id,
           "status" => "completed",
           "step_outputs" => steps,
@@ -286,16 +290,16 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
         case decomposition_store().create(decomposition_payload) do
           {:ok, decomposition} ->
             Logger.info("Decomposition created: decomposition_id=#{decomposition["id"]}, task_id=#{task_id}, first review in #{BotArmyGtd.FSRSScheduler.format_interval(initial_due_at)}")
-            publish_decomposition_completed(decomposition, event_id)
+            publish_decomposition_completed(decomposition, event_id, tenant_id, user_id)
 
           {:error, reason} ->
             Logger.error("Failed to create decomposition: #{inspect(reason)}")
-            publish_error(event_id, reason, "Failed to store decomposition")
+            publish_error(event_id, reason, "Failed to store decomposition", tenant_id, user_id)
         end
 
       {:error, reason} ->
         Logger.error("Failed to parse decomposition steps: #{inspect(reason)}")
-        publish_error(event_id, reason, "Failed to parse decomposition results")
+        publish_error(event_id, reason, "Failed to parse decomposition results", tenant_id, user_id)
     end
   end
 
@@ -713,7 +717,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp publish_decomposition_completed(decomposition, event_id) do
+  defp publish_decomposition_completed(decomposition, event_id, tenant_id, user_id) do
     event_data = %{
       "event" => "gtd.decomposition.completed",
       "event_id" => UUID.uuid4(),
@@ -722,6 +726,8 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       "source_node" => get_node_name(),
       "triggered_by" => "gtd.bot",
       "schema_version" => "1.0",
+      "tenant_id" => tenant_id,
+      "user_id" => user_id,
       "payload" => %{
         "decomposition" => decomposition,
         "triggered_by_event_id" => event_id
@@ -819,6 +825,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp publish_error(event_id, reason, message) do
+    default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+    publish_error(event_id, reason, message, default_tenant_id, nil)
+  end
+
+  defp publish_error(event_id, reason, message, tenant_id, user_id) do
     error_event = %{
       "event" => "gtd.error",
       "event_id" => UUID.uuid4(),
@@ -827,6 +838,8 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       "source_node" => get_node_name(),
       "triggered_by" => "gtd.bot",
       "schema_version" => "1.0",
+      "tenant_id" => tenant_id,
+      "user_id" => user_id,
       "payload" => %{
         "error" => message,
         "reason" => inspect(reason),

@@ -36,7 +36,7 @@ defmodule BotArmyGtd.LogEntryStore do
   end
 
   @doc """
-  List log entries with optional filtering.
+  List log entries for a tenant with optional filtering.
 
   Options:
   - `date` - Filter by date (Date.t())
@@ -45,8 +45,8 @@ defmodule BotArmyGtd.LogEntryStore do
 
   Returns `{:ok, entries}`.
   """
-  def list(opts \\ []) when is_list(opts) do
-    GenServer.call(@server, {:list, opts})
+  def list(tenant_id, opts \\ []) when is_binary(tenant_id) and is_list(opts) do
+    GenServer.call(@server, {:list, tenant_id, opts})
   end
 
   @doc """
@@ -113,6 +113,8 @@ defmodule BotArmyGtd.LogEntryStore do
     changeset = BotArmyGtd.Schemas.LogEntry.changeset(
       %BotArmyGtd.Schemas.LogEntry{id: entry_id},
       %{
+        "tenant_id" => payload["tenant_id"],
+        "user_id" => Map.get(payload, "user_id"),
         "body" => payload["body"],
         "occurred_at" => occurred_at,
         "category" => Map.get(payload, "category", "personal"),
@@ -138,9 +140,10 @@ defmodule BotArmyGtd.LogEntryStore do
   end
 
   @impl true
-  def handle_call({:list, opts}, _from, state) do
+  def handle_call({:list, tenant_id, opts}, _from, state) do
     entries = state
       |> Map.values()
+      |> Enum.filter(&(&1["tenant_id"] == tenant_id))
       |> filter_by_date(Keyword.get(opts, :date))
       |> filter_by_category(Keyword.get(opts, :category))
       |> Enum.sort_by(&(&1["occurred_at"]), {:desc, NaiveDateTime})
@@ -231,6 +234,8 @@ defmodule BotArmyGtd.LogEntryStore do
   defp schema_to_map(%BotArmyGtd.Schemas.LogEntry{} = entry) do
     %{
       "id" => Ecto.UUID.cast!(entry.id) |> to_string(),
+      "tenant_id" => entry.tenant_id |> to_string(),
+      "user_id" => if(entry.user_id, do: entry.user_id |> to_string(), else: nil),
       "body" => entry.body,
       "occurred_at" => entry.occurred_at |> NaiveDateTime.to_iso8601(),
       "category" => entry.category,

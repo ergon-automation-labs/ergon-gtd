@@ -55,30 +55,30 @@ defmodule BotArmyGtd.InboxItemStore do
   end
 
   @doc """
-  Retrieve an inbox item by ID.
+  Retrieve an inbox item by ID, scoped to a tenant.
 
   Returns `{:ok, item}` or `{:error, :not_found}`.
   """
-  def get(item_id) when is_binary(item_id) do
-    GenServer.call(@server, {:get, item_id})
+  def get(tenant_id, item_id) when is_binary(tenant_id) and is_binary(item_id) do
+    GenServer.call(@server, {:get, tenant_id, item_id})
   end
 
   @doc """
-  List all pending inbox items.
+  List all pending inbox items for a tenant.
 
   Returns `{:ok, items}`.
   """
-  def list_pending do
-    GenServer.call(@server, :list_pending)
+  def list_pending(tenant_id) when is_binary(tenant_id) do
+    GenServer.call(@server, {:list_pending, tenant_id})
   end
 
   @doc """
-  List all inbox items including processed and discarded.
+  List all inbox items for a tenant including processed and discarded.
 
   Returns `{:ok, items}`.
   """
-  def list_all do
-    GenServer.call(@server, :list_all)
+  def list_all(tenant_id) when is_binary(tenant_id) do
+    GenServer.call(@server, {:list_all, tenant_id})
   end
 
   @doc """
@@ -118,6 +118,8 @@ defmodule BotArmyGtd.InboxItemStore do
     changeset = BotArmyGtd.Schemas.InboxItem.changeset(
       %BotArmyGtd.Schemas.InboxItem{id: item_id},
       %{
+        "tenant_id" => payload["tenant_id"],
+        "user_id" => Map.get(payload, "user_id"),
         "raw_text" => payload["raw_text"],
         "source" => Map.get(payload, "source", "user"),
         "source_metadata" => Map.get(payload, "source_metadata"),
@@ -207,26 +209,34 @@ defmodule BotArmyGtd.InboxItemStore do
   end
 
   @impl true
-  def handle_call({:get, item_id}, _from, state) do
+  def handle_call({:get, tenant_id, item_id}, _from, state) do
     case Map.get(state, item_id) do
-      nil -> {:reply, {:error, :not_found}, state}
-      item -> {:reply, {:ok, item}, state}
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      item ->
+        # Verify tenant_id matches
+        if item["tenant_id"] == tenant_id do
+          {:reply, {:ok, item}, state}
+        else
+          {:reply, {:error, :not_found}, state}
+        end
     end
   end
 
   @impl true
-  def handle_call(:list_pending, _from, state) do
+  def handle_call({:list_pending, tenant_id}, _from, state) do
     items =
       state
       |> Map.values()
-      |> Enum.filter(fn item -> item["status"] == "pending" end)
+      |> Enum.filter(fn item -> item["tenant_id"] == tenant_id and item["status"] == "pending" end)
 
     {:reply, {:ok, items}, state}
   end
 
   @impl true
-  def handle_call(:list_all, _from, state) do
-    items = Map.values(state)
+  def handle_call({:list_all, tenant_id}, _from, state) do
+    items = state |> Map.values() |> Enum.filter(&(&1["tenant_id"] == tenant_id))
     {:reply, {:ok, items}, state}
   end
 
@@ -241,6 +251,8 @@ defmodule BotArmyGtd.InboxItemStore do
   defp schema_to_map(%BotArmyGtd.Schemas.InboxItem{} = item) do
     %{
       "id" => Ecto.UUID.cast!(item.id) |> to_string(),
+      "tenant_id" => item.tenant_id |> to_string(),
+      "user_id" => if(item.user_id, do: item.user_id |> to_string(), else: nil),
       "raw_text" => item.raw_text,
       "source" => item.source,
       "source_metadata" => item.source_metadata,

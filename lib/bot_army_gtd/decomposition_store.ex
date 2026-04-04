@@ -40,23 +40,23 @@ defmodule BotArmyGtd.DecompositionStore do
   end
 
   @doc """
-  Retrieve a decomposition by ID.
+  Retrieve a decomposition by ID, scoped to a tenant.
 
   Returns `{:ok, decomposition}` or `{:error, :not_found}`.
   """
   @impl true
-  def get(decomposition_id) when is_binary(decomposition_id) do
-    GenServer.call(@server, {:get, decomposition_id})
+  def get(tenant_id, decomposition_id) when is_binary(tenant_id) and is_binary(decomposition_id) do
+    GenServer.call(@server, {:get, tenant_id, decomposition_id})
   end
 
   @doc """
-  Retrieve decomposition for a parent task.
+  Retrieve decomposition for a parent task, scoped to a tenant.
 
   Returns `{:ok, decomposition}` or `{:error, :not_found}`.
   """
   @impl true
-  def get_by_parent_task(parent_task_id) when is_binary(parent_task_id) do
-    GenServer.call(@server, {:get_by_parent_task, parent_task_id})
+  def get_by_parent_task(tenant_id, parent_task_id) when is_binary(tenant_id) and is_binary(parent_task_id) do
+    GenServer.call(@server, {:get_by_parent_task, tenant_id, parent_task_id})
   end
 
   @doc """
@@ -70,13 +70,13 @@ defmodule BotArmyGtd.DecompositionStore do
   end
 
   @doc """
-  List all decompositions.
+  List all decompositions for a tenant.
 
   Returns `{:ok, decompositions}`.
   """
   @impl true
-  def list do
-    GenServer.call(@server, :list)
+  def list(tenant_id) when is_binary(tenant_id) do
+    GenServer.call(@server, {:list, tenant_id})
   end
 
   @doc """
@@ -124,6 +124,8 @@ defmodule BotArmyGtd.DecompositionStore do
     changeset = BotArmyGtd.Schemas.Decomposition.changeset(
       %BotArmyGtd.Schemas.Decomposition{id: decomposition_id},
       %{
+        "tenant_id" => payload["tenant_id"],
+        "user_id" => Map.get(payload, "user_id"),
         "parent_task_id" => payload["parent_task_id"],
         "status" => Map.get(payload, "status", "in_progress"),
         "step_outputs" => Map.get(payload, "step_outputs", []),
@@ -151,16 +153,25 @@ defmodule BotArmyGtd.DecompositionStore do
   end
 
   @impl true
-  def handle_call({:get, decomposition_id}, _from, state) do
+  def handle_call({:get, tenant_id, decomposition_id}, _from, state) do
     case Map.get(state, decomposition_id) do
-      nil -> {:reply, {:error, :not_found}, state}
-      decomposition -> {:reply, {:ok, decomposition}, state}
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      decomposition ->
+        # Verify tenant_id matches
+        if decomposition["tenant_id"] == tenant_id do
+          {:reply, {:ok, decomposition}, state}
+        else
+          {:reply, {:error, :not_found}, state}
+        end
     end
   end
 
   @impl true
-  def handle_call({:get_by_parent_task, parent_task_id}, _from, state) do
+  def handle_call({:get_by_parent_task, tenant_id, parent_task_id}, _from, state) do
     result = Enum.find(state, fn {_k, decomposition} ->
+      decomposition["tenant_id"] == tenant_id and
       Map.get(decomposition, "parent_task_id") == parent_task_id
     end)
 
@@ -219,8 +230,8 @@ defmodule BotArmyGtd.DecompositionStore do
   end
 
   @impl true
-  def handle_call(:list, _from, state) do
-    decompositions = Map.values(state)
+  def handle_call({:list, tenant_id}, _from, state) do
+    decompositions = state |> Map.values() |> Enum.filter(&(&1["tenant_id"] == tenant_id))
     {:reply, {:ok, decompositions}, state}
   end
 
@@ -259,6 +270,8 @@ defmodule BotArmyGtd.DecompositionStore do
   defp schema_to_map(%BotArmyGtd.Schemas.Decomposition{} = decomposition) do
     %{
       "id" => Ecto.UUID.cast!(decomposition.id) |> to_string(),
+      "tenant_id" => decomposition.tenant_id |> to_string(),
+      "user_id" => if(decomposition.user_id, do: decomposition.user_id |> to_string(), else: nil),
       "parent_task_id" => Ecto.UUID.cast!(decomposition.parent_task_id) |> to_string(),
       "status" => decomposition.status,
       "step_outputs" => decomposition.step_outputs,

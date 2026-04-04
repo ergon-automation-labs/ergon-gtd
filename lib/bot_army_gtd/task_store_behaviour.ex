@@ -8,7 +8,7 @@ defmodule BotArmyGtd.TaskStoreBehaviour do
   @callback create(payload :: map()) :: {:ok, map()} | {:error, atom()}
   @callback update(task_id :: String.t(), payload :: map()) :: {:ok, map()} | {:error, atom()}
   @callback complete(task_id :: String.t()) :: {:ok, map()} | {:error, atom()}
-  @callback get(task_id :: String.t()) :: {:ok, map()} | {:error, atom()}
-  @callback list() :: {:ok, list(map())}
+  @callback get(tenant_id :: String.t(), task_id :: String.t()) :: {:ok, map()} | {:error, atom()}
+  @callback list(tenant_id :: String.t()) :: {:ok, list(map())}
   @callback clear() :: :ok
 end

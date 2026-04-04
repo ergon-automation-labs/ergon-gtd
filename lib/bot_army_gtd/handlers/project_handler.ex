@@ -31,22 +31,28 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
   def handle_create(message) do
     event_id = message["event_id"]
     payload = message["payload"]
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
-    case validate_create_payload(payload) do
+    stamped_payload = Map.merge(payload, %{
+      "tenant_id" => tenant_id,
+      "user_id" => user_id
+    })
+
+    case validate_create_payload(stamped_payload) do
       :ok ->
-        case project_store().create(payload) do
+        case project_store().create(stamped_payload) do
           {:ok, project} ->
-            Logger.info("Project created: project_id=#{project.id}, event_id=#{event_id}")
-            publish_event("gtd.project.created", payload, project, event_id, message)
+            Logger.info("Project created: project_id=#{project["id"]}, event_id=#{event_id}")
+            publish_event("gtd.project.created", stamped_payload, project, event_id, message, tenant_id, user_id)
 
           {:error, reason} ->
             Logger.error("Failed to create project: #{inspect(reason)}")
-            publish_error(event_id, reason, "Failed to create project")
+            publish_error(event_id, reason, "Failed to create project", tenant_id, user_id)
         end
 
       {:error, reason} ->
         Logger.warning("Invalid project creation payload: #{inspect(reason)}")
-        publish_error(event_id, reason, "Invalid project data")
+        publish_error(event_id, reason, "Invalid project data", tenant_id, user_id)
     end
   end
 
@@ -58,6 +64,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
   def handle_update(message) do
     event_id = message["event_id"]
     payload = message["payload"]
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
     case validate_update_payload(payload) do
       :ok ->
@@ -66,16 +73,16 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
         case project_store().update(project_id, payload) do
           {:ok, project} ->
             Logger.info("Project updated: project_id=#{project_id}, event_id=#{event_id}")
-            publish_event("gtd.project.updated", payload, project, event_id, message)
+            publish_event("gtd.project.updated", payload, project, event_id, message, tenant_id, user_id)
 
           {:error, reason} ->
             Logger.error("Failed to update project #{project_id}: #{inspect(reason)}")
-            publish_error(event_id, reason, "Failed to update project")
+            publish_error(event_id, reason, "Failed to update project", tenant_id, user_id)
         end
 
       {:error, reason} ->
         Logger.warning("Invalid project update payload: #{inspect(reason)}")
-        publish_error(event_id, reason, "Invalid project data")
+        publish_error(event_id, reason, "Invalid project data", tenant_id, user_id)
     end
   end
 
@@ -102,7 +109,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
     end
   end
 
-  defp publish_event(event_type, _payload, project, event_id, _original_message) do
+  defp publish_event(event_type, _payload, project, event_id, _original_message, tenant_id, user_id) do
     event_data = %{
       "event" => event_type,
       "event_id" => UUID.uuid4(),
@@ -111,6 +118,8 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
       "source_node" => get_node_name(),
       "triggered_by" => "gtd.bot",
       "schema_version" => "1.0",
+      "tenant_id" => tenant_id,
+      "user_id" => user_id,
       "payload" => %{
         "project" => project,
         "triggered_by_event_id" => event_id
@@ -123,7 +132,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
     end
   end
 
-  defp publish_error(event_id, reason, message) do
+  defp publish_error(event_id, reason, message, tenant_id, user_id) do
     error_event = %{
       "event" => "gtd.error",
       "event_id" => UUID.uuid4(),
@@ -132,6 +141,8 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
       "source_node" => get_node_name(),
       "triggered_by" => "gtd.bot",
       "schema_version" => "1.0",
+      "tenant_id" => tenant_id,
+      "user_id" => user_id,
       "payload" => %{
         "error" => message,
         "reason" => inspect(reason),

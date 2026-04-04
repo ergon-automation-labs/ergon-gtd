@@ -64,7 +64,8 @@ defmodule BotArmyGtd.ReviewScheduler do
   Returns a list of maps with due decompositions, sorted by due_at.
   """
   def get_due do
-    with {:ok, decompositions} <- get_store().list() do
+    default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+    with {:ok, decompositions} <- get_store().list(default_tenant_id) do
       now = DateTime.utc_now()
 
       due =
