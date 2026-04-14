@@ -50,27 +50,59 @@ defmodule BotArmyGtd.NATS.Consumer do
     event = message["event"]
 
     case event do
-      "gtd.inbox.add" -> BotArmyGtd.Handlers.InboxHandler.handle_add(message)
-      "gtd.task.create" -> BotArmyGtd.Handlers.TaskHandler.handle_create(message)
-      "gtd.task.update" -> BotArmyGtd.Handlers.TaskHandler.handle_update(message)
-      "gtd.task.complete" -> BotArmyGtd.Handlers.TaskHandler.handle_complete(message)
-      "gtd.task.command.defer" -> BotArmyGtd.Handlers.TaskHandler.handle_defer(message)
-      "gtd.task.command.delete" -> BotArmyGtd.Handlers.TaskHandler.handle_delete(message)
-      "gtd.task.decompose" -> BotArmyGtd.Handlers.DecompositionHandler.handle_decompose(message)
-      "gtd.decomposition.approve" -> BotArmyGtd.Handlers.DecompositionHandler.handle_approve(message)
-      "gtd.decomposition.reject" -> BotArmyGtd.Handlers.DecompositionHandler.handle_reject(message)
-      "gtd.decomposition.review" -> BotArmyGtd.Handlers.DecompositionHandler.handle_review(message)
-      "gtd.decomposition.request_review" -> BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
-      "gtd.project.create" -> BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
-      "gtd.project.update" -> BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
-      "gtd.log.create" -> BotArmyGtd.Handlers.LogEntryHandler.handle_create(message)
+      "gtd.inbox.add" ->
+        BotArmyGtd.Handlers.InboxHandler.handle_add(message)
+
+      "gtd.task.create" ->
+        BotArmyGtd.Handlers.TaskHandler.handle_create(message)
+
+      "gtd.task.update" ->
+        BotArmyGtd.Handlers.TaskHandler.handle_update(message)
+
+      "gtd.task.complete" ->
+        BotArmyGtd.Handlers.TaskHandler.handle_complete(message)
+
+      "gtd.task.command.defer" ->
+        BotArmyGtd.Handlers.TaskHandler.handle_defer(message)
+
+      "gtd.task.command.delete" ->
+        BotArmyGtd.Handlers.TaskHandler.handle_delete(message)
+
+      "gtd.task.decompose" ->
+        BotArmyGtd.Handlers.DecompositionHandler.handle_decompose(message)
+
+      "gtd.decomposition.approve" ->
+        BotArmyGtd.Handlers.DecompositionHandler.handle_approve(message)
+
+      "gtd.decomposition.reject" ->
+        BotArmyGtd.Handlers.DecompositionHandler.handle_reject(message)
+
+      "gtd.decomposition.review" ->
+        BotArmyGtd.Handlers.DecompositionHandler.handle_review(message)
+
+      "gtd.decomposition.request_review" ->
+        BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
+
+      "gtd.project.create" ->
+        BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
+
+      "gtd.project.update" ->
+        BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
+
+      "gtd.log.create" ->
+        BotArmyGtd.Handlers.LogEntryHandler.handle_create(message)
+
       "llm.response.parsed" ->
         case get_in(message, ["payload", "enrichment_source"]) do
           "log_enrichment" -> BotArmyGtd.Handlers.LogEnrichmentHandler.handle_enriched(message)
           _ -> BotArmyGtd.Handlers.InboxParsingHandler.handle_parse(message)
         end
-      "llm.chain.completed" -> BotArmyGtd.Handlers.DecompositionHandler.handle_chain_completed(message)
-      _ -> Logger.debug("Unknown event type: #{event}")
+
+      "llm.chain.completed" ->
+        BotArmyGtd.Handlers.DecompositionHandler.handle_chain_completed(message)
+
+      _ ->
+        Logger.debug("Unknown event type: #{event}")
     end
   end
 
@@ -148,9 +180,10 @@ defmodule BotArmyGtd.NATS.Consumer do
   def handle_info({:msg, %{topic: "gtd.task.list", reply_to: reply_to} = _msg}, state)
       when is_binary(reply_to) and reply_to != "" do
     task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+    tenant_id = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
 
     response =
-      case task_store.list() do
+      case task_store.list(tenant_id) do
         {:ok, tasks} ->
           Jason.encode!(%{tasks: tasks})
 
@@ -166,13 +199,19 @@ defmodule BotArmyGtd.NATS.Consumer do
   end
 
   @impl true
-  def handle_info({:msg, %{topic: "gtd.decomposition.list_due", reply_to: reply_to} = _msg}, state)
+  def handle_info(
+        {:msg, %{topic: "gtd.decomposition.list_due", reply_to: reply_to} = _msg},
+        state
+      )
       when is_binary(reply_to) and reply_to != "" do
-    decomposition_store = Application.get_env(:bot_army_gtd, :decomposition_store, BotArmyGtd.DecompositionStore)
+    decomposition_store =
+      Application.get_env(:bot_army_gtd, :decomposition_store, BotArmyGtd.DecompositionStore)
+
+    tenant_id = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
     now = DateTime.utc_now()
 
     response =
-      case decomposition_store.list() do
+      case decomposition_store.list(tenant_id) do
         {:ok, decompositions} ->
           due =
             decompositions
@@ -186,7 +225,9 @@ defmodule BotArmyGtd.NATS.Consumer do
               end
             end)
             |> Enum.sort_by(fn d -> d["due_at"] end)
+
           Jason.encode!(%{decompositions: due})
+
         {:error, reason} ->
           Jason.encode!(%{error: inspect(reason), decompositions: []})
       end
