@@ -76,7 +76,8 @@ defmodule BotArmyGtd.Handlers.LogEnrichmentHandler do
           Logger.warning("structured_data is not a map in enrichment response")
           :ok
 
-        {log_entry_id, structured_data} when is_binary(log_entry_id) and is_map(structured_data) ->
+        {log_entry_id, structured_data}
+        when is_binary(log_entry_id) and is_map(structured_data) ->
           case log_entry_store().mark_enriched(log_entry_id, structured_data) do
             {:ok, updated_entry} ->
               publish_enriched_event(updated_entry)
@@ -111,7 +112,7 @@ defmodule BotArmyGtd.Handlers.LogEnrichmentHandler do
       "schema_version" => "1.0",
       "payload" => %{
         "model" => "gpt-4-turbo",
-        "prompt" => build_prompt(body),
+        "text" => build_prompt(body),
         "output_schema" => output_schema(),
         "max_retries" => 2,
         "log_entry_id" => log_entry_id,
