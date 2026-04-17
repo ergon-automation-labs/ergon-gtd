@@ -32,14 +32,15 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
   def handle_parse(message) do
     event_id = message["event_id"]
     payload = message["payload"]
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
     case validate_parse_payload(payload) do
       :ok ->
-        process_parse(payload, event_id, message)
+        process_parse(payload, event_id, message, tenant_id, user_id)
 
       {:error, reason} ->
         Logger.warning("Invalid parse payload: #{inspect(reason)}")
-        publish_error(event_id, reason, "Invalid parsed data")
+        publish_error(event_id, reason, "Invalid parsed data", tenant_id, user_id)
     end
   end
 
@@ -66,7 +67,7 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
 
   # Private processing
 
-  defp process_parse(payload, event_id, _message) do
+  defp process_parse(payload, event_id, _message, tenant_id, user_id) do
     structured_data = payload["structured_data"]
     inbox_item_id = payload["inbox_item_id"]
     source = payload["source"] || "user"
@@ -82,30 +83,44 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
 
     # Create task with parsed data
     case task_store().create(%{
-      "title" => title,
-      "description" => description,
-      "project_id" => project,
-      "status" => "inbox",
-      "priority" => priority,
-      "due_date" => due_date,
-      "tags" => tags,
-      "source" => source,
-      "source_metadata" => source_metadata,
-      "inbox_item_id" => inbox_item_id
-    }) do
+           "tenant_id" => tenant_id,
+           "user_id" => user_id,
+           "title" => title,
+           "description" => description,
+           "project_id" => project,
+           "status" => "inbox",
+           "priority" => priority,
+           "due_date" => due_date,
+           "tags" => tags,
+           "source" => source,
+           "source_metadata" => source_metadata,
+           "inbox_item_id" => inbox_item_id
+         }) do
       {:ok, task} ->
         Logger.info("Parsed task created: task_id=#{task["id"]}, event_id=#{event_id}")
-        publish_task_created(task, event_id)
+        publish_task_created(task, event_id, tenant_id, user_id)
 
       {:error, reason} ->
         Logger.error("Failed to create task from parsed data: #{inspect(reason)}")
-        publish_error(event_id, reason, "Failed to create task from parsed data")
+
+        publish_error(
+          event_id,
+          reason,
+          "Failed to create task from parsed data",
+          tenant_id,
+          user_id
+        )
     end
   end
 
   # Private publishing
 
   defp publish_task_created(task, event_id) do
+    default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+    publish_task_created(task, event_id, default_tenant_id, nil)
+  end
+
+  defp publish_task_created(task, event_id, tenant_id, user_id) do
     event_data = %{
       "event" => "gtd.task.created",
       "event_id" => UUID.uuid4(),
@@ -114,6 +129,8 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
       "source_node" => get_node_name(),
       "triggered_by" => "gtd.bot",
       "schema_version" => "1.0",
+      "tenant_id" => tenant_id,
+      "user_id" => user_id,
       "payload" => %{
         "task" => task,
         "triggered_by_event_id" => event_id
@@ -127,6 +144,11 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
   end
 
   defp publish_error(event_id, reason, message) do
+    default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+    publish_error(event_id, reason, message, default_tenant_id, nil)
+  end
+
+  defp publish_error(event_id, reason, message, tenant_id, user_id) do
     error_event = %{
       "event" => "gtd.error",
       "event_id" => UUID.uuid4(),
@@ -135,6 +157,8 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
       "source_node" => get_node_name(),
       "triggered_by" => "gtd.bot",
       "schema_version" => "1.0",
+      "tenant_id" => tenant_id,
+      "user_id" => user_id,
       "payload" => %{
         "error" => message,
         "reason" => inspect(reason),

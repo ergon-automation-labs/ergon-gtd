@@ -97,16 +97,22 @@ defmodule BotArmyGtd.InboxItemStore do
     Logger.info("InboxItemStore started")
     # Load all inbox items from database
     # Gracefully handle database unavailability (e.g., in tests)
-    state = try do
-      items = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.InboxItem)
-      Enum.reduce(items, %{}, fn item, acc ->
-        Map.put(acc, item.id |> to_string(), schema_to_map(item))
-      end)
-    rescue
-      _ ->
-        Logger.warning("Could not load inbox items from database (database unavailable). Starting with empty state.")
-        %{}
-    end
+    state =
+      try do
+        items = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.InboxItem)
+
+        Enum.reduce(items, %{}, fn item, acc ->
+          Map.put(acc, item.id |> to_string(), schema_to_map(item))
+        end)
+      rescue
+        _ ->
+          Logger.warning(
+            "Could not load inbox items from database (database unavailable). Starting with empty state."
+          )
+
+          %{}
+      end
+
     {:ok, state}
   end
 
@@ -115,18 +121,19 @@ defmodule BotArmyGtd.InboxItemStore do
     item_id = Ecto.UUID.generate()
     now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
 
-    changeset = BotArmyGtd.Schemas.InboxItem.changeset(
-      %BotArmyGtd.Schemas.InboxItem{id: item_id},
-      %{
-        "tenant_id" => payload["tenant_id"],
-        "user_id" => Map.get(payload, "user_id"),
-        "raw_text" => payload["raw_text"],
-        "source" => Map.get(payload, "source", "user"),
-        "source_metadata" => Map.get(payload, "source_metadata"),
-        "received_at" => now,
-        "status" => "pending"
-      }
-    )
+    changeset =
+      BotArmyGtd.Schemas.InboxItem.changeset(
+        %BotArmyGtd.Schemas.InboxItem{id: item_id},
+        %{
+          "tenant_id" => payload["tenant_id"],
+          "user_id" => Map.get(payload, "user_id"),
+          "raw_text" => payload["raw_text"],
+          "source" => Map.get(payload, "source", "user"),
+          "source_metadata" => Map.get(payload, "source_metadata"),
+          "received_at" => now,
+          "status" => "pending"
+        }
+      )
 
     case BotArmyGtd.Repo.insert(changeset) do
       {:ok, db_item} ->
@@ -149,29 +156,39 @@ defmodule BotArmyGtd.InboxItemStore do
 
       _item ->
         item_uuid = Ecto.UUID.cast!(item_id)
-        db_item = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.InboxItem, item_uuid)
 
-        if db_item do
-          now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+        case BotArmyGtd.Repo.transaction(fn ->
+               db_item = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.InboxItem, item_uuid)
 
-          changeset = BotArmyGtd.Schemas.InboxItem.changeset(db_item, %{
-            "status" => "clarified",
-            "processed_at" => now
-          })
+               if db_item do
+                 now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
 
-          case BotArmyGtd.Repo.update(changeset) do
-            {:ok, updated_db_item} ->
-              updated_item = schema_to_map(updated_db_item)
-              new_state = Map.put(state, item_id, updated_item)
-              Logger.info("Marked inbox item as processed: #{item_id}")
-              {:reply, {:ok, updated_item}, new_state}
+                 changeset =
+                   BotArmyGtd.Schemas.InboxItem.changeset(db_item, %{
+                     "status" => "clarified",
+                     "processed_at" => now
+                   })
 
-            {:error, changeset} ->
-              Logger.error("Failed to mark inbox item as processed: #{inspect(changeset.errors)}")
-              {:reply, {:error, :database_error}, state}
-          end
-        else
-          {:reply, {:error, :not_found}, state}
+                 case BotArmyGtd.Repo.update(changeset) do
+                   {:ok, updated} -> updated
+                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+                 end
+               else
+                 BotArmyGtd.Repo.rollback(:not_found)
+               end
+             end) do
+          {:ok, updated_db_item} ->
+            updated_item = schema_to_map(updated_db_item)
+            new_state = Map.put(state, item_id, updated_item)
+            Logger.info("Marked inbox item as processed: #{item_id}")
+            {:reply, {:ok, updated_item}, new_state}
+
+          {:error, :not_found} ->
+            {:reply, {:error, :not_found}, state}
+
+          {:error, changeset} ->
+            Logger.error("Failed to mark inbox item as processed: #{inspect(changeset.errors)}")
+            {:reply, {:error, :database_error}, state}
         end
     end
   end
@@ -184,26 +201,36 @@ defmodule BotArmyGtd.InboxItemStore do
 
       _item ->
         item_uuid = Ecto.UUID.cast!(item_id)
-        db_item = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.InboxItem, item_uuid)
 
-        if db_item do
-          changeset = BotArmyGtd.Schemas.InboxItem.changeset(db_item, %{
-            "status" => "discarded"
-          })
+        case BotArmyGtd.Repo.transaction(fn ->
+               db_item = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.InboxItem, item_uuid)
 
-          case BotArmyGtd.Repo.update(changeset) do
-            {:ok, updated_db_item} ->
-              updated_item = schema_to_map(updated_db_item)
-              new_state = Map.put(state, item_id, updated_item)
-              Logger.info("Marked inbox item as discarded: #{item_id}")
-              {:reply, {:ok, updated_item}, new_state}
+               if db_item do
+                 changeset =
+                   BotArmyGtd.Schemas.InboxItem.changeset(db_item, %{
+                     "status" => "discarded"
+                   })
 
-            {:error, changeset} ->
-              Logger.error("Failed to mark inbox item as discarded: #{inspect(changeset.errors)}")
-              {:reply, {:error, :database_error}, state}
-          end
-        else
-          {:reply, {:error, :not_found}, state}
+                 case BotArmyGtd.Repo.update(changeset) do
+                   {:ok, updated} -> updated
+                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+                 end
+               else
+                 BotArmyGtd.Repo.rollback(:not_found)
+               end
+             end) do
+          {:ok, updated_db_item} ->
+            updated_item = schema_to_map(updated_db_item)
+            new_state = Map.put(state, item_id, updated_item)
+            Logger.info("Marked inbox item as discarded: #{item_id}")
+            {:reply, {:ok, updated_item}, new_state}
+
+          {:error, :not_found} ->
+            {:reply, {:error, :not_found}, state}
+
+          {:error, changeset} ->
+            Logger.error("Failed to mark inbox item as discarded: #{inspect(changeset.errors)}")
+            {:reply, {:error, :database_error}, state}
         end
     end
   end

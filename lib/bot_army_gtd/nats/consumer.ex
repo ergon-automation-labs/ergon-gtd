@@ -126,6 +126,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   def handle_continue(:connect, state) do
     case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
       {:ok, conn} ->
+        BotArmyRuntime.NATS.Connection.subscribe_to_status()
         Logger.info("Connected to NATS, subscribing to GTD topics")
 
         subscriptions =
@@ -241,15 +242,17 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @impl true
   def handle_info({:msg, msg}, state) do
-    Logger.debug("Received NATS message on subject: #{msg.topic}")
+    BotArmyRuntime.Tracing.with_consumer_span(msg.topic, msg.headers, fn ->
+      Logger.debug("Received NATS message on subject: #{msg.topic}")
 
-    case BotArmyCore.NATS.Decoder.decode(msg.body) do
-      {:ok, decoded_message} ->
-        route_message(decoded_message)
+      case BotArmyCore.NATS.Decoder.decode(msg.body) do
+        {:ok, decoded_message} ->
+          route_message(decoded_message)
 
-      {:error, reason} ->
-        Logger.warning("Failed to decode message from #{msg.topic}: #{inspect(reason)}")
-    end
+        {:error, reason} ->
+          Logger.warning("Failed to decode message from #{msg.topic}: #{inspect(reason)}")
+      end
+    end)
 
     {:noreply, state}
   end
@@ -258,18 +261,18 @@ defmodule BotArmyGtd.NATS.Consumer do
   def handle_info({:nats, :disconnected}, state) do
     Logger.warning("Disconnected from NATS, will attempt to reconnect")
     Process.send_after(self(), :reconnect, @reconnect_delay_ms)
-    {:noreply, state}
+    {:noreply, %{state | subscriptions: [], conn: nil}}
   end
 
   @impl true
   def handle_info({:nats, :connected}, state) do
-    Logger.info("Connected to NATS")
-    {:noreply, state}
+    Logger.info("Connected to NATS, re-subscribing")
+    {:noreply, state, {:continue, :connect}}
   end
 
   @impl true
   def handle_info(:reconnect, state) do
     Logger.info("Attempting to reconnect to NATS")
-    {:noreply, state}
+    {:noreply, state, {:continue, :connect}}
   end
 end
