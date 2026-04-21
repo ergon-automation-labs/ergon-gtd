@@ -30,7 +30,8 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
         valid_create_message()
         |> put_in(["payload", "title"], nil)
 
-      assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_create(message)
+      assert {:error, {:missing_field, "title"}} =
+               BotArmyGtd.Handlers.TaskHandler.handle_create(message)
     end
   end
 
@@ -83,7 +84,7 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
         "payload" => payload
       }
 
-      assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_update(update_msg)
+      assert {:error, :not_found} = BotArmyGtd.Handlers.TaskHandler.handle_update(update_msg)
     end
   end
 
@@ -124,7 +125,7 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
         "payload" => %{"task_id" => task_id}
       }
 
-      assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_complete(message)
+      assert {:error, :not_found} = BotArmyGtd.Handlers.TaskHandler.handle_complete(message)
     end
   end
 

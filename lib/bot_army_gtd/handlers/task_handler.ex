@@ -35,26 +35,40 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
     # Stamp tenant and user context into payload
-    stamped_payload = Map.merge(payload, %{
-      "tenant_id" => tenant_id,
-      "user_id" => user_id
-    })
+    stamped_payload =
+      Map.merge(payload, %{
+        "tenant_id" => tenant_id,
+        "user_id" => user_id
+      })
 
     case validate_create_payload(stamped_payload) do
       :ok ->
         case task_store().create(stamped_payload) do
           {:ok, task} ->
             Logger.info("Task created: task_id=#{task["id"]}, event_id=#{event_id}")
-            publish_event("gtd.task.created", stamped_payload, task, event_id, message, tenant_id, user_id)
+
+            publish_event(
+              "gtd.task.created",
+              stamped_payload,
+              task,
+              event_id,
+              message,
+              tenant_id,
+              user_id
+            )
+
+            :ok
 
           {:error, reason} ->
             Logger.error("Failed to create task: #{inspect(reason)}")
             publish_error(event_id, reason, "Failed to create task", tenant_id, user_id)
+            {:error, reason}
         end
 
       {:error, reason} ->
         Logger.warning("Invalid task creation payload: #{inspect(reason)}")
         publish_error(event_id, reason, "Invalid task data", tenant_id, user_id)
+        {:error, reason}
     end
   end
 
@@ -75,16 +89,29 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         case task_store().update(task_id, payload) do
           {:ok, task} ->
             Logger.info("Task updated: task_id=#{task_id}, event_id=#{event_id}")
-            publish_event("gtd.task.updated", payload, task, event_id, message, tenant_id, user_id)
+
+            publish_event(
+              "gtd.task.updated",
+              payload,
+              task,
+              event_id,
+              message,
+              tenant_id,
+              user_id
+            )
+
+            :ok
 
           {:error, reason} ->
             Logger.error("Failed to update task #{task_id}: #{inspect(reason)}")
             publish_error(event_id, reason, "Failed to update task", tenant_id, user_id)
+            {:error, reason}
         end
 
       {:error, reason} ->
         Logger.warning("Invalid task update payload: #{inspect(reason)}")
         publish_error(event_id, reason, "Invalid task data", tenant_id, user_id)
+        {:error, reason}
     end
   end
 
@@ -105,16 +132,29 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         case task_store().complete(task_id) do
           {:ok, task} ->
             Logger.info("Task completed: task_id=#{task_id}, event_id=#{event_id}")
-            publish_event("gtd.task.completed", payload, task, event_id, message, tenant_id, user_id)
+
+            publish_event(
+              "gtd.task.completed",
+              payload,
+              task,
+              event_id,
+              message,
+              tenant_id,
+              user_id
+            )
+
+            :ok
 
           {:error, reason} ->
             Logger.error("Failed to complete task #{task_id}: #{inspect(reason)}")
             publish_error(event_id, reason, "Failed to complete task", tenant_id, user_id)
+            {:error, reason}
         end
 
       {:error, reason} ->
         Logger.warning("Invalid task completion payload: #{inspect(reason)}")
         publish_error(event_id, reason, "Invalid task data", tenant_id, user_id)
+        {:error, reason}
     end
   end
 
@@ -135,17 +175,32 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
         case task_store().update(task_id, %{"due_date" => defer_until}) do
           {:ok, task} ->
-            Logger.info("Task deferred: task_id=#{task_id}, until=#{defer_until}, event_id=#{event_id}")
-            publish_event("gtd.task.state.updated", payload, task, event_id, message, tenant_id, user_id)
+            Logger.info(
+              "Task deferred: task_id=#{task_id}, until=#{defer_until}, event_id=#{event_id}"
+            )
+
+            publish_event(
+              "gtd.task.state.updated",
+              payload,
+              task,
+              event_id,
+              message,
+              tenant_id,
+              user_id
+            )
+
+            :ok
 
           {:error, reason} ->
             Logger.error("Failed to defer task #{task_id}: #{inspect(reason)}")
             publish_error(event_id, reason, "Failed to defer task", tenant_id, user_id)
+            {:error, reason}
         end
 
       {:error, reason} ->
         Logger.warning("Invalid task defer payload: #{inspect(reason)}")
         publish_error(event_id, reason, "Invalid defer data", tenant_id, user_id)
+        {:error, reason}
     end
   end
 
@@ -166,16 +221,29 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         case task_store().update(task_id, %{"status" => "deleted"}) do
           {:ok, task} ->
             Logger.info("Task deleted: task_id=#{task_id}, event_id=#{event_id}")
-            publish_event("gtd.task.state.updated", payload, task, event_id, message, tenant_id, user_id)
+
+            publish_event(
+              "gtd.task.state.updated",
+              payload,
+              task,
+              event_id,
+              message,
+              tenant_id,
+              user_id
+            )
+
+            :ok
 
           {:error, reason} ->
             Logger.error("Failed to delete task #{task_id}: #{inspect(reason)}")
             publish_error(event_id, reason, "Failed to delete task", tenant_id, user_id)
+            {:error, reason}
         end
 
       {:error, reason} ->
         Logger.warning("Invalid task delete payload: #{inspect(reason)}")
         publish_error(event_id, reason, "Invalid delete data", tenant_id, user_id)
+        {:error, reason}
     end
   end
 
