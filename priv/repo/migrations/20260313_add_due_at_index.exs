@@ -1,5 +1,6 @@
 defmodule BotArmyGtd.Repo.Migrations.AddDueAtIndex do
   use Ecto.Migration
+  import Ecto.Migration, only: [table_exists?: 1]
   require Logger
 
   def up do
