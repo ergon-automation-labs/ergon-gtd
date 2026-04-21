@@ -1,18 +1,21 @@
 defmodule BotArmyGtd.FormatterTest do
   use ExUnit.Case
+  @moduletag :format
   doctest BotArmyGtd.Formatter
 
   alias BotArmyGtd.Formatter
 
   describe "format/2" do
     test "inbox_cleared with all values" do
-      result = Formatter.format(:inbox_cleared, %{
-        "added" => 3,
-        "scheduled" => 2,
-        "deleted" => 1
-      })
+      result =
+        Formatter.format(:inbox_cleared, %{
+          "added" => 3,
+          "scheduled" => 2,
+          "deleted" => 1
+        })
 
-      assert result == "◉ Inbox cleared. 3 tasks added, 2 scheduled, 1 deleted because honestly, no."
+      assert result ==
+               "◉ Inbox cleared. 3 tasks added, 2 scheduled, 1 deleted because honestly, no."
     end
 
     test "inbox_pending with multiple tasks" do
@@ -32,12 +35,16 @@ defmodule BotArmyGtd.FormatterTest do
 
     test "weekly_review_overdue with multiple days" do
       result = Formatter.format(:weekly_review_overdue, %{"days_overdue" => 6})
-      assert result == "◉ Weekly review pending for 6 days. When you're ready, I'm ready. I'll be here."
+
+      assert result ==
+               "◉ Weekly review pending for 6 days. When you're ready, I'm ready. I'll be here."
     end
 
     test "weekly_review_overdue with one day" do
       result = Formatter.format(:weekly_review_overdue, %{"days_overdue" => 1})
-      assert result == "◉ Weekly review pending for 1 day. When you're ready, I'm ready. I'll be here."
+
+      assert result ==
+               "◉ Weekly review pending for 1 day. When you're ready, I'm ready. I'll be here."
     end
 
     test "weekly_review_due" do
@@ -46,10 +53,11 @@ defmodule BotArmyGtd.FormatterTest do
     end
 
     test "task_created with context" do
-      result = Formatter.format(:task_created, %{
-        "title" => "Review Q1 goals",
-        "context" => "planning"
-      })
+      result =
+        Formatter.format(:task_created, %{
+          "title" => "Review Q1 goals",
+          "context" => "planning"
+        })
 
       assert result == "◉ Added: Review Q1 goals (planning)"
     end
@@ -75,10 +83,11 @@ defmodule BotArmyGtd.FormatterTest do
     end
 
     test "decomposition_complete" do
-      result = Formatter.format(:decomposition_complete, %{
-        "task_title" => "Plan vacation",
-        "subtask_count" => 5
-      })
+      result =
+        Formatter.format(:decomposition_complete, %{
+          "task_title" => "Plan vacation",
+          "subtask_count" => 5
+        })
 
       assert result == "◉ Plan vacation is now 5 concrete next steps. Much better."
     end

@@ -1,3 +1,4 @@
+ExUnit.configure(exclude: [:integration, :load, :nats_live])
 ExUnit.start()
 Mox.defmock(BotArmyGtd.TaskStoreMock, for: BotArmyGtd.TaskStoreBehaviour)
 Mox.defmock(BotArmyGtd.ProjectStoreMock, for: BotArmyGtd.ProjectStoreBehaviour)

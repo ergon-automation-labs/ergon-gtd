@@ -1,5 +1,6 @@
 defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
   use ExUnit.Case
+  @moduletag :handlers
   import Mox
 
   setup :verify_on_exit!
@@ -11,11 +12,12 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.TaskStoreMock, :get, fn ^default_tenant_id, ^task_id ->
-        {:ok, %{
-          "id" => task_id,
-          "title" => "Implement authentication system",
-          "description" => "Add OAuth2 support"
-        }}
+        {:ok,
+         %{
+           "id" => task_id,
+           "title" => "Implement authentication system",
+           "description" => "Add OAuth2 support"
+         }}
       end)
 
       message = %{
@@ -99,12 +101,13 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :create, fn payload when is_map(payload) ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "parent_task_id" => task_id,
-          "status" => "completed",
-          "tenant_id" => default_tenant_id
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "parent_task_id" => task_id,
+           "status" => "completed",
+           "tenant_id" => default_tenant_id
+         }}
       end)
 
       message = %{
@@ -117,31 +120,46 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
           "steps" => [
             %{
               "name" => "break_down",
-              "output" => Jason.encode!([
-                %{"title" => "Setup OAuth", "description" => "Configure OAuth2 provider", "estimated_hours" => 4},
-                %{"title" => "Database schema", "description" => "Add user table", "estimated_hours" => 2},
-                %{"title" => "API endpoints", "description" => "Create auth endpoints", "estimated_hours" => 6}
-              ])
+              "output" =>
+                Jason.encode!([
+                  %{
+                    "title" => "Setup OAuth",
+                    "description" => "Configure OAuth2 provider",
+                    "estimated_hours" => 4
+                  },
+                  %{
+                    "title" => "Database schema",
+                    "description" => "Add user table",
+                    "estimated_hours" => 2
+                  },
+                  %{
+                    "title" => "API endpoints",
+                    "description" => "Create auth endpoints",
+                    "estimated_hours" => 6
+                  }
+                ])
             },
             %{
               "name" => "estimate_effort",
-              "output" => Jason.encode!(%{
-                "subtasks" => [
-                  %{"title" => "Setup OAuth", "estimated_hours" => 4},
-                  %{"title" => "Database schema", "estimated_hours" => 2},
-                  %{"title" => "API endpoints", "estimated_hours" => 6}
-                ],
-                "total_hours" => 12
-              })
+              "output" =>
+                Jason.encode!(%{
+                  "subtasks" => [
+                    %{"title" => "Setup OAuth", "estimated_hours" => 4},
+                    %{"title" => "Database schema", "estimated_hours" => 2},
+                    %{"title" => "API endpoints", "estimated_hours" => 6}
+                  ],
+                  "total_hours" => 12
+                })
             },
             %{
               "name" => "identify_dependencies",
-              "output" => Jason.encode!(%{
-                "dependencies" => [
-                  %{"depends_on" => "Setup OAuth", "required_for" => "API endpoints"},
-                  %{"depends_on" => "Database schema", "required_for" => "API endpoints"}
-                ]
-              })
+              "output" =>
+                Jason.encode!(%{
+                  "dependencies" => [
+                    %{"depends_on" => "Setup OAuth", "required_for" => "API endpoints"},
+                    %{"depends_on" => "Database schema", "required_for" => "API endpoints"}
+                  ]
+                })
             }
           ],
           "metadata" => %{
@@ -200,12 +218,13 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :create, fn payload when is_map(payload) ->
-        {:ok, %{
-          "id" => UUID.uuid4(),
-          "parent_task_id" => task_id,
-          "status" => "completed",
-          "tenant_id" => default_tenant_id
-        }}
+        {:ok,
+         %{
+           "id" => UUID.uuid4(),
+           "parent_task_id" => task_id,
+           "status" => "completed",
+           "tenant_id" => default_tenant_id
+         }}
       end)
 
       message = %{
@@ -260,26 +279,29 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       ]
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "parent_task_id" => task_id,
-          "subtask_list" => subtask_list,
-          "status" => "completed"
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "parent_task_id" => task_id,
+           "subtask_list" => subtask_list,
+           "status" => "completed"
+         }}
       end)
 
       expect(BotArmyGtd.TaskStoreMock, :create, 3, fn payload when is_map(payload) ->
-        {:ok, %{
-          "id" => UUID.uuid4(),
-          "title" => payload["title"],
-          "parent_task_id" => task_id,
-          "status" => "inbox"
-        }}
+        {:ok,
+         %{
+           "id" => UUID.uuid4(),
+           "title" => payload["title"],
+           "parent_task_id" => task_id,
+           "status" => "inbox"
+         }}
       end)
 
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, update_payload ->
-        {:ok, Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
+        {:ok,
+         Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
       end)
 
       message = %{
@@ -304,17 +326,24 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "parent_task_id" => task_id,
-          "subtask_list" => [],
-          "status" => "completed"
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "parent_task_id" => task_id,
+           "subtask_list" => [],
+           "status" => "completed"
+         }}
       end)
 
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, _update_payload ->
-        {:ok, %{"id" => decomposition_id, "status" => "reviewed", "actual_subtask_count" => 0, "tenant_id" => default_tenant_id}}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "status" => "reviewed",
+           "actual_subtask_count" => 0,
+           "tenant_id" => default_tenant_id
+         }}
       end)
 
       message = %{
@@ -378,16 +407,18 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "status" => "completed",
-          "last_grade" => 2
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "status" => "completed",
+           "last_grade" => 2
+         }}
       end)
 
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, update_payload ->
-        {:ok, Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
+        {:ok,
+         Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
       end)
 
       message = %{
@@ -451,19 +482,22 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "status" => "completed",
-          "predicted_subtask_count" => 5,
-          "actual_subtask_count" => 5,
-          "review_count" => 0
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "status" => "completed",
+           "predicted_subtask_count" => 5,
+           "actual_subtask_count" => 5,
+           "review_count" => 0
+         }}
       end)
 
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, update_payload ->
         assert update_payload["last_grade"] == 0
-        {:ok, Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
+
+        {:ok,
+         Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
       end)
 
       message = %{
@@ -487,19 +521,22 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "status" => "completed",
-          "predicted_subtask_count" => 10,
-          "actual_subtask_count" => 3,
-          "review_count" => 0
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "status" => "completed",
+           "predicted_subtask_count" => 10,
+           "actual_subtask_count" => 3,
+           "review_count" => 0
+         }}
       end)
 
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, update_payload ->
         assert update_payload["last_grade"] == 0
-        {:ok, Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
+
+        {:ok,
+         Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
       end)
 
       message = %{
@@ -523,19 +560,22 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "status" => "completed",
-          "predicted_subtask_count" => 3,
-          "actual_subtask_count" => 3,
-          "review_count" => 0
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "status" => "completed",
+           "predicted_subtask_count" => 3,
+           "actual_subtask_count" => 3,
+           "review_count" => 0
+         }}
       end)
 
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, update_payload ->
         assert update_payload["last_grade"] == 3
-        {:ok, Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
+
+        {:ok,
+         Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
       end)
 
       message = %{
@@ -559,19 +599,22 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "status" => "completed",
-          "predicted_subtask_count" => nil,
-          "actual_subtask_count" => 5,
-          "review_count" => 0
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "status" => "completed",
+           "predicted_subtask_count" => nil,
+           "actual_subtask_count" => 5,
+           "review_count" => 0
+         }}
       end)
 
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, update_payload ->
         assert update_payload["last_grade"] == 2
-        {:ok, Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
+
+        {:ok,
+         Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
       end)
 
       message = %{
@@ -596,19 +639,22 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       feedback = "Good breakdown but missed some edge cases"
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "status" => "completed",
-          "predicted_subtask_count" => 5,
-          "actual_subtask_count" => 5,
-          "review_count" => 0
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "status" => "completed",
+           "predicted_subtask_count" => 5,
+           "actual_subtask_count" => 5,
+           "review_count" => 0
+         }}
       end)
 
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, update_payload ->
         assert update_payload["user_feedback"] == feedback
-        {:ok, Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
+
+        {:ok,
+         Map.merge(update_payload, %{"id" => decomposition_id, "tenant_id" => default_tenant_id})}
       end)
 
       message = %{
@@ -699,14 +745,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       now = DateTime.utc_now()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "status" => "completed",
-          "due_at" => DateTime.add(now, -1, :day) |> DateTime.to_iso8601(),
-          "predicted_subtask_count" => 5,
-          "actual_subtask_count" => 4
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "status" => "completed",
+           "due_at" => DateTime.add(now, -1, :day) |> DateTime.to_iso8601(),
+           "predicted_subtask_count" => 5,
+           "actual_subtask_count" => 4
+         }}
       end)
 
       message = %{
@@ -730,12 +777,13 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       now = DateTime.utc_now()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "status" => "completed",
-          "due_at" => DateTime.add(now, 1, :day) |> DateTime.to_iso8601()
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "status" => "completed",
+           "due_at" => DateTime.add(now, 1, :day) |> DateTime.to_iso8601()
+         }}
       end)
 
       message = %{
@@ -759,12 +807,13 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       now = DateTime.utc_now()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "tenant_id" => default_tenant_id,
-          "status" => "in_progress",
-          "due_at" => DateTime.add(now, -1, :day) |> DateTime.to_iso8601()
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "tenant_id" => default_tenant_id,
+           "status" => "in_progress",
+           "due_at" => DateTime.add(now, -1, :day) |> DateTime.to_iso8601()
+         }}
       end)
 
       message = %{

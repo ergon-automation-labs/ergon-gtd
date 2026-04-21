@@ -1,5 +1,6 @@
 defmodule BotArmyGtd.PersonalityTest do
   use ExUnit.Case
+  @moduletag :core
   doctest BotArmyGtd.Personality
 
   alias BotArmyGtd.Personality

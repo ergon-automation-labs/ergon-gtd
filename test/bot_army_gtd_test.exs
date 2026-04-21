@@ -1,5 +1,6 @@
 defmodule BotArmyGtdTest do
   use ExUnit.Case
+  @moduletag :handlers
   doctest BotArmyGtd
 
   test "version" do

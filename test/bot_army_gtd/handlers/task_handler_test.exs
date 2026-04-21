@@ -1,5 +1,6 @@
 defmodule BotArmyGtd.Handlers.TaskHandlerTest do
   use ExUnit.Case
+  @moduletag :handlers
   import Mox
 
   setup :verify_on_exit!
@@ -124,6 +125,70 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
       }
 
       assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_complete(message)
+    end
+  end
+
+  describe "handle_update/1 - Claude task operations" do
+    test "successfully claims a task" do
+      task_id = "test-task-id"
+
+      payload = %{
+        "task_id" => task_id,
+        "status" => "claimed"
+      }
+
+      expected_task = %{
+        "id" => task_id,
+        "title" => "Test Task",
+        "project_id" => "project-1",
+        "priority" => "normal",
+        "status" => "claimed"
+      }
+
+      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, ^payload ->
+        {:ok, expected_task}
+      end)
+
+      update_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.update",
+        "payload" => payload
+      }
+
+      BotArmyGtd.Handlers.TaskHandler.handle_update(update_msg)
+    end
+
+    test "successfully updates task with result" do
+      task_id = "test-task-id"
+
+      payload = %{
+        "task_id" => task_id,
+        "status" => "completed",
+        "result" => %{
+          "output" => "Task completed successfully",
+          "success" => true,
+          "metrics" => %{"duration_ms" => 123}
+        }
+      }
+
+      expected_task = %{
+        "id" => task_id,
+        "title" => "Test Task",
+        "status" => "completed",
+        "result" => payload["result"]
+      }
+
+      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, ^payload ->
+        {:ok, expected_task}
+      end)
+
+      update_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.update",
+        "payload" => payload
+      }
+
+      BotArmyGtd.Handlers.TaskHandler.handle_update(update_msg)
     end
   end
 

@@ -1,11 +1,15 @@
 defmodule BotArmyGtd.Handlers.InboxParsingHandlerTest do
   use ExUnit.Case
+  @moduletag :handlers
 
   alias BotArmyGtd.Handlers.InboxParsingHandler
 
   defmodule TestTaskStoreMock do
     def create(payload) do
-      Process.get({:task_store_mock, :create}, {:ok, payload |> Map.put("id", UUID.uuid4() |> to_string())})
+      Process.get(
+        {:task_store_mock, :create},
+        {:ok, payload |> Map.put("id", UUID.uuid4() |> to_string())}
+      )
     end
 
     def get(item_id) do
@@ -43,12 +47,13 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandlerTest do
   test "creates task from parsed inbox data" do
     Process.put(
       {:task_store_mock, :create},
-      {:ok, %{
-        "id" => "task-1",
-        "title" => "Call dentist",
-        "priority" => "high",
-        "due_date" => "2026-03-18T14:00Z"
-      }}
+      {:ok,
+       %{
+         "id" => "task-1",
+         "title" => "Call dentist",
+         "priority" => "high",
+         "due_date" => "2026-03-18T14:00Z"
+       }}
     )
 
     message = %{
@@ -71,15 +76,16 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandlerTest do
   test "extracts all task fields from parsed data" do
     Process.put(
       {:task_store_mock, :create},
-      {:ok, %{
-        "id" => "task-2",
-        "title" => "Plan team offsite",
-        "description" => "3-day team building event",
-        "project_id" => "Team Events",
-        "priority" => "high",
-        "due_date" => "2026-04-15T09:00Z",
-        "tags" => ["planning", "team"]
-      }}
+      {:ok,
+       %{
+         "id" => "task-2",
+         "title" => "Plan team offsite",
+         "description" => "3-day team building event",
+         "project_id" => "Team Events",
+         "priority" => "high",
+         "due_date" => "2026-04-15T09:00Z",
+         "tags" => ["planning", "team"]
+       }}
     )
 
     message = %{

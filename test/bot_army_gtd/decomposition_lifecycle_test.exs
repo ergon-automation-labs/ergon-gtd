@@ -12,6 +12,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
   """
 
   use ExUnit.Case, async: true
+  @moduletag :handlers
   import Mox
 
   alias BotArmyGtd.ReviewScheduler
@@ -38,28 +39,31 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
           "steps" => [
             %{
               "name" => "break_down",
-              "output" => Jason.encode!(%{
-                "subtasks" => [
-                  %{"title" => "Task 1", "description" => "Desc 1", "estimated_hours" => 2},
-                  %{"title" => "Task 2", "description" => "Desc 2", "estimated_hours" => 3}
-                ]
-              })
+              "output" =>
+                Jason.encode!(%{
+                  "subtasks" => [
+                    %{"title" => "Task 1", "description" => "Desc 1", "estimated_hours" => 2},
+                    %{"title" => "Task 2", "description" => "Desc 2", "estimated_hours" => 3}
+                  ]
+                })
             },
             %{
               "name" => "estimate_effort",
-              "output" => Jason.encode!(%{
-                "subtasks" => [
-                  %{"title" => "Task 1", "estimated_hours" => 2},
-                  %{"title" => "Task 2", "estimated_hours" => 3}
-                ],
-                "total_hours" => 5
-              })
+              "output" =>
+                Jason.encode!(%{
+                  "subtasks" => [
+                    %{"title" => "Task 1", "estimated_hours" => 2},
+                    %{"title" => "Task 2", "estimated_hours" => 3}
+                  ],
+                  "total_hours" => 5
+                })
             },
             %{
               "name" => "identify_dependencies",
-              "output" => Jason.encode!(%{
-                "dependencies" => []
-              })
+              "output" =>
+                Jason.encode!(%{
+                  "dependencies" => []
+                })
             }
           ],
           "metadata" => %{"task_id" => parent_task_id}
@@ -101,20 +105,21 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       }
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "status" => "completed",
-          "stability" => 1.0,
-          "difficulty" => 5.0,
-          "due_at" => due_yesterday,
-          "review_count" => 0,
-          "predicted_subtask_count" => 2,
-          "predicted_total_effort_hours" => 5,
-          "subtask_list" => [
-            %{"title" => "Task 1", "description" => "Desc 1", "estimated_hours" => 2},
-            %{"title" => "Task 2", "description" => "Desc 2", "estimated_hours" => 3}
-          ]
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "status" => "completed",
+           "stability" => 1.0,
+           "difficulty" => 5.0,
+           "due_at" => due_yesterday,
+           "review_count" => 0,
+           "predicted_subtask_count" => 2,
+           "predicted_total_effort_hours" => 5,
+           "subtask_list" => [
+             %{"title" => "Task 1", "description" => "Desc 1", "estimated_hours" => 2},
+             %{"title" => "Task 2", "description" => "Desc 2", "estimated_hours" => 3}
+           ]
+         }}
       end)
 
       expect(BotArmyGtd.TaskStoreMock, :create, fn _ ->
@@ -130,7 +135,8 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
         assert payload["status"] == "reviewed"
         assert payload["actual_subtask_count"] == 2
         assert payload["review_count"] == 1
-        assert payload["last_grade"] == 3  # Grade 3 = "Good" (matched prediction)
+        # Grade 3 = "Good" (matched prediction)
+        assert payload["last_grade"] == 3
         assert payload["stability"] > 0
         assert payload["difficulty"] > 0
         assert payload["due_at"]
@@ -191,7 +197,8 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
         "user_id" => nil,
         "payload" => %{
           "decomposition_id" => decomposition_id,
-          "rating" => 4,  # Good rating
+          # Good rating
+          "rating" => 4,
           "feedback" => "Decomposition was accurate"
         }
       }
@@ -205,7 +212,8 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
         assert payload["user_rating"] == 4
         assert payload["user_feedback"] == "Decomposition was accurate"
         assert payload["review_count"] == 2
-        assert payload["last_grade"]  # Should have a grade
+        # Should have a grade
+        assert payload["last_grade"]
         assert payload["stability"] > 0
         assert payload["difficulty"] > 0
         assert payload["due_at"]
@@ -243,11 +251,12 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
 
       # Decomposition is completed but not due yet
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "status" => "completed",
-          "due_at" => future
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "status" => "completed",
+           "due_at" => future
+         }}
       end)
 
       # Should reject as not ready (publishes error)
@@ -265,22 +274,23 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
 
       # Test case 1: Perfect match (grade 3)
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "status" => "completed",
-          "stability" => 1.0,
-          "difficulty" => 5.0,
-          "due_at" => due_yesterday,
-          "review_count" => 0,
-          "predicted_subtask_count" => 5,
-          "subtask_list" => [
-            %{"title" => "Task 1", "description" => "Desc 1", "estimated_hours" => 1},
-            %{"title" => "Task 2", "description" => "Desc 2", "estimated_hours" => 1},
-            %{"title" => "Task 3", "description" => "Desc 3", "estimated_hours" => 1},
-            %{"title" => "Task 4", "description" => "Desc 4", "estimated_hours" => 1},
-            %{"title" => "Task 5", "description" => "Desc 5", "estimated_hours" => 1}
-          ]
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "status" => "completed",
+           "stability" => 1.0,
+           "difficulty" => 5.0,
+           "due_at" => due_yesterday,
+           "review_count" => 0,
+           "predicted_subtask_count" => 5,
+           "subtask_list" => [
+             %{"title" => "Task 1", "description" => "Desc 1", "estimated_hours" => 1},
+             %{"title" => "Task 2", "description" => "Desc 2", "estimated_hours" => 1},
+             %{"title" => "Task 3", "description" => "Desc 3", "estimated_hours" => 1},
+             %{"title" => "Task 4", "description" => "Desc 4", "estimated_hours" => 1},
+             %{"title" => "Task 5", "description" => "Desc 5", "estimated_hours" => 1}
+           ]
+         }}
       end)
 
       expect(BotArmyGtd.TaskStoreMock, :create, fn _ ->
@@ -334,7 +344,8 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
         "user_id" => nil,
         "payload" => %{
           "decomposition_id" => decomposition_id,
-          "rating" => 5,  # Excellent rating
+          # Excellent rating
+          "rating" => 5,
           "feedback" => "Perfect decomposition"
         }
       }
@@ -343,15 +354,17 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
       original_difficulty = 4.5
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
-        {:ok, %{
-          "id" => decomposition_id,
-          "status" => "reviewed",
-          "stability" => original_stability,
-          "difficulty" => original_difficulty,
-          "review_count" => 1,
-          "predicted_subtask_count" => 5,
-          "actual_subtask_count" => 5  # Perfect match
-        }}
+        {:ok,
+         %{
+           "id" => decomposition_id,
+           "status" => "reviewed",
+           "stability" => original_stability,
+           "difficulty" => original_difficulty,
+           "review_count" => 1,
+           "predicted_subtask_count" => 5,
+           # Perfect match
+           "actual_subtask_count" => 5
+         }}
       end)
 
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, payload ->
