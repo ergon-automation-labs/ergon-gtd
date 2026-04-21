@@ -178,10 +178,15 @@ defmodule BotArmyGtd.NATS.Consumer do
   end
 
   @impl true
-  def handle_info({:msg, %{topic: "gtd.task.list", reply_to: reply_to} = _msg}, state)
+  def handle_info({:msg, %{topic: "gtd.task.list", reply_to: reply_to, body: body} = _msg}, state)
       when is_binary(reply_to) and reply_to != "" do
     task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
-    tenant_id = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+    tenant_id =
+      case Jason.decode(body) do
+        {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" -> tid
+        _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+      end
 
     response =
       case task_store.list(tenant_id) do
@@ -201,14 +206,19 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @impl true
   def handle_info(
-        {:msg, %{topic: "gtd.decomposition.list_due", reply_to: reply_to} = _msg},
+        {:msg, %{topic: "gtd.decomposition.list_due", reply_to: reply_to, body: body} = _msg},
         state
       )
       when is_binary(reply_to) and reply_to != "" do
     decomposition_store =
       Application.get_env(:bot_army_gtd, :decomposition_store, BotArmyGtd.DecompositionStore)
 
-    tenant_id = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+    tenant_id =
+      case Jason.decode(body) do
+        {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" -> tid
+        _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+      end
+
     now = DateTime.utc_now()
 
     response =
