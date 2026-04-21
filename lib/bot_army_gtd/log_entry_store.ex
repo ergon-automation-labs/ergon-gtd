@@ -63,7 +63,8 @@ defmodule BotArmyGtd.LogEntryStore do
 
   Returns `{:ok, entry}` or `{:error, :not_found}`.
   """
-  def mark_enriched(entry_id, enrichment_data) when is_binary(entry_id) and is_map(enrichment_data) do
+  def mark_enriched(entry_id, enrichment_data)
+      when is_binary(entry_id) and is_map(enrichment_data) do
     GenServer.call(@server, {:mark_enriched, entry_id, enrichment_data})
   end
 
@@ -82,25 +83,30 @@ defmodule BotArmyGtd.LogEntryStore do
   def init(_opts) do
     Logger.info("LogEntryStore started")
 
-    state = try do
-      # Load last 7 days of log entries
-      cutoff_date = NaiveDateTime.utc_now() |> NaiveDateTime.add(-@days_to_load * 86400)
+    state =
+      try do
+        # Load last 7 days of log entries
+        cutoff_date = NaiveDateTime.utc_now() |> NaiveDateTime.add(-@days_to_load * 86400)
 
-      entries = BotArmyGtd.Repo.all(
-        from(e in BotArmyGtd.Schemas.LogEntry,
-          where: e.inserted_at >= ^cutoff_date,
-          order_by: [desc: e.inserted_at]
-        )
-      )
+        entries =
+          BotArmyGtd.Repo.all(
+            from(e in BotArmyGtd.Schemas.LogEntry,
+              where: e.inserted_at >= ^cutoff_date,
+              order_by: [desc: e.inserted_at]
+            )
+          )
 
-      Enum.reduce(entries, %{}, fn entry, acc ->
-        Map.put(acc, entry.id |> to_string(), schema_to_map(entry))
-      end)
-    rescue
-      _ ->
-        Logger.warning("Could not load log entries from database (database unavailable). Starting with empty state.")
-        %{}
-    end
+        Enum.reduce(entries, %{}, fn entry, acc ->
+          Map.put(acc, entry.id |> to_string(), schema_to_map(entry))
+        end)
+      rescue
+        _ ->
+          Logger.warning(
+            "Could not load log entries from database (database unavailable). Starting with empty state."
+          )
+
+          %{}
+      end
 
     {:ok, state}
   end
@@ -110,21 +116,22 @@ defmodule BotArmyGtd.LogEntryStore do
     entry_id = Ecto.UUID.generate()
     occurred_at = parse_occurred_at(Map.get(payload, "occurred_at"))
 
-    changeset = BotArmyGtd.Schemas.LogEntry.changeset(
-      %BotArmyGtd.Schemas.LogEntry{id: entry_id},
-      %{
-        "tenant_id" => payload["tenant_id"],
-        "user_id" => Map.get(payload, "user_id"),
-        "body" => payload["body"],
-        "occurred_at" => occurred_at,
-        "category" => Map.get(payload, "category", "personal"),
-        "tags" => Map.get(payload, "tags", []),
-        "task_id" => Map.get(payload, "task_id"),
-        "project" => Map.get(payload, "project"),
-        "source" => Map.get(payload, "source", "user"),
-        "structured_data" => Map.get(payload, "structured_data")
-      }
-    )
+    changeset =
+      BotArmyGtd.Schemas.LogEntry.changeset(
+        %BotArmyGtd.Schemas.LogEntry{id: entry_id},
+        %{
+          "tenant_id" => payload["tenant_id"],
+          "user_id" => Map.get(payload, "user_id"),
+          "body" => payload["body"],
+          "occurred_at" => occurred_at,
+          "category" => Map.get(payload, "category", "personal"),
+          "tags" => Map.get(payload, "tags", []),
+          "task_id" => Map.get(payload, "task_id"),
+          "project" => Map.get(payload, "project"),
+          "source" => Map.get(payload, "source", "user"),
+          "structured_data" => Map.get(payload, "structured_data")
+        }
+      )
 
     case BotArmyGtd.Repo.insert(changeset) do
       {:ok, db_entry} ->
@@ -141,12 +148,13 @@ defmodule BotArmyGtd.LogEntryStore do
 
   @impl true
   def handle_call({:list, tenant_id, opts}, _from, state) do
-    entries = state
+    entries =
+      state
       |> Map.values()
       |> Enum.filter(&(&1["tenant_id"] == tenant_id))
       |> filter_by_date(Keyword.get(opts, :date))
       |> filter_by_category(Keyword.get(opts, :category))
-      |> Enum.sort_by(&(&1["occurred_at"]), {:desc, NaiveDateTime})
+      |> Enum.sort_by(& &1["occurred_at"], {:desc, NaiveDateTime})
       |> Enum.take(Keyword.get(opts, :limit, 100))
 
     {:reply, {:ok, entries}, state}
@@ -160,27 +168,37 @@ defmodule BotArmyGtd.LogEntryStore do
 
       _entry ->
         entry_uuid = Ecto.UUID.cast!(entry_id)
-        db_entry = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.LogEntry, entry_uuid)
 
-        if db_entry do
-          changeset = BotArmyGtd.Schemas.LogEntry.changeset(
-            db_entry,
-            %{"file_written" => true}
-          )
+        case BotArmyGtd.Repo.transaction(fn ->
+               db_entry = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.LogEntry, entry_uuid)
 
-          case BotArmyGtd.Repo.update(changeset) do
-            {:ok, updated_db_entry} ->
-              updated_entry = schema_to_map(updated_db_entry)
-              new_state = Map.put(state, entry_id, updated_entry)
-              Logger.info("Marked log entry as file-written: #{entry_id}")
-              {:reply, {:ok, updated_entry}, new_state}
+               if db_entry do
+                 changeset =
+                   BotArmyGtd.Schemas.LogEntry.changeset(
+                     db_entry,
+                     %{"file_written" => true}
+                   )
 
-            {:error, changeset} ->
-              Logger.error("Failed to mark log entry as written: #{inspect(changeset.errors)}")
-              {:reply, {:error, :database_error}, state}
-          end
-        else
-          {:reply, {:error, :not_found}, state}
+                 case BotArmyGtd.Repo.update(changeset) do
+                   {:ok, updated} -> updated
+                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+                 end
+               else
+                 BotArmyGtd.Repo.rollback(:not_found)
+               end
+             end) do
+          {:ok, updated_db_entry} ->
+            updated_entry = schema_to_map(updated_db_entry)
+            new_state = Map.put(state, entry_id, updated_entry)
+            Logger.info("Marked log entry as file-written: #{entry_id}")
+            {:reply, {:ok, updated_entry}, new_state}
+
+          {:error, :not_found} ->
+            {:reply, {:error, :not_found}, state}
+
+          {:error, changeset} ->
+            Logger.error("Failed to mark log entry as written: #{inspect(changeset.errors)}")
+            {:reply, {:error, :database_error}, state}
         end
     end
   end
@@ -193,31 +211,42 @@ defmodule BotArmyGtd.LogEntryStore do
 
       _entry ->
         entry_uuid = Ecto.UUID.cast!(entry_id)
-        db_entry = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.LogEntry, entry_uuid)
 
-        if db_entry do
-          changeset = BotArmyGtd.Schemas.LogEntry.changeset(
-            db_entry,
-            %{
-              "enriched" => true,
-              "enriched_at" => NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second),
-              "structured_data" => enrichment_data
-            }
-          )
+        case BotArmyGtd.Repo.transaction(fn ->
+               db_entry = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.LogEntry, entry_uuid)
 
-          case BotArmyGtd.Repo.update(changeset) do
-            {:ok, updated_db_entry} ->
-              updated_entry = schema_to_map(updated_db_entry)
-              new_state = Map.put(state, entry_id, updated_entry)
-              Logger.info("Marked log entry as enriched: #{entry_id}")
-              {:reply, {:ok, updated_entry}, new_state}
+               if db_entry do
+                 changeset =
+                   BotArmyGtd.Schemas.LogEntry.changeset(
+                     db_entry,
+                     %{
+                       "enriched" => true,
+                       "enriched_at" =>
+                         NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second),
+                       "structured_data" => enrichment_data
+                     }
+                   )
 
-            {:error, changeset} ->
-              Logger.error("Failed to mark log entry as enriched: #{inspect(changeset.errors)}")
-              {:reply, {:error, :database_error}, state}
-          end
-        else
-          {:reply, {:error, :not_found}, state}
+                 case BotArmyGtd.Repo.update(changeset) do
+                   {:ok, updated} -> updated
+                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+                 end
+               else
+                 BotArmyGtd.Repo.rollback(:not_found)
+               end
+             end) do
+          {:ok, updated_db_entry} ->
+            updated_entry = schema_to_map(updated_db_entry)
+            new_state = Map.put(state, entry_id, updated_entry)
+            Logger.info("Marked log entry as enriched: #{entry_id}")
+            {:reply, {:ok, updated_entry}, new_state}
+
+          {:error, :not_found} ->
+            {:reply, {:error, :not_found}, state}
+
+          {:error, changeset} ->
+            Logger.error("Failed to mark log entry as enriched: #{inspect(changeset.errors)}")
+            {:reply, {:error, :database_error}, state}
         end
     end
   end
@@ -245,7 +274,8 @@ defmodule BotArmyGtd.LogEntryStore do
       "source" => entry.source,
       "file_written" => entry.file_written,
       "enriched" => entry.enriched,
-      "enriched_at" => if(entry.enriched_at, do: entry.enriched_at |> NaiveDateTime.to_iso8601(), else: nil),
+      "enriched_at" =>
+        if(entry.enriched_at, do: entry.enriched_at |> NaiveDateTime.to_iso8601(), else: nil),
       "structured_data" => entry.structured_data,
       "created_at" => entry.inserted_at |> NaiveDateTime.to_iso8601(),
       "updated_at" => entry.updated_at |> NaiveDateTime.to_iso8601()

@@ -67,16 +67,22 @@ defmodule BotArmyGtd.ProjectStore do
     Logger.info("ProjectStore started")
     # Load all projects from database into GenServer state
     # Gracefully handle database unavailability (e.g., in tests)
-    state = try do
-      projects = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Project)
-      Enum.reduce(projects, %{}, fn project, acc ->
-        Map.put(acc, project.id |> to_string(), schema_to_map(project))
-      end)
-    rescue
-      _ ->
-        Logger.warning("Could not load projects from database (database unavailable). Starting with empty state.")
-        %{}
-    end
+    state =
+      try do
+        projects = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Project)
+
+        Enum.reduce(projects, %{}, fn project, acc ->
+          Map.put(acc, project.id |> to_string(), schema_to_map(project))
+        end)
+      rescue
+        _ ->
+          Logger.warning(
+            "Could not load projects from database (database unavailable). Starting with empty state."
+          )
+
+          %{}
+      end
+
     {:ok, state}
   end
 
@@ -84,17 +90,18 @@ defmodule BotArmyGtd.ProjectStore do
   def handle_call({:create, payload}, _from, state) do
     project_id = Ecto.UUID.generate()
 
-    changeset = BotArmyGtd.Schemas.Project.changeset(
-      %BotArmyGtd.Schemas.Project{id: project_id},
-      %{
-        "tenant_id" => payload["tenant_id"],
-        "user_id" => Map.get(payload, "user_id"),
-        "name" => payload["name"],
-        "description" => Map.get(payload, "description"),
-        "status" => Map.get(payload, "status", "active"),
-        "area" => Map.get(payload, "area")
-      }
-    )
+    changeset =
+      BotArmyGtd.Schemas.Project.changeset(
+        %BotArmyGtd.Schemas.Project{id: project_id},
+        %{
+          "tenant_id" => payload["tenant_id"],
+          "user_id" => Map.get(payload, "user_id"),
+          "name" => payload["name"],
+          "description" => Map.get(payload, "description"),
+          "status" => Map.get(payload, "status", "active"),
+          "area" => Map.get(payload, "area")
+        }
+      )
 
     case BotArmyGtd.Repo.insert(changeset) do
       {:ok, db_project} ->
@@ -117,32 +124,42 @@ defmodule BotArmyGtd.ProjectStore do
 
       _project ->
         project_uuid = Ecto.UUID.cast!(project_id)
-        db_project = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Project, project_uuid)
 
-        if db_project do
-          changeset = BotArmyGtd.Schemas.Project.changeset(
-            db_project,
-            %{
-              "name" => Map.get(payload, "name", db_project.name),
-              "description" => Map.get(payload, "description", db_project.description),
-              "status" => Map.get(payload, "status", db_project.status),
-              "area" => Map.get(payload, "area", db_project.area)
-            }
-          )
+        case BotArmyGtd.Repo.transaction(fn ->
+               db_project = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Project, project_uuid)
 
-          case BotArmyGtd.Repo.update(changeset) do
-            {:ok, updated_db_project} ->
-              updated_project = schema_to_map(updated_db_project)
-              new_state = Map.put(state, project_id, updated_project)
-              Logger.info("Updated project in database: #{project_id}")
-              {:reply, {:ok, updated_project}, new_state}
+               if db_project do
+                 changeset =
+                   BotArmyGtd.Schemas.Project.changeset(
+                     db_project,
+                     %{
+                       "name" => Map.get(payload, "name", db_project.name),
+                       "description" => Map.get(payload, "description", db_project.description),
+                       "status" => Map.get(payload, "status", db_project.status),
+                       "area" => Map.get(payload, "area", db_project.area)
+                     }
+                   )
 
-            {:error, changeset} ->
-              Logger.error("Failed to update project: #{inspect(changeset.errors)}")
-              {:reply, {:error, :database_error}, state}
-          end
-        else
-          {:reply, {:error, :not_found}, state}
+                 case BotArmyGtd.Repo.update(changeset) do
+                   {:ok, updated} -> updated
+                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+                 end
+               else
+                 BotArmyGtd.Repo.rollback(:not_found)
+               end
+             end) do
+          {:ok, updated_db_project} ->
+            updated_project = schema_to_map(updated_db_project)
+            new_state = Map.put(state, project_id, updated_project)
+            Logger.info("Updated project in database: #{project_id}")
+            {:reply, {:ok, updated_project}, new_state}
+
+          {:error, :not_found} ->
+            {:reply, {:error, :not_found}, state}
+
+          {:error, changeset} ->
+            Logger.error("Failed to update project: #{inspect(changeset.errors)}")
+            {:reply, {:error, :database_error}, state}
         end
     end
   end

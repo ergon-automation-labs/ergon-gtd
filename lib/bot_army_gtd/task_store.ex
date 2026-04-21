@@ -16,6 +16,7 @@ defmodule BotArmyGtd.TaskStore do
 
   use GenServer
   require Logger
+  import Ecto.Query
 
   @server __MODULE__
 
@@ -86,16 +87,22 @@ defmodule BotArmyGtd.TaskStore do
     Logger.info("TaskStore started")
     # Load all tasks from database into GenServer state
     # Gracefully handle database unavailability (e.g., in tests)
-    state = try do
-      tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
-      Enum.reduce(tasks, %{}, fn task, acc ->
-        Map.put(acc, task.id |> to_string(), schema_to_map(task))
-      end)
-    rescue
-      _ ->
-        Logger.warning("Could not load tasks from database (database unavailable). Starting with empty state.")
-        %{}
-    end
+    state =
+      try do
+        tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
+
+        Enum.reduce(tasks, %{}, fn task, acc ->
+          Map.put(acc, task.id |> to_string(), schema_to_map(task))
+        end)
+      rescue
+        _ ->
+          Logger.warning(
+            "Could not load tasks from database (database unavailable). Starting with empty state."
+          )
+
+          %{}
+      end
+
     {:ok, state}
   end
 
@@ -104,33 +111,39 @@ defmodule BotArmyGtd.TaskStore do
     task_id = Ecto.UUID.generate()
 
     # Parse due_date if present
-    due_date = case Map.get(payload, "due_date") do
-      nil -> nil
-      date_str when is_binary(date_str) ->
-        case Date.from_iso8601(date_str) do
-          {:ok, date} -> date
-          {:error, _} -> nil
-        end
-      _ -> nil
-    end
+    due_date =
+      case Map.get(payload, "due_date") do
+        nil ->
+          nil
+
+        date_str when is_binary(date_str) ->
+          case Date.from_iso8601(date_str) do
+            {:ok, date} -> date
+            {:error, _} -> nil
+          end
+
+        _ ->
+          nil
+      end
 
     # Create database record
-    changeset = BotArmyGtd.Schemas.Task.changeset(
-      %BotArmyGtd.Schemas.Task{id: task_id},
-      %{
-        "tenant_id" => payload["tenant_id"],
-        "user_id" => Map.get(payload, "user_id"),
-        "title" => payload["title"],
-        "project_id" => payload["project_id"],
-        "description" => Map.get(payload, "description"),
-        "status" => Map.get(payload, "status", "active"),
-        "priority" => Map.get(payload, "priority", "normal"),
-        "context" => Map.get(payload, "context"),
-        "source" => Map.get(payload, "source", "user"),
-        "source_metadata" => Map.get(payload, "source_metadata"),
-        "due_date" => due_date
-      }
-    )
+    changeset =
+      BotArmyGtd.Schemas.Task.changeset(
+        %BotArmyGtd.Schemas.Task{id: task_id},
+        %{
+          "tenant_id" => payload["tenant_id"],
+          "user_id" => Map.get(payload, "user_id"),
+          "title" => payload["title"],
+          "project_id" => payload["project_id"],
+          "description" => Map.get(payload, "description"),
+          "status" => Map.get(payload, "status", "active"),
+          "priority" => Map.get(payload, "priority", "normal"),
+          "context" => Map.get(payload, "context"),
+          "source" => Map.get(payload, "source", "user"),
+          "source_metadata" => Map.get(payload, "source_metadata"),
+          "due_date" => due_date
+        }
+      )
 
     case BotArmyGtd.Repo.insert(changeset) do
       {:ok, db_task} ->
@@ -153,47 +166,64 @@ defmodule BotArmyGtd.TaskStore do
 
       _task ->
         task_uuid = Ecto.UUID.cast!(task_id)
-        db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
 
-        if db_task do
-          # Parse due_date if present
-          due_date = case Map.get(payload, "due_date") do
-            nil -> nil
-            date_str when is_binary(date_str) ->
-              case Date.from_iso8601(date_str) do
-                {:ok, date} -> date
-                {:error, _} -> nil
-              end
-            _ -> nil
-          end
+        case BotArmyGtd.Repo.transaction(fn ->
+               db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
 
-          changeset = BotArmyGtd.Schemas.Task.changeset(
-            db_task,
-            %{
-              "title" => Map.get(payload, "title", db_task.title),
-              "description" => Map.get(payload, "description", db_task.description),
-              "status" => Map.get(payload, "status", db_task.status),
-              "priority" => Map.get(payload, "priority", db_task.priority),
-              "context" => Map.get(payload, "context", db_task.context),
-              "source" => Map.get(payload, "source", db_task.source),
-              "source_metadata" => Map.get(payload, "source_metadata", db_task.source_metadata),
-              "due_date" => due_date || db_task.due_date
-            }
-          )
+               if db_task do
+                 # Parse due_date if present
+                 due_date =
+                   case Map.get(payload, "due_date") do
+                     nil ->
+                       nil
 
-          case BotArmyGtd.Repo.update(changeset) do
-            {:ok, updated_db_task} ->
-              updated_task = schema_to_map(updated_db_task)
-              new_state = Map.put(state, task_id, updated_task)
-              Logger.info("Updated task in database: #{task_id}")
-              {:reply, {:ok, updated_task}, new_state}
+                     date_str when is_binary(date_str) ->
+                       case Date.from_iso8601(date_str) do
+                         {:ok, date} -> date
+                         {:error, _} -> nil
+                       end
 
-            {:error, changeset} ->
-              Logger.error("Failed to update task: #{inspect(changeset.errors)}")
-              {:reply, {:error, :database_error}, state}
-          end
-        else
-          {:reply, {:error, :not_found}, state}
+                     _ ->
+                       nil
+                   end
+
+                 changeset =
+                   BotArmyGtd.Schemas.Task.changeset(
+                     db_task,
+                     %{
+                       "title" => Map.get(payload, "title", db_task.title),
+                       "description" => Map.get(payload, "description", db_task.description),
+                       "status" => Map.get(payload, "status", db_task.status),
+                       "priority" => Map.get(payload, "priority", db_task.priority),
+                       "context" => Map.get(payload, "context", db_task.context),
+                       "source" => Map.get(payload, "source", db_task.source),
+                       "source_metadata" =>
+                         Map.get(payload, "source_metadata", db_task.source_metadata),
+                       "due_date" => due_date || db_task.due_date,
+                       "result" => Map.get(payload, "result", db_task.result)
+                     }
+                   )
+
+                 case BotArmyGtd.Repo.update(changeset) do
+                   {:ok, updated} -> updated
+                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+                 end
+               else
+                 BotArmyGtd.Repo.rollback(:not_found)
+               end
+             end) do
+          {:ok, updated_db_task} ->
+            updated_task = schema_to_map(updated_db_task)
+            new_state = Map.put(state, task_id, updated_task)
+            Logger.info("Updated task in database: #{task_id}")
+            {:reply, {:ok, updated_task}, new_state}
+
+          {:error, :not_found} ->
+            {:reply, {:error, :not_found}, state}
+
+          {:error, changeset} ->
+            Logger.error("Failed to update task: #{inspect(changeset.errors)}")
+            {:reply, {:error, :database_error}, state}
         end
     end
   end
@@ -206,30 +236,21 @@ defmodule BotArmyGtd.TaskStore do
 
       _task ->
         task_uuid = Ecto.UUID.cast!(task_id)
-        db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
+        completed_at = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
 
-        if db_task do
-          changeset = BotArmyGtd.Schemas.Task.changeset(
-            db_task,
-            %{
-              "status" => "completed",
-              "completed_at" => NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
-            }
-          )
+        case BotArmyGtd.Repo.update_all(
+               from(t in BotArmyGtd.Schemas.Task, where: t.id == ^task_uuid),
+               set: [status: "completed", completed_at: completed_at]
+             ) do
+          {1, _} ->
+            db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
+            completed_task = schema_to_map(db_task)
+            new_state = Map.put(state, task_id, completed_task)
+            Logger.info("Completed task in database: #{task_id}")
+            {:reply, {:ok, completed_task}, new_state}
 
-          case BotArmyGtd.Repo.update(changeset) do
-            {:ok, completed_db_task} ->
-              completed_task = schema_to_map(completed_db_task)
-              new_state = Map.put(state, task_id, completed_task)
-              Logger.info("Completed task in database: #{task_id}")
-              {:reply, {:ok, completed_task}, new_state}
-
-            {:error, changeset} ->
-              Logger.error("Failed to complete task: #{inspect(changeset.errors)}")
-              {:reply, {:error, :database_error}, state}
-          end
-        else
-          {:reply, {:error, :not_found}, state}
+          {0, _} ->
+            {:reply, {:error, :not_found}, state}
         end
     end
   end
@@ -284,7 +305,9 @@ defmodule BotArmyGtd.TaskStore do
       "source_metadata" => task.source_metadata,
       "project_id" => task.project_id |> to_string(),
       "due_date" => if(task.due_date, do: task.due_date |> to_string(), else: nil),
-      "completed_at" => if(task.completed_at, do: task.completed_at |> NaiveDateTime.to_iso8601(), else: nil),
+      "completed_at" =>
+        if(task.completed_at, do: task.completed_at |> NaiveDateTime.to_iso8601(), else: nil),
+      "result" => task.result,
       "created_at" => task.inserted_at |> NaiveDateTime.to_iso8601(),
       "updated_at" => task.updated_at |> NaiveDateTime.to_iso8601()
     }

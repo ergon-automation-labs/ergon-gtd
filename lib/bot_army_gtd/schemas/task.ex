@@ -10,18 +10,19 @@ defmodule BotArmyGtd.Schemas.Task do
   @foreign_key_type Ecto.UUID
 
   schema "tasks" do
-    field :title, :string
-    field :description, :string
-    field :status, :string, default: "active"
-    field :priority, :string, default: "normal"
-    field :context, :string
-    field :source, :string, default: "user"
-    field :source_metadata, :map
-    field :due_date, :date
-    field :completed_at, :naive_datetime
-    field :project_id, :string
-    field :tenant_id, Ecto.UUID
-    field :user_id, Ecto.UUID
+    field(:title, :string)
+    field(:description, :string)
+    field(:status, :string, default: "active")
+    field(:priority, :string, default: "normal")
+    field(:context, :string)
+    field(:source, :string, default: "user")
+    field(:source_metadata, :map)
+    field(:due_date, :date)
+    field(:completed_at, :naive_datetime)
+    field(:project_id, :string)
+    field(:tenant_id, Ecto.UUID)
+    field(:user_id, Ecto.UUID)
+    field(:result, :map)
 
     timestamps()
   end
@@ -41,7 +42,8 @@ defmodule BotArmyGtd.Schemas.Task do
       :completed_at,
       :project_id,
       :tenant_id,
-      :user_id
+      :user_id,
+      :result
     ])
     |> validate_required([:title, :tenant_id])
     |> validate_inclusion(:status, [
@@ -53,6 +55,7 @@ defmodule BotArmyGtd.Schemas.Task do
       "done",
       "deleted",
       "active",
+      "claimed",
       "completed",
       "archived"
     ])

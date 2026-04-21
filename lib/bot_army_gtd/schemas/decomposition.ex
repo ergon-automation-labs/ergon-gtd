@@ -13,44 +13,44 @@ defmodule BotArmyGtd.Schemas.Decomposition do
   @foreign_key_type Ecto.UUID
 
   schema "decompositions" do
-    field :parent_task_id, Ecto.UUID
-    field :status, :string, default: "in_progress"
-    field :tenant_id, Ecto.UUID
-    field :user_id, Ecto.UUID
+    field(:parent_task_id, Ecto.UUID)
+    field(:status, :string, default: "in_progress")
+    field(:tenant_id, Ecto.UUID)
+    field(:user_id, Ecto.UUID)
 
     # Steps and outputs (Phase 2)
-    field :step_outputs, {:array, :map}, default: []
-    field :subtask_list, :map
-    field :effort_estimates, :map
-    field :dependencies, :map
+    field(:step_outputs, {:array, :map}, default: [])
+    field(:subtask_list, {:array, :map}, default: [])
+    field(:effort_estimates, {:array, :map}, default: [])
+    field(:dependencies, {:array, :map}, default: [])
 
     # FSRS fields for future learning (Phase 3+)
-    field :stability, :float, default: 0.0
-    field :difficulty, :float, default: 0.0
-    field :due_at, :utc_datetime
-    field :review_count, :integer, default: 0
-    field :last_grade, :integer
+    field(:stability, :float, default: 0.0)
+    field(:difficulty, :float, default: 0.0)
+    field(:due_at, :utc_datetime)
+    field(:review_count, :integer, default: 0)
+    field(:last_grade, :integer)
 
     # Predicted vs actual tracking (Phase 3+)
-    field :predicted_subtask_count, :integer
-    field :predicted_total_effort_hours, :float
-    field :actual_subtask_count, :integer
-    field :actual_total_effort_hours, :float
-    field :missing_subtasks, {:array, :string}, default: []
-    field :extra_subtasks, {:array, :string}, default: []
+    field(:predicted_subtask_count, :integer)
+    field(:predicted_total_effort_hours, :float)
+    field(:actual_subtask_count, :integer)
+    field(:actual_total_effort_hours, :float)
+    field(:missing_subtasks, {:array, :string}, default: [])
+    field(:extra_subtasks, {:array, :string}, default: [])
 
     # User feedback (Phase 3+)
-    field :user_rating, :integer
-    field :user_feedback, :string
-    field :confidence_grade, :integer
+    field(:user_rating, :integer)
+    field(:user_feedback, :string)
+    field(:confidence_grade, :integer)
 
     # Extensibility for Phase 3+
-    field :review_queue_id, Ecto.UUID
+    field(:review_queue_id, Ecto.UUID)
 
     # Metadata for learning (Phase 3+)
-    field :source_domain, :string
-    field :source_complexity_estimate, :string
-    field :decomposition_timestamp, :utc_datetime
+    field(:source_domain, :string)
+    field(:source_complexity_estimate, :string)
+    field(:decomposition_timestamp, :utc_datetime)
 
     timestamps()
   end

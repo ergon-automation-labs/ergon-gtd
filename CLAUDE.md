@@ -33,6 +33,71 @@ Handles:
 
 ---
 
+## Claude Code Task Queue
+
+Claude Code uses the GTD bot as its task execution queue via NATS (not direct DB access).
+
+**Important:** Claude is treated as just another user in the system, not a special case.
+The `user_id` field identifies Claude, and tasks are scoped to that user.
+
+### How It Works
+
+1. **Claude creates tasks** via `gtd.task.create` NATS subject with Claude's `user_id`
+2. **GTD bot stores tasks** with the assigned `user_id` - no config needed
+3. **Claude polls via NATS** by subscribing to `gtd.task.created` events filtered by its `user_id`
+4. **Claude claims tasks** via `gtd.task.update` with `"status": "claimed"`
+5. **Claude completes tasks** via `gtd.task.update` with result data in `"result"` field
+6. **GTD publishes events** for each state change for audit trail
+
+### Setting Claude's User ID
+
+Claude uses a dedicated environment variable to identify itself:
+```bash
+BOT_ARMY_CLAUDE_USER_ID="00000000-0000-0000-0000-000000000002"
+```
+
+The GTD bot extracts `user_id` from NATS envelopes via `BotArmyCore.Tenant.extract_context/1`.
+When Claude creates tasks, it should set `user_id` to the value of `BOT_ARMY_CLAUDE_USER_ID`.
+
+**Note:** This is temporary until automated user onboarding is built (see "Future" section below).
+
+### Future: Automated User Onboarding
+
+A `bot_army_users` bot should be built to handle user registration via NATS:
+- `users.user.create` - Register new user (returns user_id)
+- `users.user.get` - Look up user by email/name
+- Auto-generate UUIDs, store in DB, return to requester
+
+This would allow Claude (or any system) to self-register as a user without manual config.
+
+### Task State Flow
+
+```
+active → claimed → completed
+```
+
+### Task Result Format
+
+```json
+{
+  "task_id": "...",
+  "status": "completed",
+  "result": {
+    "output": "Result content",
+    "success": true,
+    "errors": [],
+    "metrics": {}
+  }
+}
+```
+
+### Key Principle
+
+**Always use NATS for communication** - the GTD bot is a service, not a shared library.
+Direct database access breaks the isolation model and creates coupling.
+
+---
+
 ## File Organization
 
 ```
@@ -93,6 +158,18 @@ mix test
 4. **BotArmyGtd.Handlers.ProjectHandler** - Manage projects
 5. **BotArmyGtd.Handlers.DecompositionHandler** - Multi-step task decomposition (Phase 2)
 6. **BotArmyGtd.DecompositionStore** - Store decomposition results with FSRS fields
+
+### Task Status Flow
+
+**General workflow:** `active → claimed → completed`
+
+**Claude Code usage pattern:**
+1. Claude creates task via `gtd.task.create` with `user_id="claude-<uuid>"`
+2. GTD bot stores task and publishes `gtd.task.created` event
+3. Claude polls events for its user_id
+4. Claude claims task via `gtd.task.update` with `"status": "claimed"`
+5. Claude completes task via `gtd.task.update` with `"result"` field
+6. GTD bot publishes `gtd.task.updated` event with completion data
 
 ### Message Subjects
 
