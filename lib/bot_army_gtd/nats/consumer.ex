@@ -242,19 +242,72 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @impl true
   def handle_info({:msg, msg}, state) do
-    BotArmyRuntime.Tracing.with_consumer_span(msg.topic, msg.headers, fn ->
-      Logger.debug("Received NATS message on subject: #{msg.topic}")
+    topic = msg.topic
+    reply_to = Map.get(msg, :reply_to)
 
-      case BotArmyCore.NATS.Decoder.decode(msg.body) do
-        {:ok, decoded_message} ->
-          route_message(decoded_message)
+    # Handle request-reply patterns first
+    case topic do
+      "gtd.task.create" when is_binary(reply_to) and reply_to != "" ->
+        handle_task_create_request(msg, reply_to, state)
 
-        {:error, reason} ->
-          Logger.warning("Failed to decode message from #{msg.topic}: #{inspect(reason)}")
-      end
-    end)
+      "gtd.task.update" when is_binary(reply_to) and reply_to != "" ->
+        handle_task_update_request(msg, reply_to, state)
+
+      _ ->
+        BotArmyRuntime.Tracing.with_consumer_span(topic, msg.headers, fn ->
+          Logger.debug("Received NATS message on subject: #{topic}")
+
+          case BotArmyCore.NATS.Decoder.decode(msg.body) do
+            {:ok, decoded_message} ->
+              route_message(decoded_message)
+
+            {:error, reason} ->
+              Logger.warning("Failed to decode message from #{topic}: #{inspect(reason)}")
+          end
+        end)
+    end
 
     {:noreply, state}
+  end
+
+  defp handle_task_create_request(msg, reply_to, state) do
+    case BotArmyCore.NATS.Decoder.decode(msg.body) do
+      {:ok, decoded_message} ->
+        case BotArmyGtd.Handlers.TaskHandler.handle_create(decoded_message) do
+          :ok ->
+            response = Jason.encode!(%{success: true, message: "Task created"})
+            if state.conn, do: Gnat.pub(state.conn, reply_to, response)
+
+          {:error, reason} ->
+            error_response = Jason.encode!(%{error: inspect(reason)})
+            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+        end
+
+      {:error, reason} ->
+        Logger.warning("Failed to decode task create message: #{inspect(reason)}")
+        error_response = Jason.encode!(%{error: "Invalid message format"})
+        if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+    end
+  end
+
+  defp handle_task_update_request(msg, reply_to, state) do
+    case BotArmyCore.NATS.Decoder.decode(msg.body) do
+      {:ok, decoded_message} ->
+        case BotArmyGtd.Handlers.TaskHandler.handle_update(decoded_message) do
+          :ok ->
+            response = Jason.encode!(%{success: true, message: "Task updated"})
+            if state.conn, do: Gnat.pub(state.conn, reply_to, response)
+
+          {:error, reason} ->
+            error_response = Jason.encode!(%{error: inspect(reason)})
+            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+        end
+
+      {:error, reason} ->
+        Logger.warning("Failed to decode task update message: #{inspect(reason)}")
+        error_response = Jason.encode!(%{error: "Invalid message format"})
+        if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+    end
   end
 
   @impl true
