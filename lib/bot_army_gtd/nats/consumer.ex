@@ -282,7 +282,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         handle_project_list_request(msg, reply_to, state)
 
       _ ->
-        BotArmyRuntime.Tracing.with_consumer_span(topic, msg.headers, fn ->
+        BotArmyRuntime.Tracing.with_consumer_span(topic, Map.get(msg, :headers, []), fn ->
           Logger.debug("Received NATS message on subject: #{topic}")
 
           case BotArmyCore.NATS.Decoder.decode(msg.body) do
