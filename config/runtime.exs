@@ -3,6 +3,10 @@ import Config
 # Runtime configuration — evaluated when the app starts, not at compile time
 # This allows environment variables set by launchd/Salt to be read properly
 
+# Auto-start bot_army_runtime services (Registry, NATS connection, etc.)
+# This is needed when starting the application manually (not via supervisor)
+config :bot_army_runtime, :auto_start_services, true
+
 # Database configuration at runtime
 # Priority: BOT_ARMY_GTD_DB_* (set by Salt/Jenkins) > DATABASE_* (from .env for local dev) > defaults
 config :bot_army_gtd, BotArmyGtd.Repo,

@@ -146,12 +146,21 @@ defmodule BotArmyGtd.HealthResponder do
 
   defp check_db(repo) do
     try do
+      Logger.debug("[Health] Checking DB with repo: #{inspect(repo)}")
+      Logger.debug("[Health] Ecto config: #{inspect(Ecto.Repo.Registry.lookup(BotArmyGtd.Repo))}")
+
       case repo.query("SELECT 1") do
-        {:ok, _} -> :ok
-        {:error, _} -> :error
+        {:ok, _} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.error("[Health] DB query error: #{inspect(reason)}")
+          :error
       end
     rescue
-      _ -> :error
+      e ->
+        Logger.error("[Health] DB query exception: #{inspect(e)}")
+        :error
     end
   end
 
