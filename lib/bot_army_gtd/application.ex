@@ -14,15 +14,17 @@ defmodule BotArmyGtd.Application do
 
   @impl true
   def start(_type, _args) do
-    children = []
-    |> maybe_add_repo()
-    |> maybe_add_task_store()
-    |> maybe_add_project_store()
-    |> maybe_add_inbox_item_store()
-    |> maybe_add_decomposition_store()
-    |> maybe_add_log_entry_store()
-    |> maybe_add_review_scheduler()
-    |> maybe_add_consumer()
+    children =
+      []
+      |> maybe_add_repo()
+      |> maybe_add_task_store()
+      |> maybe_add_project_store()
+      |> maybe_add_inbox_item_store()
+      |> maybe_add_decomposition_store()
+      |> maybe_add_log_entry_store()
+      |> maybe_add_review_scheduler()
+      |> maybe_add_consumer()
+      |> maybe_add_health_responder()
 
     opts = [strategy: :one_for_one, name: BotArmyGtd.Supervisor]
     Supervisor.start_link(children, opts)
@@ -58,5 +60,14 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_consumer(children) do
     if @env == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
+  end
+
+  defp maybe_add_health_responder(children) do
+    if @env == :test,
+      do: children,
+      else: [
+        {BotArmyGtd.HealthResponder, [bot_name: :gtd, repo: BotArmyGtd.Repo, version: "0.3.0"]},
+        {BotArmyRuntime.Health.Monitor, []} | children
+      ]
   end
 end
