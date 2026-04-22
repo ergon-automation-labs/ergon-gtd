@@ -141,7 +141,9 @@ defmodule BotArmyGtd.TaskStore do
           "context" => Map.get(payload, "context"),
           "source" => Map.get(payload, "source", "user"),
           "source_metadata" => Map.get(payload, "source_metadata"),
-          "due_date" => due_date
+          "due_date" => due_date,
+          "parent_task_id" => Map.get(payload, "parent_task_id"),
+          "labels" => Map.get(payload, "labels", [])
         }
       )
 
@@ -200,7 +202,10 @@ defmodule BotArmyGtd.TaskStore do
                        "source_metadata" =>
                          Map.get(payload, "source_metadata", db_task.source_metadata),
                        "due_date" => due_date || db_task.due_date,
-                       "result" => Map.get(payload, "result", db_task.result)
+                       "result" => Map.get(payload, "result", db_task.result),
+                       "parent_task_id" =>
+                         Map.get(payload, "parent_task_id", db_task.parent_task_id),
+                       "labels" => Map.get(payload, "labels", db_task.labels)
                      }
                    )
 
@@ -304,6 +309,8 @@ defmodule BotArmyGtd.TaskStore do
       "source" => task.source,
       "source_metadata" => task.source_metadata,
       "project_id" => task.project_id |> to_string(),
+      "parent_task_id" => task.parent_task_id |> to_string(),
+      "labels" => task.labels,
       "due_date" => if(task.due_date, do: task.due_date |> to_string(), else: nil),
       "completed_at" =>
         if(task.completed_at, do: task.completed_at |> NaiveDateTime.to_iso8601(), else: nil),

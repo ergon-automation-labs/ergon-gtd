@@ -10,14 +10,15 @@ defmodule BotArmyGtd.Schemas.Project do
   @foreign_key_type Ecto.UUID
 
   schema "projects" do
-    field :name, :string
-    field :description, :string
-    field :status, :string, default: "active"
-    field :area, :string
-    field :tenant_id, Ecto.UUID
-    field :user_id, Ecto.UUID
+    field(:name, :string)
+    field(:description, :string)
+    field(:status, :string, default: "active")
+    field(:area, :string)
+    field(:labels, {:array, :string}, default: [])
+    field(:tenant_id, Ecto.UUID)
+    field(:user_id, Ecto.UUID)
 
-    has_many :tasks, BotArmyGtd.Schemas.Task
+    has_many(:tasks, BotArmyGtd.Schemas.Task)
 
     timestamps()
   end
@@ -25,7 +26,7 @@ defmodule BotArmyGtd.Schemas.Project do
   @doc false
   def changeset(project, attrs) do
     project
-    |> cast(attrs, [:name, :description, :status, :area, :tenant_id, :user_id])
+    |> cast(attrs, [:name, :description, :status, :area, :labels, :tenant_id, :user_id])
     |> validate_required([:name])
     |> validate_inclusion(:status, ["active", "archived", "completed"])
   end

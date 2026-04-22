@@ -101,6 +101,12 @@ defmodule BotArmyGtd.NATS.Consumer do
       "llm.chain.completed" ->
         BotArmyGtd.Handlers.DecompositionHandler.handle_chain_completed(message)
 
+      "claude.task.create" ->
+        BotArmyGtd.Handlers.ClaudeHandler.handle_task_create(message)
+
+      "claude.operation.success" ->
+        BotArmyGtd.Handlers.ClaudeHandler.handle_operation_success(message)
+
       _ ->
         Logger.debug("Unknown event type: #{event}")
     end
@@ -149,7 +155,9 @@ defmodule BotArmyGtd.NATS.Consumer do
             "events.llm.response.parsed",
             "events.llm.chain.completed",
             "gtd.task.list",
-            "gtd.decomposition.list_due"
+            "gtd.decomposition.list_due",
+            "claude.task.create",
+            "claude.operation.success"
           ]
           |> Enum.map(fn subject ->
             case Gnat.sub(conn, self(), subject) do

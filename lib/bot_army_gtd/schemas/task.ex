@@ -20,9 +20,20 @@ defmodule BotArmyGtd.Schemas.Task do
     field(:due_date, :date)
     field(:completed_at, :naive_datetime)
     field(:project_id, :string)
+    field(:parent_task_id, :string)
+    field(:labels, {:array, :string}, default: [])
     field(:tenant_id, Ecto.UUID)
     field(:user_id, Ecto.UUID)
     field(:result, :map)
+
+    # Relationships - parent_task_id stored as string for simplicity
+    belongs_to(:parent_task, __MODULE__,
+      foreign_key: :parent_task_id,
+      type: Ecto.UUID,
+      define_field: false
+    )
+
+    has_many(:subtasks, __MODULE__, foreign_key: :parent_task_id)
 
     timestamps()
   end
@@ -41,6 +52,8 @@ defmodule BotArmyGtd.Schemas.Task do
       :due_date,
       :completed_at,
       :project_id,
+      :parent_task_id,
+      :labels,
       :tenant_id,
       :user_id,
       :result

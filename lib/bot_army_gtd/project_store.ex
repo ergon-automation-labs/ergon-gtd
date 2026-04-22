@@ -99,7 +99,8 @@ defmodule BotArmyGtd.ProjectStore do
           "name" => payload["name"],
           "description" => Map.get(payload, "description"),
           "status" => Map.get(payload, "status", "active"),
-          "area" => Map.get(payload, "area")
+          "area" => Map.get(payload, "area"),
+          "labels" => Map.get(payload, "labels", [])
         }
       )
 
@@ -136,7 +137,8 @@ defmodule BotArmyGtd.ProjectStore do
                        "name" => Map.get(payload, "name", db_project.name),
                        "description" => Map.get(payload, "description", db_project.description),
                        "status" => Map.get(payload, "status", db_project.status),
-                       "area" => Map.get(payload, "area", db_project.area)
+                       "area" => Map.get(payload, "area", db_project.area),
+                       "labels" => Map.get(payload, "labels", db_project.labels)
                      }
                    )
 
@@ -196,6 +198,7 @@ defmodule BotArmyGtd.ProjectStore do
       "description" => project.description,
       "status" => project.status,
       "area" => project.area,
+      "labels" => project.labels,
       "created_at" => project.inserted_at |> NaiveDateTime.to_iso8601(),
       "updated_at" => project.updated_at |> NaiveDateTime.to_iso8601()
     }
