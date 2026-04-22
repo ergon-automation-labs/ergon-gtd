@@ -66,8 +66,7 @@ defmodule BotArmyGtd.Application do
     if @env == :test,
       do: children,
       else: [
-        {BotArmyGtd.HealthResponder, [bot_name: :gtd, repo: BotArmyGtd.Repo, version: "0.3.0"]},
-        {BotArmyRuntime.Health.Monitor, []} | children
+        {BotArmyGtd.HealthResponder, [bot_name: :gtd, repo: BotArmyGtd.Repo, version: "0.4.8"]}
       ]
   end
 end
