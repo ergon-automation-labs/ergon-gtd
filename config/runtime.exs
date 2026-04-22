@@ -19,5 +19,5 @@ config :bot_army_gtd, BotArmyGtd.Repo,
   password:
     System.get_env("BOT_ARMY_GTD_DB_PASSWORD") || System.get_env("DATABASE_PASSWORD") ||
       "postgres",
-  pool_size: 10,
+  pool_size: 3,
   ssl: false

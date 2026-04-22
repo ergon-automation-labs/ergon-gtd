@@ -144,6 +144,7 @@ defmodule BotArmyGtd.NATS.Consumer do
             "gtd.decomposition.request_review",
             "gtd.project.create",
             "gtd.project.update",
+            "gtd.project.list",
             "gtd.log.create",
             "events.llm.response.parsed",
             "events.llm.chain.completed",
@@ -263,6 +264,15 @@ defmodule BotArmyGtd.NATS.Consumer do
       "gtd.task.update" when is_binary(reply_to) and reply_to != "" ->
         handle_task_update_request(msg, reply_to, state)
 
+      "gtd.project.create" when is_binary(reply_to) and reply_to != "" ->
+        handle_project_create_request(msg, reply_to, state)
+
+      "gtd.project.update" when is_binary(reply_to) and reply_to != "" ->
+        handle_project_update_request(msg, reply_to, state)
+
+      "gtd.project.list" when is_binary(reply_to) and reply_to != "" ->
+        handle_project_list_request(msg, reply_to, state)
+
       _ ->
         BotArmyRuntime.Tracing.with_consumer_span(topic, msg.headers, fn ->
           Logger.debug("Received NATS message on subject: #{topic}")
@@ -318,6 +328,67 @@ defmodule BotArmyGtd.NATS.Consumer do
         error_response = Jason.encode!(%{error: "Invalid message format"})
         if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
     end
+  end
+
+  defp handle_project_create_request(msg, reply_to, state) do
+    case BotArmyCore.NATS.Decoder.decode(msg.body) do
+      {:ok, decoded_message} ->
+        case BotArmyGtd.Handlers.ProjectHandler.handle_create(decoded_message) do
+          :ok ->
+            response = Jason.encode!(%{success: true, message: "Project created"})
+            if state.conn, do: Gnat.pub(state.conn, reply_to, response)
+
+          {:error, reason} ->
+            error_response = Jason.encode!(%{error: inspect(reason)})
+            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+        end
+
+      {:error, reason} ->
+        Logger.warning("Failed to decode project create message: #{inspect(reason)}")
+        error_response = Jason.encode!(%{error: "Invalid message format"})
+        if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+    end
+  end
+
+  defp handle_project_update_request(msg, reply_to, state) do
+    case BotArmyCore.NATS.Decoder.decode(msg.body) do
+      {:ok, decoded_message} ->
+        case BotArmyGtd.Handlers.ProjectHandler.handle_update(decoded_message) do
+          :ok ->
+            response = Jason.encode!(%{success: true, message: "Project updated"})
+            if state.conn, do: Gnat.pub(state.conn, reply_to, response)
+
+          {:error, reason} ->
+            error_response = Jason.encode!(%{error: inspect(reason)})
+            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+        end
+
+      {:error, reason} ->
+        Logger.warning("Failed to decode project update message: #{inspect(reason)}")
+        error_response = Jason.encode!(%{error: "Invalid message format"})
+        if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+    end
+  end
+
+  defp handle_project_list_request(msg, reply_to, state) do
+    tenant_id =
+      case BotArmyCore.NATS.Decoder.decode(msg.body) do
+        {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" -> tid
+        _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+      end
+
+    project_store = Application.get_env(:bot_army_gtd, :project_store, BotArmyGtd.ProjectStore)
+
+    response =
+      case project_store.list(tenant_id) do
+        {:ok, projects} ->
+          Jason.encode!(%{projects: projects})
+
+        {:error, reason} ->
+          Jason.encode!(%{error: inspect(reason), projects: []})
+      end
+
+    if state.conn, do: Gnat.pub(state.conn, reply_to, response)
   end
 
   @impl true
