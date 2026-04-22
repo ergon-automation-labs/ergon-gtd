@@ -4,13 +4,14 @@ defmodule BotArmyGtd.MixProject do
   def project do
     [
       app: :bot_army_gtd,
-      version: "0.6.0",
+      version: "0.6.1",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       releases: [
         gtd_bot: [
-          applications: [bot_army_gtd: :permanent]
+          applications: [bot_army_gtd: :permanent],
+          validate_compile_env: false
         ]
       ]
     ]
