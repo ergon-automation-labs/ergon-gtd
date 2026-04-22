@@ -1,4 +1,4 @@
-defmodule BotArmyGTD.HealthResponder do
+defmodule BotArmyGtd.HealthResponder do
   @moduledoc """
   NATS request/reply handler for GTD bot health checks.
 
