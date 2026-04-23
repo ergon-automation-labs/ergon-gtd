@@ -37,7 +37,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   # API
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__, debug: [:trace])
   end
 
   @doc """
@@ -116,6 +116,9 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @impl true
   def init(opts) do
+    # Ensure Logger is started (in case we're starting before app full initialization)
+    :ok = :application.start(:logger)
+
     Logger.info("Starting GTD NATS consumer")
 
     state = %{
@@ -130,52 +133,64 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @impl true
   def handle_continue(:connect, state) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
-      {:ok, conn} ->
-        BotArmyRuntime.NATS.Connection.subscribe_to_status()
-        Logger.info("Connected to NATS, subscribing to GTD topics")
+    try do
+      case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+        {:ok, conn} ->
+          BotArmyRuntime.NATS.Connection.subscribe_to_status()
+          Logger.info("Connected to NATS, subscribing to GTD topics")
 
-        subscriptions =
-          [
-            "gtd.inbox.add",
-            "gtd.task.create",
-            "gtd.task.update",
-            "gtd.task.complete",
-            "gtd.task.command.defer",
-            "gtd.task.command.delete",
-            "gtd.task.decompose",
-            "gtd.decomposition.approve",
-            "gtd.decomposition.reject",
-            "gtd.decomposition.review",
-            "gtd.decomposition.request_review",
-            "gtd.project.create",
-            "gtd.project.update",
-            "gtd.project.list",
-            "gtd.log.create",
-            "events.llm.response.parsed",
-            "events.llm.chain.completed",
-            "gtd.task.list",
-            "gtd.decomposition.list_due",
-            "claude.task.create",
-            "claude.operation.success"
-          ]
-          |> Enum.map(fn subject ->
-            case Gnat.sub(conn, self(), subject) do
-              {:ok, sub} ->
-                Logger.info("GTD consumer subscribed to #{subject}")
-                sub
+          subscriptions =
+            [
+              "gtd.inbox.add",
+              "gtd.task.create",
+              "gtd.task.update",
+              "gtd.task.complete",
+              "gtd.task.command.defer",
+              "gtd.task.command.delete",
+              "gtd.task.decompose",
+              "gtd.decomposition.approve",
+              "gtd.decomposition.reject",
+              "gtd.decomposition.review",
+              "gtd.decomposition.request_review",
+              "gtd.project.create",
+              "gtd.project.update",
+              "gtd.project.list",
+              "gtd.log.create",
+              "events.llm.response.parsed",
+              "events.llm.chain.completed",
+              "gtd.task.list",
+              "gtd.decomposition.list_due",
+              "claude.task.create",
+              "claude.operation.success"
+            ]
+            |> Enum.map(fn subject ->
+              case Gnat.sub(conn, self(), subject) do
+                {:ok, sub} ->
+                  Logger.info("GTD consumer subscribed to #{subject}")
+                  sub
 
-              {:error, reason} ->
-                Logger.error("Failed to subscribe to #{subject}: #{inspect(reason)}")
-                nil
-            end
-          end)
-          |> Enum.filter(&(not is_nil(&1)))
+                {:error, reason} ->
+                  Logger.error("Failed to subscribe to #{subject}: #{inspect(reason)}")
+                  nil
+              end
+            end)
+            |> Enum.filter(&(not is_nil(&1)))
 
-        {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
+          {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
-      {:error, _reason} ->
-        Logger.warning("NATS connection not ready, will retry")
+        {:error, _reason} ->
+          Logger.warning("NATS connection not ready, will retry")
+          Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
+          {:noreply, state}
+      end
+    rescue
+      e ->
+        Logger.error("Error connecting to NATS: #{inspect(e)}")
+        Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
+        {:noreply, state}
+    catch
+      :exit, reason ->
+        Logger.error("Exit while connecting to NATS: #{inspect(reason)}")
         Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
         {:noreply, state}
     end
