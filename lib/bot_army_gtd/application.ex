@@ -10,7 +10,8 @@ defmodule BotArmyGtd.Application do
 
   use Application
 
-  @env Mix.env()
+  # Use System.get_env for runtime (Mix not available in releases)
+  @env String.to_atom(System.get_env("MIX_ENV") || "prod")
 
   @impl true
   def start(_type, _args) do
