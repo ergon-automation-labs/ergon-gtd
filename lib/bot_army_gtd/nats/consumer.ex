@@ -117,7 +117,10 @@ defmodule BotArmyGtd.NATS.Consumer do
   @impl true
   def init(opts) do
     # Ensure Logger is started (in case we're starting before app full initialization)
-    :ok = :application.start(:logger)
+    case :application.start(:logger) do
+      :ok -> :ok
+      {:error, {:already_started, :logger}} -> :ok
+    end
 
     Logger.info("Starting GTD NATS consumer")
 
