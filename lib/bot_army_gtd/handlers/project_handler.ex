@@ -33,17 +33,27 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
     payload = message["payload"]
     %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
-    stamped_payload = Map.merge(payload, %{
-      "tenant_id" => tenant_id,
-      "user_id" => user_id
-    })
+    stamped_payload =
+      Map.merge(payload, %{
+        "tenant_id" => tenant_id,
+        "user_id" => user_id
+      })
 
     case validate_create_payload(stamped_payload) do
       :ok ->
         case project_store().create(stamped_payload) do
           {:ok, project} ->
             Logger.info("Project created: project_id=#{project["id"]}, event_id=#{event_id}")
-            publish_event("gtd.project.created", stamped_payload, project, event_id, message, tenant_id, user_id)
+
+            publish_event(
+              "gtd.project.created",
+              stamped_payload,
+              project,
+              event_id,
+              message,
+              tenant_id,
+              user_id
+            )
 
           {:error, reason} ->
             Logger.error("Failed to create project: #{inspect(reason)}")
@@ -73,7 +83,16 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
         case project_store().update(project_id, payload) do
           {:ok, project} ->
             Logger.info("Project updated: project_id=#{project_id}, event_id=#{event_id}")
-            publish_event("gtd.project.updated", payload, project, event_id, message, tenant_id, user_id)
+
+            publish_event(
+              "gtd.project.updated",
+              payload,
+              project,
+              event_id,
+              message,
+              tenant_id,
+              user_id
+            )
 
           {:error, reason} ->
             Logger.error("Failed to update project #{project_id}: #{inspect(reason)}")
@@ -109,7 +128,15 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
     end
   end
 
-  defp publish_event(event_type, _payload, project, event_id, _original_message, tenant_id, user_id) do
+  defp publish_event(
+         event_type,
+         _payload,
+         project,
+         event_id,
+         _original_message,
+         tenant_id,
+         user_id
+       ) do
     event_data = %{
       "event" => event_type,
       "event_id" => UUID.uuid4(),
@@ -127,6 +154,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
     }
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
+      {:ok, _subject} -> Logger.debug("Published event: #{event_type}")
       :ok -> Logger.debug("Published event: #{event_type}")
       {:error, reason} -> Logger.error("Failed to publish event: #{inspect(reason)}")
     end
@@ -151,6 +179,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
     }
 
     case BotArmyGtd.NATS.Publisher.publish(error_event) do
+      {:ok, _subject} -> Logger.debug("Published error event")
       :ok -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
