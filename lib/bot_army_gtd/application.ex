@@ -17,6 +17,8 @@ defmodule BotArmyGtd.Application do
   def start(_type, _args) do
     children =
       []
+      |> maybe_add_consumer()
+      |> maybe_add_health_responder()
       |> maybe_add_repo()
       |> maybe_add_task_store()
       |> maybe_add_project_store()
@@ -24,8 +26,6 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_decomposition_store()
       |> maybe_add_log_entry_store()
       |> maybe_add_review_scheduler()
-      |> maybe_add_consumer()
-      |> maybe_add_health_responder()
 
     opts = [strategy: :one_for_one, name: BotArmyGtd.Supervisor]
     Supervisor.start_link(children, opts)
