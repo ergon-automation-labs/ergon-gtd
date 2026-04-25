@@ -360,8 +360,15 @@ defmodule BotArmyGtd.NATS.Consumer do
     case BotArmyCore.NATS.Decoder.decode(msg.body) do
       {:ok, decoded_message} ->
         case BotArmyGtd.Handlers.ProjectHandler.handle_create(decoded_message) do
-          :ok ->
-            response = Jason.encode!(%{success: true, message: "Project created"})
+          {:ok, project} ->
+            response =
+              Jason.encode!(%{
+                success: true,
+                message: "Project created",
+                project_id: project["id"],
+                project: project
+              })
+
             if state.conn, do: Gnat.pub(state.conn, reply_to, response)
 
           {:error, reason} ->
@@ -388,8 +395,15 @@ defmodule BotArmyGtd.NATS.Consumer do
     case BotArmyCore.NATS.Decoder.decode(msg.body) do
       {:ok, decoded_message} ->
         case BotArmyGtd.Handlers.ProjectHandler.handle_update(decoded_message) do
-          :ok ->
-            response = Jason.encode!(%{success: true, message: "Project updated"})
+          {:ok, project} ->
+            response =
+              Jason.encode!(%{
+                success: true,
+                message: "Project updated",
+                project_id: project["id"],
+                project: project
+              })
+
             if state.conn, do: Gnat.pub(state.conn, reply_to, response)
 
           {:error, reason} ->

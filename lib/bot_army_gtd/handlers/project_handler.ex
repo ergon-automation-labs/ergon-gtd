@@ -55,7 +55,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
               user_id
             )
 
-            :ok
+            {:ok, project}
 
           {:error, reason} ->
             Logger.error("Failed to create project: #{inspect(reason)}")
@@ -98,7 +98,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
               user_id
             )
 
-            :ok
+            {:ok, project}
 
           {:error, reason} ->
             Logger.error("Failed to update project #{project_id}: #{inspect(reason)}")
