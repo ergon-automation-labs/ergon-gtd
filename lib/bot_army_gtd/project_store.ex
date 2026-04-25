@@ -90,12 +90,15 @@ defmodule BotArmyGtd.ProjectStore do
   def handle_call({:create, payload}, _from, state) do
     project_id = Ecto.UUID.generate()
 
+    tenant_id = payload["tenant_id"]
+    user_id = Map.get(payload, "user_id")
+
     changeset =
       BotArmyGtd.Schemas.Project.changeset(
         %BotArmyGtd.Schemas.Project{id: project_id},
         %{
-          "tenant_id" => payload["tenant_id"],
-          "user_id" => Map.get(payload, "user_id"),
+          "tenant_id" => convert_to_uuid(tenant_id),
+          "user_id" => if(user_id, do: convert_to_uuid(user_id), else: nil),
           "name" => payload["name"],
           "description" => Map.get(payload, "description"),
           "status" => Map.get(payload, "status", "active"),
@@ -202,5 +205,22 @@ defmodule BotArmyGtd.ProjectStore do
       "created_at" => project.inserted_at |> NaiveDateTime.to_iso8601(),
       "updated_at" => project.updated_at |> NaiveDateTime.to_iso8601()
     }
+  end
+
+  # Convert string to UUID, handling both UUID strings and placeholder strings
+  defp convert_to_uuid(value) when is_binary(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, uuid} -> uuid
+      :error -> generate_uuid_from_string(value)
+    end
+  end
+
+  defp convert_to_uuid(value), do: value
+
+  # Generate a consistent UUID from a string (e.g., "default" → deterministic UUID)
+  defp generate_uuid_from_string(string) when is_binary(string) do
+    hash = :crypto.hash(:sha256, string)
+    <<uuid_int::128>> = binary_part(hash, 0, 16)
+    <<uuid_int::128>> |> Ecto.UUID.cast() |> elem(1)
   end
 end
