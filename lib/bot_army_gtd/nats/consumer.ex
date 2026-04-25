@@ -320,8 +320,15 @@ defmodule BotArmyGtd.NATS.Consumer do
     case BotArmyCore.NATS.Decoder.decode(msg.body) do
       {:ok, decoded_message} ->
         case BotArmyGtd.Handlers.TaskHandler.handle_create(decoded_message) do
-          :ok ->
-            response = Jason.encode!(%{success: true, message: "Task created"})
+          {:ok, task} ->
+            response =
+              Jason.encode!(%{
+                success: true,
+                message: "Task created",
+                task_id: task["id"],
+                task: task
+              })
+
             if state.conn, do: Gnat.pub(state.conn, reply_to, response)
 
           {:error, reason} ->

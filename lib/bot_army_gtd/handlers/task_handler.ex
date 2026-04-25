@@ -57,7 +57,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
               user_id
             )
 
-            :ok
+            {:ok, task}
 
           {:error, reason} ->
             Logger.error("Failed to create task: #{inspect(reason)}")

@@ -22,7 +22,7 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
       end)
 
       message = valid_create_message()
-      assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_create(message)
+      assert {:ok, ^expected_task} = BotArmyGtd.Handlers.TaskHandler.handle_create(message)
     end
 
     test "returns error for missing required field" do
