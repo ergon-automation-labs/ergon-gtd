@@ -24,6 +24,7 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_decomposition_store()
       |> maybe_add_log_entry_store()
       |> maybe_add_review_scheduler()
+      |> maybe_add_army_context_consumer()
 
     children = base_children ++ maybe_add_consumer([]) ++ maybe_add_health_responder([])
 
@@ -69,5 +70,9 @@ defmodule BotArmyGtd.Application do
       else: [
         {BotArmyGtd.HealthResponder, [bot_name: :gtd, repo: BotArmyGtd.Repo, version: "0.4.8"]}
       ]
+  end
+
+  defp maybe_add_army_context_consumer(children) do
+    if @env == :test, do: children, else: [{BotArmyGtd.ArmyContextConsumer, []} | children]
   end
 end
