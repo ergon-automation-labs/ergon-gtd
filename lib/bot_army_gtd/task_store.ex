@@ -148,12 +148,15 @@ defmodule BotArmyGtd.TaskStore do
       end
 
     # Create database record
+    tenant_id = payload["tenant_id"]
+    user_id = Map.get(payload, "user_id")
+
     changeset =
       BotArmyGtd.Schemas.Task.changeset(
         %BotArmyGtd.Schemas.Task{id: task_id},
         %{
-          "tenant_id" => payload["tenant_id"],
-          "user_id" => Map.get(payload, "user_id"),
+          "tenant_id" => convert_to_uuid(tenant_id),
+          "user_id" => if(user_id, do: convert_to_uuid(user_id), else: nil),
           "title" => payload["title"],
           "project_id" => payload["project_id"],
           "description" => Map.get(payload, "description"),
@@ -314,6 +317,23 @@ defmodule BotArmyGtd.TaskStore do
     # Clear database
     BotArmyGtd.Repo.delete_all(BotArmyGtd.Schemas.Task)
     {:reply, :ok, %{}}
+  end
+
+  # Convert string to UUID, handling both UUID strings and placeholder strings
+  defp convert_to_uuid(value) when is_binary(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, uuid} -> uuid
+      :error -> generate_uuid_from_string(value)
+    end
+  end
+
+  defp convert_to_uuid(value), do: value
+
+  # Generate a consistent UUID from a string (e.g., "default" → deterministic UUID)
+  defp generate_uuid_from_string(string) when is_binary(string) do
+    hash = :crypto.hash(:sha256, string)
+    <<uuid_int::128>> = binary_part(hash, 0, 16)
+    <<uuid_int::128>> |> Ecto.UUID.cast() |> elem(1)
   end
 
   # Helper function to convert Ecto schema to map for GenServer state
