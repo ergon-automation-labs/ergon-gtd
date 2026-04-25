@@ -25,6 +25,7 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_log_entry_store()
       |> maybe_add_review_scheduler()
       |> maybe_add_army_context_consumer()
+      |> maybe_add_pulse_publisher()
 
     children = base_children ++ maybe_add_consumer([]) ++ maybe_add_health_responder([])
 
@@ -74,5 +75,9 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_army_context_consumer(children) do
     if @env == :test, do: children, else: [{BotArmyGtd.ArmyContextConsumer, []} | children]
+  end
+
+  defp maybe_add_pulse_publisher(children) do
+    if @env == :test, do: children, else: [{BotArmyGtd.PulsePublisher, []} | children]
   end
 end
