@@ -475,8 +475,21 @@ defmodule BotArmyGtd.NATS.Consumer do
   defp handle_project_list_request(msg, reply_to, state) do
     tenant_id =
       case BotArmyCore.NATS.Decoder.decode(msg.body) do
-        {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" -> tid
-        _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+        {:ok, decoded} ->
+          case Map.get(decoded, "payload") do
+            %{"tenant_id" => tid} when is_binary(tid) and tid != "" ->
+              tid
+
+            _ ->
+              Map.get(
+                decoded,
+                "tenant_id",
+                Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+              )
+          end
+
+        _ ->
+          Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
       end
 
     project_store = Application.get_env(:bot_army_gtd, :project_store, BotArmyGtd.ProjectStore)
