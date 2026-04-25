@@ -34,6 +34,55 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @reconnect_delay_ms 5000
 
+  # Register subjects for the registry
+  @subjects [
+    %{subject: "gtd.inbox.add", type: :subscribe, description: "Add items to inbox"},
+    %{subject: "gtd.task.create", type: :request_reply, description: "Create a task"},
+    %{subject: "gtd.task.update", type: :request_reply, description: "Update a task"},
+    %{subject: "gtd.task.list", type: :request_reply, description: "List tasks"},
+    %{subject: "gtd.task.complete", type: :subscribe, description: "Task completion events"},
+    %{subject: "gtd.task.command.defer", type: :subscribe, description: "Defer task"},
+    %{subject: "gtd.task.command.delete", type: :subscribe, description: "Delete task"},
+    %{subject: "gtd.task.decompose", type: :subscribe, description: "Decompose task"},
+    %{
+      subject: "gtd.decomposition.approve",
+      type: :subscribe,
+      description: "Approve decomposition"
+    },
+    %{subject: "gtd.decomposition.reject", type: :subscribe, description: "Reject decomposition"},
+    %{subject: "gtd.decomposition.review", type: :subscribe, description: "Review decomposition"},
+    %{
+      subject: "gtd.decomposition.request_review",
+      type: :subscribe,
+      description: "Request decomposition review"
+    },
+    %{subject: "gtd.project.create", type: :request_reply, description: "Create a project"},
+    %{subject: "gtd.project.update", type: :request_reply, description: "Update a project"},
+    %{subject: "gtd.project.list", type: :request_reply, description: "List projects"},
+    %{subject: "gtd.log.create", type: :subscribe, description: "Create log entry"},
+    %{
+      subject: "gtd.decomposition.list_due",
+      type: :request_reply,
+      description: "List due decompositions"
+    },
+    %{
+      subject: "events.llm.response.parsed",
+      type: :subscribe,
+      description: "LLM response parsed"
+    },
+    %{
+      subject: "events.llm.chain.completed",
+      type: :subscribe,
+      description: "LLM chain completed"
+    },
+    %{subject: "claude.task.create", type: :subscribe, description: "Claude task creation"},
+    %{
+      subject: "claude.operation.success",
+      type: :subscribe,
+      description: "Claude operation success"
+    }
+  ]
+
   # API
 
   def start_link(opts) do
@@ -179,6 +228,7 @@ defmodule BotArmyGtd.NATS.Consumer do
             end)
             |> Enum.filter(&(not is_nil(&1)))
 
+          BotArmyRuntime.Health.Responder.register_subjects(@subjects)
           {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
         {:error, _reason} ->
@@ -218,10 +268,10 @@ defmodule BotArmyGtd.NATS.Consumer do
     response =
       case task_store.list_prioritized(tenant_id) do
         {:ok, tasks} ->
-          Jason.encode!(%{tasks: tasks})
+          BotArmyRuntime.NATS.Reply.ok(%{"tasks" => tasks})
 
         {:error, reason} ->
-          Jason.encode!(%{error: inspect(reason), tasks: []})
+          BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
       end
 
     if state.conn do
@@ -264,10 +314,10 @@ defmodule BotArmyGtd.NATS.Consumer do
             end)
             |> Enum.sort_by(fn d -> d["due_at"] end)
 
-          Jason.encode!(%{decompositions: due})
+          BotArmyRuntime.NATS.Reply.ok(%{"decompositions" => due})
 
         {:error, reason} ->
-          Jason.encode!(%{error: inspect(reason), decompositions: []})
+          BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
       end
 
     if state.conn do
@@ -321,24 +371,17 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:ok, decoded_message} ->
         case BotArmyGtd.Handlers.TaskHandler.handle_create(decoded_message) do
           {:ok, task} ->
-            response =
-              Jason.encode!(%{
-                success: true,
-                message: "Task created",
-                task_id: task["id"],
-                task: task
-              })
-
+            response = BotArmyRuntime.NATS.Reply.ok(%{"task_id" => task["id"], "task" => task})
             if state.conn, do: Gnat.pub(state.conn, reply_to, response)
 
           {:error, reason} ->
-            error_response = Jason.encode!(%{error: inspect(reason)})
+            error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :create_failed)
             if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode task create message: #{inspect(reason)}")
-        error_response = Jason.encode!(%{error: "Invalid message format"})
+        error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
         if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
     end
   end
@@ -348,17 +391,17 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:ok, decoded_message} ->
         case BotArmyGtd.Handlers.TaskHandler.handle_update(decoded_message) do
           :ok ->
-            response = Jason.encode!(%{success: true, message: "Task updated"})
+            response = BotArmyRuntime.NATS.Reply.ok(%{})
             if state.conn, do: Gnat.pub(state.conn, reply_to, response)
 
           {:error, reason} ->
-            error_response = Jason.encode!(%{error: inspect(reason)})
+            error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :update_failed)
             if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode task update message: #{inspect(reason)}")
-        error_response = Jason.encode!(%{error: "Invalid message format"})
+        error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
         if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
     end
   end
@@ -369,31 +412,29 @@ defmodule BotArmyGtd.NATS.Consumer do
         case BotArmyGtd.Handlers.ProjectHandler.handle_create(decoded_message) do
           {:ok, project} ->
             response =
-              Jason.encode!(%{
-                success: true,
-                message: "Project created",
-                project_id: project["id"],
-                project: project
-              })
+              BotArmyRuntime.NATS.Reply.ok(%{"project_id" => project["id"], "project" => project})
 
             if state.conn, do: Gnat.pub(state.conn, reply_to, response)
 
           {:error, reason} ->
-            error_response = Jason.encode!(%{error: inspect(reason)})
+            error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :create_failed)
             if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
 
           other ->
             Logger.warning("Unexpected return value from handle_create: #{inspect(other)}")
 
             error_response =
-              Jason.encode!(%{error: "Internal error: unexpected handler response"})
+              BotArmyRuntime.NATS.Reply.error(
+                "Internal error: unexpected handler response",
+                :internal_error
+              )
 
             if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode project create message: #{inspect(reason)}")
-        error_response = Jason.encode!(%{error: "Invalid message format"})
+        error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
         if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
     end
   end
@@ -404,31 +445,29 @@ defmodule BotArmyGtd.NATS.Consumer do
         case BotArmyGtd.Handlers.ProjectHandler.handle_update(decoded_message) do
           {:ok, project} ->
             response =
-              Jason.encode!(%{
-                success: true,
-                message: "Project updated",
-                project_id: project["id"],
-                project: project
-              })
+              BotArmyRuntime.NATS.Reply.ok(%{"project_id" => project["id"], "project" => project})
 
             if state.conn, do: Gnat.pub(state.conn, reply_to, response)
 
           {:error, reason} ->
-            error_response = Jason.encode!(%{error: inspect(reason)})
+            error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :update_failed)
             if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
 
           other ->
             Logger.warning("Unexpected return value from handle_update: #{inspect(other)}")
 
             error_response =
-              Jason.encode!(%{error: "Internal error: unexpected handler response"})
+              BotArmyRuntime.NATS.Reply.error(
+                "Internal error: unexpected handler response",
+                :internal_error
+              )
 
             if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode project update message: #{inspect(reason)}")
-        error_response = Jason.encode!(%{error: "Invalid message format"})
+        error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
         if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
     end
   end
@@ -445,10 +484,10 @@ defmodule BotArmyGtd.NATS.Consumer do
     response =
       case project_store.list(tenant_id) do
         {:ok, projects} ->
-          Jason.encode!(%{projects: projects})
+          BotArmyRuntime.NATS.Reply.ok(%{"projects" => projects})
 
         {:error, reason} ->
-          Jason.encode!(%{error: inspect(reason), projects: []})
+          BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
       end
 
     if state.conn, do: Gnat.pub(state.conn, reply_to, response)

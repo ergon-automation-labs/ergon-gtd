@@ -253,18 +253,56 @@ defmodule BotArmyGtd.InboxItemStore do
 
   @impl true
   def handle_call({:list_pending, tenant_id}, _from, state) do
+    # If state is empty, try to load from database (handles startup failure scenario)
+    state_to_use =
+      if map_size(state) == 0 do
+        try do
+          items = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.InboxItem)
+          Logger.info("InboxItemStore recovered #{length(items)} items from database")
+
+          Enum.reduce(items, %{}, fn item, acc ->
+            Map.put(acc, item.id |> to_string(), schema_to_map(item))
+          end)
+        rescue
+          _ ->
+            Logger.warning("InboxItemStore recovery from database failed, using empty state")
+            state
+        end
+      else
+        state
+      end
+
     items =
-      state
+      state_to_use
       |> Map.values()
       |> Enum.filter(fn item -> item["tenant_id"] == tenant_id and item["status"] == "pending" end)
 
-    {:reply, {:ok, items}, state}
+    {:reply, {:ok, items}, state_to_use}
   end
 
   @impl true
   def handle_call({:list_all, tenant_id}, _from, state) do
-    items = state |> Map.values() |> Enum.filter(&(&1["tenant_id"] == tenant_id))
-    {:reply, {:ok, items}, state}
+    # If state is empty, try to load from database (handles startup failure scenario)
+    state_to_use =
+      if map_size(state) == 0 do
+        try do
+          items = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.InboxItem)
+          Logger.info("InboxItemStore recovered #{length(items)} items from database")
+
+          Enum.reduce(items, %{}, fn item, acc ->
+            Map.put(acc, item.id |> to_string(), schema_to_map(item))
+          end)
+        rescue
+          _ ->
+            Logger.warning("InboxItemStore recovery from database failed, using empty state")
+            state
+        end
+      else
+        state
+      end
+
+    items = state_to_use |> Map.values() |> Enum.filter(&(&1["tenant_id"] == tenant_id))
+    {:reply, {:ok, items}, state_to_use}
   end
 
   @impl true

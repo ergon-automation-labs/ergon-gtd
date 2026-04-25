@@ -269,8 +269,27 @@ defmodule BotArmyGtd.DecompositionStore do
 
   @impl true
   def handle_call({:list, tenant_id}, _from, state) do
-    decompositions = state |> Map.values() |> Enum.filter(&(&1["tenant_id"] == tenant_id))
-    {:reply, {:ok, decompositions}, state}
+    # If state is empty, try to load from database (handles startup failure scenario)
+    state_to_use =
+      if map_size(state) == 0 do
+        try do
+          decompositions = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Decomposition)
+          Logger.info("DecompositionStore recovered #{length(decompositions)} from database")
+
+          Enum.reduce(decompositions, %{}, fn decomp, acc ->
+            Map.put(acc, decomp.id |> to_string(), schema_to_map(decomp))
+          end)
+        rescue
+          _ ->
+            Logger.warning("DecompositionStore recovery from database failed, using empty state")
+            state
+        end
+      else
+        state
+      end
+
+    decompositions = state_to_use |> Map.values() |> Enum.filter(&(&1["tenant_id"] == tenant_id))
+    {:reply, {:ok, decompositions}, state_to_use}
   end
 
   @impl true

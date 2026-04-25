@@ -187,8 +187,27 @@ defmodule BotArmyGtd.ProjectStore do
 
   @impl true
   def handle_call({:list, tenant_id}, _from, state) do
-    projects = state |> Map.values() |> Enum.filter(&(&1["tenant_id"] == tenant_id))
-    {:reply, {:ok, projects}, state}
+    # If state is empty, try to load from database (handles startup failure scenario)
+    state_to_use =
+      if map_size(state) == 0 do
+        try do
+          projects = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Project)
+          Logger.info("ProjectStore recovered #{length(projects)} projects from database")
+
+          Enum.reduce(projects, %{}, fn project, acc ->
+            Map.put(acc, project.id |> to_string(), schema_to_map(project))
+          end)
+        rescue
+          _ ->
+            Logger.warning("ProjectStore recovery from database failed, using empty state")
+            state
+        end
+      else
+        state
+      end
+
+    projects = state_to_use |> Map.values() |> Enum.filter(&(&1["tenant_id"] == tenant_id))
+    {:reply, {:ok, projects}, state_to_use}
   end
 
   # Helper function to convert Ecto schema to map for GenServer state

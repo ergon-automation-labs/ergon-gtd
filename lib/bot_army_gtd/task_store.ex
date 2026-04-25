@@ -302,13 +302,32 @@ defmodule BotArmyGtd.TaskStore do
 
   @impl true
   def handle_call({:list, tenant_id}, _from, state) do
+    # If state is empty, try to load from database (handles startup failure scenario)
+    state_to_use =
+      if map_size(state) == 0 do
+        try do
+          tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
+          Logger.info("TaskStore recovered #{length(tasks)} tasks from database")
+
+          Enum.reduce(tasks, %{}, fn task, acc ->
+            Map.put(acc, task.id |> to_string(), schema_to_map(task))
+          end)
+        rescue
+          _ ->
+            Logger.warning("TaskStore recovery from database failed, using empty state")
+            state
+        end
+      else
+        state
+      end
+
     tasks =
-      state
+      state_to_use
       |> Map.values()
       |> Enum.filter(&(&1["tenant_id"] == tenant_id))
       |> Enum.reject(&(&1["status"] in ["deleted", "completed"]))
 
-    {:reply, {:ok, tasks}, state}
+    {:reply, {:ok, tasks}, state_to_use}
   end
 
   @impl true
