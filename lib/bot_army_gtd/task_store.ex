@@ -72,6 +72,27 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   @doc """
+  List all tasks for a tenant, prioritized by goal health.
+
+  Tasks from at-risk goals (from Synapse) appear first, followed by other tasks.
+  Gracefully handles NATS unavailability.
+
+  Returns `{:ok, tasks}`.
+  """
+  def list_prioritized(tenant_id) when is_binary(tenant_id) do
+    {:ok, tasks} = list(tenant_id)
+    at_risk_goals = BotArmyGtd.ArmyContextConsumer.get_at_risk_goals()
+
+    prioritized =
+      Enum.sort_by(tasks, fn task ->
+        # Tasks from at-risk goals sort first (false < true when sorted ascending)
+        not Enum.any?(at_risk_goals, &(&1 == task["project_id"]))
+      end)
+
+    {:ok, prioritized}
+  end
+
+  @doc """
   Clear all tasks (for testing).
 
   Returns `:ok`.

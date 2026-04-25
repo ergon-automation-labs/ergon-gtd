@@ -216,7 +216,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       end
 
     response =
-      case task_store.list(tenant_id) do
+      case task_store.list_prioritized(tenant_id) do
         {:ok, tasks} ->
           Jason.encode!(%{tasks: tasks})
 
