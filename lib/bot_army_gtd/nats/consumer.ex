@@ -367,6 +367,14 @@ defmodule BotArmyGtd.NATS.Consumer do
           {:error, reason} ->
             error_response = Jason.encode!(%{error: inspect(reason)})
             if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+
+          other ->
+            Logger.warning("Unexpected return value from handle_create: #{inspect(other)}")
+
+            error_response =
+              Jason.encode!(%{error: "Internal error: unexpected handler response"})
+
+            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
@@ -386,6 +394,14 @@ defmodule BotArmyGtd.NATS.Consumer do
 
           {:error, reason} ->
             error_response = Jason.encode!(%{error: inspect(reason)})
+            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+
+          other ->
+            Logger.warning("Unexpected return value from handle_update: #{inspect(other)}")
+
+            error_response =
+              Jason.encode!(%{error: "Internal error: unexpected handler response"})
+
             if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
         end
 

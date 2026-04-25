@@ -55,14 +55,18 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
               user_id
             )
 
+            :ok
+
           {:error, reason} ->
             Logger.error("Failed to create project: #{inspect(reason)}")
             publish_error(event_id, reason, "Failed to create project", tenant_id, user_id)
+            {:error, reason}
         end
 
       {:error, reason} ->
         Logger.warning("Invalid project creation payload: #{inspect(reason)}")
         publish_error(event_id, reason, "Invalid project data", tenant_id, user_id)
+        {:error, reason}
     end
   end
 
@@ -94,14 +98,18 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
               user_id
             )
 
+            :ok
+
           {:error, reason} ->
             Logger.error("Failed to update project #{project_id}: #{inspect(reason)}")
             publish_error(event_id, reason, "Failed to update project", tenant_id, user_id)
+            {:error, reason}
         end
 
       {:error, reason} ->
         Logger.warning("Invalid project update payload: #{inspect(reason)}")
         publish_error(event_id, reason, "Invalid project data", tenant_id, user_id)
+        {:error, reason}
     end
   end
 
