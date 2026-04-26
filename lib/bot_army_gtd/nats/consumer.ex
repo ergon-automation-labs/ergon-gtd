@@ -260,16 +260,34 @@ defmodule BotArmyGtd.NATS.Consumer do
     BotArmyRuntime.Tracing.with_consumer_span("gtd.task.list", Map.get(msg, :headers, []), fn ->
       task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
-      tenant_id =
+      {tenant_id, limit, offset} =
         case Jason.decode(body) do
-          {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" -> tid
-          _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+          {:ok, params} ->
+            tid =
+              case params["tenant_id"] do
+                t when is_binary(t) and t != "" -> t
+                _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+              end
+
+            lim = min(params["limit"] || 100, 500)
+            off = params["offset"] || 0
+            {tid, lim, off}
+
+          _ ->
+            {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), 100, 0}
         end
 
       response =
         case task_store.list_prioritized(tenant_id) do
-          {:ok, tasks} ->
-            BotArmyRuntime.NATS.Reply.ok(%{"tasks" => tasks})
+          {:ok, all_tasks} ->
+            page = all_tasks |> Enum.drop(offset) |> Enum.take(limit)
+
+            BotArmyRuntime.NATS.Reply.ok(%{
+              "tasks" => page,
+              "total_count" => length(all_tasks),
+              "limit" => limit,
+              "offset" => offset
+            })
 
           {:error, reason} ->
             BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
