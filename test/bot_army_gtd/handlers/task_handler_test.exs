@@ -33,6 +33,27 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
       assert {:error, {:missing_field, "title"}} =
                BotArmyGtd.Handlers.TaskHandler.handle_create(message)
     end
+
+    test "creates task and allows optional decomposition trigger flag" do
+      expected_task = %{
+        "id" => "decompose-task-id",
+        "title" => "Break this down",
+        "project_id" => "project-1",
+        "priority" => "normal",
+        "status" => "active"
+      }
+
+      expect(BotArmyGtd.TaskStoreMock, :create, fn payload when is_map(payload) ->
+        assert payload["decompose"] == true
+        {:ok, expected_task}
+      end)
+
+      message =
+        valid_create_message()
+        |> put_in(["payload", "decompose"], true)
+
+      assert {:ok, ^expected_task} = BotArmyGtd.Handlers.TaskHandler.handle_create(message)
+    end
   end
 
   describe "handle_update/1" do

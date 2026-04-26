@@ -262,7 +262,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     BotArmyRuntime.Tracing.with_consumer_span("gtd.task.list", Map.get(msg, :headers, []), fn ->
       task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
-      {tenant_id, limit, offset} =
+      {tenant_id, limit, offset, filters} =
         case Jason.decode(body) do
           {:ok, params} ->
             tid =
@@ -273,14 +273,15 @@ defmodule BotArmyGtd.NATS.Consumer do
 
             lim = min(params["limit"] || 100, 500)
             off = params["offset"] || 0
-            {tid, lim, off}
+            filters = %{"status" => params["status"], "labels" => params["labels"]}
+            {tid, lim, off, filters}
 
           _ ->
-            {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), 100, 0}
+            {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), 100, 0, %{}}
         end
 
       response =
-        case task_store.list_prioritized(tenant_id) do
+        case task_store.list_prioritized(tenant_id, filters) do
           {:ok, all_tasks} ->
             page = all_tasks |> Enum.drop(offset) |> Enum.take(limit)
 

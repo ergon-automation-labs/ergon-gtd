@@ -65,10 +65,14 @@ defmodule BotArmyGtd.TaskStore do
   @doc """
   List all tasks for a tenant.
 
+  Optional filters:
+  - "status" (string or list of strings)
+  - "labels" (string or list of strings)
+
   Returns `{:ok, tasks}`.
   """
-  def list(tenant_id) when is_binary(tenant_id) do
-    GenServer.call(@server, {:list, tenant_id})
+  def list(tenant_id, filters \\ %{}) when is_binary(tenant_id) and is_map(filters) do
+    GenServer.call(@server, {:list, tenant_id, filters})
   end
 
   @doc """
@@ -79,8 +83,8 @@ defmodule BotArmyGtd.TaskStore do
 
   Returns `{:ok, tasks}`.
   """
-  def list_prioritized(tenant_id) when is_binary(tenant_id) do
-    {:ok, tasks} = list(tenant_id)
+  def list_prioritized(tenant_id, filters \\ %{}) when is_binary(tenant_id) and is_map(filters) do
+    {:ok, tasks} = list(tenant_id, filters)
     at_risk_goals = BotArmyGtd.ArmyContextConsumer.get_at_risk_goals()
 
     prioritized =
@@ -314,7 +318,7 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   @impl true
-  def handle_call({:list, tenant_id}, _from, state) do
+  def handle_call({:list, tenant_id, filters}, _from, state) do
     # If state is empty, try to load from database (handles startup failure scenario)
     state_to_use =
       if map_size(state) == 0 do
@@ -339,6 +343,7 @@ defmodule BotArmyGtd.TaskStore do
       |> Map.values()
       |> Enum.filter(&(&1["tenant_id"] == tenant_id))
       |> Enum.reject(&(&1["status"] in ["deleted", "completed"]))
+      |> apply_list_filters(filters)
 
     {:reply, {:ok, tasks}, state_to_use}
   end
@@ -446,6 +451,43 @@ defmodule BotArmyGtd.TaskStore do
   defp apply_project_filter(tasks, project_id) when is_binary(project_id) do
     Enum.filter(tasks, &(&1["project_id"] == project_id))
   end
+
+  defp apply_list_filters(tasks, filters) when is_map(filters) do
+    tasks
+    |> apply_list_status_filter(Map.get(filters, "status"))
+    |> apply_list_labels_filter(Map.get(filters, "labels"))
+  end
+
+  defp apply_list_filters(tasks, _), do: tasks
+
+  defp apply_list_status_filter(tasks, nil), do: tasks
+
+  defp apply_list_status_filter(tasks, status) when is_binary(status) do
+    Enum.filter(tasks, &(&1["status"] == status))
+  end
+
+  defp apply_list_status_filter(tasks, statuses) when is_list(statuses) do
+    Enum.filter(tasks, &(&1["status"] in statuses))
+  end
+
+  defp apply_list_status_filter(tasks, _), do: tasks
+
+  defp apply_list_labels_filter(tasks, nil), do: tasks
+
+  defp apply_list_labels_filter(tasks, label) when is_binary(label) do
+    Enum.filter(tasks, fn task ->
+      label in (task["labels"] || [])
+    end)
+  end
+
+  defp apply_list_labels_filter(tasks, labels) when is_list(labels) do
+    Enum.filter(tasks, fn task ->
+      task_labels = task["labels"] || []
+      Enum.any?(labels, &Enum.member?(task_labels, &1))
+    end)
+  end
+
+  defp apply_list_labels_filter(tasks, _), do: tasks
 
   # Convert string to UUID, handling both UUID strings and placeholder strings
   defp convert_to_uuid(value) when is_binary(value) do

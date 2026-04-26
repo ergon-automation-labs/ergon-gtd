@@ -57,6 +57,8 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
               user_id
             )
 
+            maybe_trigger_decomposition(task, stamped_payload, tenant_id, user_id)
+
             {:ok, task}
 
           {:error, reason} ->
@@ -338,5 +340,39 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
   defp get_node_name do
     node() |> Atom.to_string()
+  end
+
+  defp maybe_trigger_decomposition(task, payload, tenant_id, user_id) do
+    if Map.get(payload, "decompose", false) == true do
+      decompose_event = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.decompose",
+        "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+        "source" => "bot_army_gtd",
+        "source_node" => get_node_name(),
+        "triggered_by" => "gtd.bot",
+        "schema_version" => "1.0",
+        "tenant_id" => tenant_id,
+        "user_id" => user_id,
+        "payload" =>
+          %{
+            "task_id" => task["id"],
+            "model" => Map.get(payload, "decompose_model"),
+            "chain_id" => Map.get(payload, "decompose_chain_id")
+          }
+          |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+          |> Map.new()
+      }
+
+      case BotArmyRuntime.NATS.Publisher.publish("gtd.task.decompose", decompose_event) do
+        {:ok, _} ->
+          Logger.info("Triggered decomposition for task_id=#{task["id"]}")
+
+        {:error, reason} ->
+          Logger.warning(
+            "Task created but failed to trigger decomposition for task_id=#{task["id"]}: #{inspect(reason)}"
+          )
+      end
+    end
   end
 end
