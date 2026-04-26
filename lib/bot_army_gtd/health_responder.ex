@@ -60,14 +60,17 @@ defmodule BotArmyGtd.HealthResponder do
             Logger.info("[Health] Subscribed to #{subject}")
 
             # Register health check subject with the registry
+            bot_name =
+              if is_atom(state.bot_name), do: Atom.to_string(state.bot_name), else: state.bot_name
+
             health_subject = %{
               subject: subject,
               type: :request_reply,
-              description: "Health check for #{state.bot_name} bot",
+              description: "Health check for #{bot_name} bot",
               timeout_ms: 5000
             }
 
-            BotArmyRuntime.Registry.register(state.bot_name, [health_subject])
+            BotArmyRuntime.Registry.register(bot_name, [health_subject])
 
             {:noreply, %{state | connection: conn, subscription: subscription}}
 
