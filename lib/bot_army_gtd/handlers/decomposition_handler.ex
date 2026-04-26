@@ -163,7 +163,14 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
       {:error, reason} ->
         Logger.warning("Invalid review request payload: #{inspect(reason)}")
-        publish_error(event_id, reason, "Invalid decomposition review request", tenant_id, user_id)
+
+        publish_error(
+          event_id,
+          reason,
+          "Invalid decomposition review request",
+          tenant_id,
+          user_id
+        )
     end
   end
 
@@ -245,17 +252,33 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       {:ok, task} ->
         title = task["title"]
         description = Map.get(task, "description", "")
+        registry_snapshot = get_registry_snapshot(title, description)
 
         # Build the multi-step decomposition chain
-        steps = build_decomposition_chain(title, description)
+        steps = build_decomposition_chain(title, description, registry_snapshot)
         initial_input = "#{title}\n#{if description != "", do: description, else: ""}"
 
         # Request LLM bot to run the inference chain
-        publish_chain_request(chain_id, steps, initial_input, model, task_id, event_id)
+        publish_chain_request(
+          chain_id,
+          steps,
+          initial_input,
+          model,
+          task_id,
+          event_id,
+          registry_snapshot
+        )
 
       {:error, :not_found} ->
         Logger.warning("Task not found for decomposition: #{task_id}")
-        publish_error(event_id, :task_not_found, "Task not found for decomposition", tenant_id, user_id)
+
+        publish_error(
+          event_id,
+          :task_not_found,
+          "Task not found for decomposition",
+          tenant_id,
+          user_id
+        )
     end
   end
 
@@ -293,7 +316,10 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
         case decomposition_store().create(decomposition_payload) do
           {:ok, decomposition} ->
-            Logger.info("Decomposition created: decomposition_id=#{decomposition["id"]}, task_id=#{task_id}, first review in #{BotArmyGtd.FSRSScheduler.format_interval(initial_due_at)}")
+            Logger.info(
+              "Decomposition created: decomposition_id=#{decomposition["id"]}, task_id=#{task_id}, first review in #{BotArmyGtd.FSRSScheduler.format_interval(initial_due_at)}"
+            )
+
             publish_decomposition_completed(decomposition, event_id, tenant_id, user_id)
 
           {:error, reason} ->
@@ -303,7 +329,14 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
       {:error, reason} ->
         Logger.error("Failed to parse decomposition steps: #{inspect(reason)}")
-        publish_error(event_id, reason, "Failed to parse decomposition results", tenant_id, user_id)
+
+        publish_error(
+          event_id,
+          reason,
+          "Failed to parse decomposition results",
+          tenant_id,
+          user_id
+        )
     end
   end
 
@@ -406,7 +439,10 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
         case decomposition_store().update(decomposition_id, updated_decomposition) do
           {:ok, updated} ->
-            Logger.info("Decomposition rejected: decomposition_id=#{decomposition_id}, next review in #{BotArmyGtd.FSRSScheduler.format_interval(new_due_at)}")
+            Logger.info(
+              "Decomposition rejected: decomposition_id=#{decomposition_id}, next review in #{BotArmyGtd.FSRSScheduler.format_interval(new_due_at)}"
+            )
+
             publish_decomposition_reviewed(updated, event_id)
 
           {:error, reason} ->
@@ -507,7 +543,13 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
             reason: "status or due_at mismatch"
           })
 
-          publish_error(event_id, :not_ready, "Decomposition is not ready for review (status=#{status})", tenant_id, user_id)
+          publish_error(
+            event_id,
+            :not_ready,
+            "Decomposition is not ready for review (status=#{status})",
+            tenant_id,
+            user_id
+          )
         end
 
       {:error, :not_found} ->
@@ -518,13 +560,25 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
   # Private helpers
 
-  defp build_decomposition_chain(task_title, description) do
+  defp build_decomposition_chain(task_title, description, registry_snapshot) do
+    registry_context =
+      case registry_snapshot do
+        "" -> "No live registry snapshot available."
+        text -> text
+      end
+
     [
       %{
         "name" => "break_down",
         "prompt" => """
         Task: #{task_title}
         #{if description != "", do: "Description: #{description}", else: ""}
+
+        Live capability snapshot (from bot registry):
+        #{registry_context}
+
+        Prefer subtasks that map to existing capabilities above. If a needed
+        capability is missing, explicitly mark it as a dependency/risk.
 
         Break this task into 3-5 subtasks. For each subtask, provide:
         - A clear, specific title
@@ -570,12 +624,13 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
           deps_data = parse_json_field(step3, "dependencies") || []
           total_hours = parse_total_hours(step2) || sum_effort(effort_data)
 
-          {:ok, %{
-            "subtasks" => subtasks,
-            "effort" => effort_data,
-            "dependencies" => deps_data,
-            "total_hours" => total_hours
-          }}
+          {:ok,
+           %{
+             "subtasks" => subtasks,
+             "effort" => effort_data,
+             "dependencies" => deps_data,
+             "total_hours" => total_hours
+           }}
 
         _ ->
           {:error, :invalid_step_count}
@@ -625,7 +680,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     subtasks
     |> Enum.reduce(0.0, fn subtask, acc ->
       hours = Map.get(subtask, "estimated_hours", 0)
-      acc + (if is_number(hours), do: hours, else: 0)
+      acc + if is_number(hours), do: hours, else: 0
     end)
   end
 
@@ -645,7 +700,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   defp calculate_accuracy_delta(0, _), do: 0.0
 
   defp calculate_accuracy_delta(predicted, actual) do
-    (abs(predicted - actual) / predicted)
+    abs(predicted - actual) / predicted
   end
 
   defp calculate_fsrs_grade(rating, delta) do
@@ -658,7 +713,8 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp calculate_approval_grade(nil, _), do: 3  # No prediction, assume "Good"
+  # No prediction, assume "Good"
+  defp calculate_approval_grade(nil, _), do: 3
   defp calculate_approval_grade(_, nil), do: 3
 
   defp calculate_approval_grade(predicted, actual) do
@@ -670,7 +726,6 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       # Perfect or near-perfect match: "Good"
       diff == 0 -> 3
       diff == 1 -> 3
-
       # Off by 2+: "Hard" (prediction was off)
       diff >= 2 -> 2
     end
@@ -693,7 +748,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
   defp is_due_now(_), do: false
 
-  defp publish_chain_request(chain_id, steps, initial_input, model, task_id, event_id) do
+  defp publish_chain_request(
+         chain_id,
+         steps,
+         initial_input,
+         model,
+         task_id,
+         event_id,
+         registry_snapshot
+       ) do
     event_data = %{
       "event" => "llm.inference.chain",
       "event_id" => UUID.uuid4(),
@@ -709,7 +772,8 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
         "model" => model,
         "metadata" => %{
           "task_id" => task_id,
-          "source" => "task_decomposition"
+          "source" => "task_decomposition",
+          "registry_snapshot" => registry_snapshot
         },
         "triggered_by_event_id" => event_id
       }
@@ -739,8 +803,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     }
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
-      {:ok, _subject} -> Logger.debug("Published decomposition.completed event")
-      {:error, reason} -> Logger.error("Failed to publish decomposition event: #{inspect(reason)}")
+      {:ok, _subject} ->
+        Logger.debug("Published decomposition.completed event")
+
+      {:error, reason} ->
+        Logger.error("Failed to publish decomposition event: #{inspect(reason)}")
     end
   end
 
@@ -781,8 +848,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     }
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
-      {:ok, _subject} -> Logger.debug("Published decomposition.approved event")
-      {:error, reason} -> Logger.error("Failed to publish decomposition.approved event: #{inspect(reason)}")
+      {:ok, _subject} ->
+        Logger.debug("Published decomposition.approved event")
+
+      {:error, reason} ->
+        Logger.error("Failed to publish decomposition.approved event: #{inspect(reason)}")
     end
   end
 
@@ -802,8 +872,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     }
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
-      {:ok, _subject} -> Logger.debug("Published decomposition.reviewed event")
-      {:error, reason} -> Logger.error("Failed to publish decomposition.reviewed event: #{inspect(reason)}")
+      {:ok, _subject} ->
+        Logger.debug("Published decomposition.reviewed event")
+
+      {:error, reason} ->
+        Logger.error("Failed to publish decomposition.reviewed event: #{inspect(reason)}")
     end
   end
 
@@ -825,8 +898,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     }
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
-      {:ok, _subject} -> Logger.debug("Published decomposition.ready_for_review event")
-      {:error, reason} -> Logger.error("Failed to publish ready_for_review event: #{inspect(reason)}")
+      {:ok, _subject} ->
+        Logger.debug("Published decomposition.ready_for_review event")
+
+      {:error, reason} ->
+        Logger.error("Failed to publish ready_for_review event: #{inspect(reason)}")
     end
   end
 
@@ -861,5 +937,92 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
   defp get_node_name do
     node() |> Atom.to_string()
+  end
+
+  defp get_registry_snapshot(task_title, description) do
+    query_text = "#{task_title} #{description}" |> String.downcase()
+
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+      {:ok, conn} ->
+        request_body = Jason.encode!(%{"include_subjects" => true})
+
+        case Gnat.request(conn, "bot_army.registry.bots.list", request_body,
+               receive_timeout: 3_000
+             ) do
+          {:ok, response} ->
+            response.body
+            |> Jason.decode()
+            |> format_registry_snapshot(query_text)
+
+          {:error, reason} ->
+            Logger.debug("Registry snapshot unavailable: #{inspect(reason)}")
+            ""
+        end
+
+      {:error, reason} ->
+        Logger.debug("NATS connection unavailable for registry snapshot: #{inspect(reason)}")
+        ""
+    end
+  end
+
+  defp format_registry_snapshot({:ok, %{"ok" => true, "data" => data}}, query_text) do
+    bots =
+      case data do
+        %{"bots" => list} when is_list(list) -> list
+        list when is_list(list) -> list
+        _ -> []
+      end
+
+    bots
+    |> Enum.filter(&registry_bot_relevant?(&1, query_text))
+    |> Enum.take(8)
+    |> Enum.map(&format_registry_bot/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join("\n")
+  end
+
+  defp format_registry_snapshot(_decode_result, _query_text), do: ""
+
+  defp registry_bot_relevant?(bot, query_text) do
+    text_blob =
+      [Map.get(bot, "name", ""), Map.get(bot, "bot_name", ""), Map.get(bot, "description", "")]
+      |> Kernel.++(extract_subject_names(bot))
+      |> Enum.join(" ")
+      |> String.downcase()
+
+    Enum.any?(String.split(query_text, ~r/\s+/, trim: true), fn token ->
+      String.length(token) > 2 and String.contains?(text_blob, token)
+    end)
+  end
+
+  defp extract_subject_names(bot) do
+    case Map.get(bot, "subjects") do
+      subjects when is_list(subjects) ->
+        Enum.map(subjects, fn
+          %{"subject" => subject} -> subject
+          subject when is_binary(subject) -> subject
+          _ -> ""
+        end)
+
+      _ ->
+        []
+    end
+  end
+
+  defp format_registry_bot(bot) do
+    name = Map.get(bot, "name") || Map.get(bot, "bot_name") || "unknown_bot"
+
+    subjects =
+      bot
+      |> extract_subject_names()
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.take(6)
+      |> Enum.join(", ")
+
+    if subjects == "" do
+      ""
+    else
+      "- #{name}: #{subjects}"
+    end
   end
 end
