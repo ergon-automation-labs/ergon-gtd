@@ -255,74 +255,82 @@ defmodule BotArmyGtd.NATS.Consumer do
   end
 
   @impl true
-  def handle_info({:msg, %{topic: "gtd.task.list", reply_to: reply_to, body: body} = _msg}, state)
+  def handle_info({:msg, %{topic: "gtd.task.list", reply_to: reply_to, body: body} = msg}, state)
       when is_binary(reply_to) and reply_to != "" do
-    task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+    BotArmyRuntime.Tracing.with_consumer_span("gtd.task.list", Map.get(msg, :headers, []), fn ->
+      task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
-    tenant_id =
-      case Jason.decode(body) do
-        {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" -> tid
-        _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
-      end
+      tenant_id =
+        case Jason.decode(body) do
+          {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" -> tid
+          _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+        end
 
-    response =
-      case task_store.list_prioritized(tenant_id) do
-        {:ok, tasks} ->
-          BotArmyRuntime.NATS.Reply.ok(%{"tasks" => tasks})
+      response =
+        case task_store.list_prioritized(tenant_id) do
+          {:ok, tasks} ->
+            BotArmyRuntime.NATS.Reply.ok(%{"tasks" => tasks})
 
-        {:error, reason} ->
-          BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
-      end
+          {:error, reason} ->
+            BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
+        end
 
-    if state.conn do
-      Gnat.pub(state.conn, reply_to, response)
-    end
+      reply_traced(state.conn, reply_to, response)
+    end)
 
     {:noreply, state}
   end
 
   @impl true
   def handle_info(
-        {:msg, %{topic: "gtd.decomposition.list_due", reply_to: reply_to, body: body} = _msg},
+        {:msg, %{topic: "gtd.decomposition.list_due", reply_to: reply_to, body: body} = msg},
         state
       )
       when is_binary(reply_to) and reply_to != "" do
-    decomposition_store =
-      Application.get_env(:bot_army_gtd, :decomposition_store, BotArmyGtd.DecompositionStore)
+    BotArmyRuntime.Tracing.with_consumer_span(
+      "gtd.decomposition.list_due",
+      Map.get(msg, :headers, []),
+      fn ->
+        decomposition_store =
+          Application.get_env(
+            :bot_army_gtd,
+            :decomposition_store,
+            BotArmyGtd.DecompositionStore
+          )
 
-    tenant_id =
-      case Jason.decode(body) do
-        {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" -> tid
-        _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+        tenant_id =
+          case Jason.decode(body) do
+            {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" -> tid
+            _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+          end
+
+        now = DateTime.utc_now()
+
+        response =
+          case decomposition_store.list(tenant_id) do
+            {:ok, decompositions} ->
+              due =
+                decompositions
+                |> Enum.filter(fn d ->
+                  d["status"] in ["completed", "reviewed"] and d["due_at"] != nil
+                end)
+                |> Enum.filter(fn d ->
+                  case DateTime.from_iso8601(d["due_at"]) do
+                    {:ok, due_at, _} -> DateTime.compare(due_at, now) in [:lt, :eq]
+                    _ -> false
+                  end
+                end)
+                |> Enum.sort_by(fn d -> d["due_at"] end)
+
+              BotArmyRuntime.NATS.Reply.ok(%{"decompositions" => due})
+
+            {:error, reason} ->
+              BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
+          end
+
+        reply_traced(state.conn, reply_to, response)
       end
-
-    now = DateTime.utc_now()
-
-    response =
-      case decomposition_store.list(tenant_id) do
-        {:ok, decompositions} ->
-          due =
-            decompositions
-            |> Enum.filter(fn d ->
-              d["status"] in ["completed", "reviewed"] and d["due_at"] != nil
-            end)
-            |> Enum.filter(fn d ->
-              case DateTime.from_iso8601(d["due_at"]) do
-                {:ok, due_at, _} -> DateTime.compare(due_at, now) in [:lt, :eq]
-                _ -> false
-              end
-            end)
-            |> Enum.sort_by(fn d -> d["due_at"] end)
-
-          BotArmyRuntime.NATS.Reply.ok(%{"decompositions" => due})
-
-        {:error, reason} ->
-          BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
-      end
-
-    if state.conn do
-      Gnat.pub(state.conn, reply_to, response)
-    end
+    )
 
     {:noreply, state}
   end
@@ -332,25 +340,24 @@ defmodule BotArmyGtd.NATS.Consumer do
     topic = msg.topic
     reply_to = Map.get(msg, :reply_to)
 
-    # Handle request-reply patterns first
-    case topic do
-      "gtd.task.create" when is_binary(reply_to) and reply_to != "" ->
-        handle_task_create_request(msg, reply_to, state)
+    BotArmyRuntime.Tracing.with_consumer_span(topic, Map.get(msg, :headers, []), fn ->
+      case topic do
+        "gtd.task.create" when is_binary(reply_to) and reply_to != "" ->
+          handle_task_create_request(msg, reply_to, state)
 
-      "gtd.task.update" when is_binary(reply_to) and reply_to != "" ->
-        handle_task_update_request(msg, reply_to, state)
+        "gtd.task.update" when is_binary(reply_to) and reply_to != "" ->
+          handle_task_update_request(msg, reply_to, state)
 
-      "gtd.project.create" when is_binary(reply_to) and reply_to != "" ->
-        handle_project_create_request(msg, reply_to, state)
+        "gtd.project.create" when is_binary(reply_to) and reply_to != "" ->
+          handle_project_create_request(msg, reply_to, state)
 
-      "gtd.project.update" when is_binary(reply_to) and reply_to != "" ->
-        handle_project_update_request(msg, reply_to, state)
+        "gtd.project.update" when is_binary(reply_to) and reply_to != "" ->
+          handle_project_update_request(msg, reply_to, state)
 
-      "gtd.project.list" when is_binary(reply_to) and reply_to != "" ->
-        handle_project_list_request(msg, reply_to, state)
+        "gtd.project.list" when is_binary(reply_to) and reply_to != "" ->
+          handle_project_list_request(msg, reply_to, state)
 
-      _ ->
-        BotArmyRuntime.Tracing.with_consumer_span(topic, Map.get(msg, :headers, []), fn ->
+        _ ->
           Logger.debug("Received NATS message on subject: #{topic}")
 
           case BotArmyCore.NATS.Decoder.decode(msg.body) do
@@ -360,8 +367,8 @@ defmodule BotArmyGtd.NATS.Consumer do
             {:error, reason} ->
               Logger.warning("Failed to decode message from #{topic}: #{inspect(reason)}")
           end
-        end)
-    end
+      end
+    end)
 
     {:noreply, state}
   end
@@ -372,17 +379,17 @@ defmodule BotArmyGtd.NATS.Consumer do
         case BotArmyGtd.Handlers.TaskHandler.handle_create(decoded_message) do
           {:ok, task} ->
             response = BotArmyRuntime.NATS.Reply.ok(%{"task_id" => task["id"], "task" => task})
-            if state.conn, do: Gnat.pub(state.conn, reply_to, response)
+            reply_traced(state.conn, reply_to, response)
 
           {:error, reason} ->
             error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :create_failed)
-            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+            reply_traced(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode task create message: #{inspect(reason)}")
         error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
-        if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+        reply_traced(state.conn, reply_to, error_response)
     end
   end
 
@@ -392,17 +399,17 @@ defmodule BotArmyGtd.NATS.Consumer do
         case BotArmyGtd.Handlers.TaskHandler.handle_update(decoded_message) do
           :ok ->
             response = BotArmyRuntime.NATS.Reply.ok(%{})
-            if state.conn, do: Gnat.pub(state.conn, reply_to, response)
+            reply_traced(state.conn, reply_to, response)
 
           {:error, reason} ->
             error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :update_failed)
-            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+            reply_traced(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode task update message: #{inspect(reason)}")
         error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
-        if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+        reply_traced(state.conn, reply_to, error_response)
     end
   end
 
@@ -414,11 +421,11 @@ defmodule BotArmyGtd.NATS.Consumer do
             response =
               BotArmyRuntime.NATS.Reply.ok(%{"project_id" => project["id"], "project" => project})
 
-            if state.conn, do: Gnat.pub(state.conn, reply_to, response)
+            reply_traced(state.conn, reply_to, response)
 
           {:error, reason} ->
             error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :create_failed)
-            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+            reply_traced(state.conn, reply_to, error_response)
 
           other ->
             Logger.warning("Unexpected return value from handle_create: #{inspect(other)}")
@@ -429,13 +436,13 @@ defmodule BotArmyGtd.NATS.Consumer do
                 :internal_error
               )
 
-            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+            reply_traced(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode project create message: #{inspect(reason)}")
         error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
-        if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+        reply_traced(state.conn, reply_to, error_response)
     end
   end
 
@@ -447,11 +454,11 @@ defmodule BotArmyGtd.NATS.Consumer do
             response =
               BotArmyRuntime.NATS.Reply.ok(%{"project_id" => project["id"], "project" => project})
 
-            if state.conn, do: Gnat.pub(state.conn, reply_to, response)
+            reply_traced(state.conn, reply_to, response)
 
           {:error, reason} ->
             error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :update_failed)
-            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+            reply_traced(state.conn, reply_to, error_response)
 
           other ->
             Logger.warning("Unexpected return value from handle_update: #{inspect(other)}")
@@ -462,13 +469,13 @@ defmodule BotArmyGtd.NATS.Consumer do
                 :internal_error
               )
 
-            if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+            reply_traced(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode project update message: #{inspect(reason)}")
         error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
-        if state.conn, do: Gnat.pub(state.conn, reply_to, error_response)
+        reply_traced(state.conn, reply_to, error_response)
     end
   end
 
@@ -503,7 +510,14 @@ defmodule BotArmyGtd.NATS.Consumer do
           BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
       end
 
-    if state.conn, do: Gnat.pub(state.conn, reply_to, response)
+    reply_traced(state.conn, reply_to, response)
+  end
+
+  defp reply_traced(conn, reply_to, body) do
+    if conn do
+      headers = BotArmyRuntime.Tracing.inject_trace_context([])
+      Gnat.pub(conn, reply_to, body, headers: headers)
+    end
   end
 
   @impl true
