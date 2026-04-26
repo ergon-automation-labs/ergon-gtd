@@ -26,6 +26,7 @@ defmodule BotArmyGtd.PulsePublisher do
   require Logger
 
   alias BotArmyGtd.TaskStore
+  alias BotArmyGtd.ProjectStore
 
   # 5 minutes
   @publish_interval_ms 30 * 60 * 1000
@@ -63,18 +64,17 @@ defmodule BotArmyGtd.PulsePublisher do
     Logger.debug("[PulsePublisher] publish_pulse() called")
     default_tenant = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
 
-    case TaskStore.list(default_tenant) do
-      {:ok, tasks} ->
-        # TODO: fetch projects from ProjectStore once stable
-        pulse = build_pulse(tasks, [], default_tenant)
-        publish_to_nats(pulse)
-
+    with {:ok, tasks} <- TaskStore.list(default_tenant),
+         {:ok, projects} <- ProjectStore.list(default_tenant) do
+      pulse = build_pulse(tasks, projects, default_tenant)
+      publish_to_nats(pulse)
+    else
       {:error, reason} ->
         Logger.warning("[PulsePublisher] Failed to build pulse: #{inspect(reason)}")
     end
   end
 
-  defp build_pulse(tasks, _projects, tenant_id) do
+  defp build_pulse(tasks, projects, tenant_id) do
     now = DateTime.utc_now()
 
     goal_observations =
@@ -98,7 +98,7 @@ defmodule BotArmyGtd.PulsePublisher do
       "bot" => "gtd",
       "timestamp" => DateTime.to_iso8601(now),
       "tenant_id" => tenant_id,
-      "projects" => [],
+      "projects" => projects,
       "tasks" => tasks,
       "observations" => %{
         "goals" => goal_observations,
