@@ -2,28 +2,20 @@ defmodule BotArmyGtd.PulsePublisher do
   @moduledoc """
   Publishes periodic health pulses to Synapse.
 
-  GTD reports its observations about task and goal state:
-  - Active task count per goal
-  - Task age distribution
-  - Goals with no recent decisions (stagnation signals)
+  GTD broadcasts full task and project state for Synapse context gathering.
+  Instead of Synapse making NATS requests (which timeout), GTD proactively
+  publishes its data every 30 minutes. Synapse's PulseListener caches this data
+  and context handlers read from the cache with zero-latency fallback.
 
-  Synapse uses pulses to correlate signals across bots and refine
-  health assessments.
-
-  Pulse format:
+  Pulse format includes full project and task data:
     {
       "bot": "gtd",
       "timestamp": "2026-04-25T10:25:00Z",
       "tenant_id": "...",
+      "projects": [...],
+      "tasks": [...],
       "observations": {
-        "goals": {
-          "goal_id": {
-            "active_tasks": N,
-            "tasks_older_than_7d": N,
-            "last_task_created_at": "...",
-            "blockers_detected": [...]
-          }
-        },
+        "goals": {...},
         "total_active_tasks": N,
         "health_signal": "nominal|degraded|critical"
       }
@@ -62,15 +54,21 @@ defmodule BotArmyGtd.PulsePublisher do
 
     case TaskStore.list(default_tenant) do
       {:ok, tasks} ->
-        pulse = build_pulse(tasks, default_tenant)
-        publish_to_nats(pulse)
+        case BotArmyGtd.ProjectStore.list(default_tenant) do
+          {:ok, projects} ->
+            pulse = build_pulse(tasks, projects, default_tenant)
+            publish_to_nats(pulse)
+
+          {:error, reason} ->
+            Logger.warning("[PulsePublisher] Failed to list projects: #{inspect(reason)}")
+        end
 
       {:error, reason} ->
         Logger.warning("[PulsePublisher] Failed to build pulse: #{inspect(reason)}")
     end
   end
 
-  defp build_pulse(tasks, tenant_id) do
+  defp build_pulse(tasks, projects, tenant_id) do
     now = DateTime.utc_now()
 
     goal_observations =
@@ -94,6 +92,8 @@ defmodule BotArmyGtd.PulsePublisher do
       "bot" => "gtd",
       "timestamp" => DateTime.to_iso8601(now),
       "tenant_id" => tenant_id,
+      "projects" => projects,
+      "tasks" => tasks,
       "observations" => %{
         "goals" => goal_observations,
         "total_active_tasks" => total_active,
