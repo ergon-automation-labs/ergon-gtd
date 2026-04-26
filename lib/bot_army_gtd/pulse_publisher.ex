@@ -38,7 +38,7 @@ defmodule BotArmyGtd.PulsePublisher do
   @impl true
   def init(_opts) do
     Logger.info("[PulsePublisher] Starting GTD pulse publisher")
-    Process.send_after(self(), :publish_pulse, 0)
+    Process.send_after(self(), :publish_pulse, 5000)
     {:ok, %{}}
   end
 
