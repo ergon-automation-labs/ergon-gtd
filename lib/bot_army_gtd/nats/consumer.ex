@@ -40,6 +40,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     %{subject: "gtd.task.create", type: :request_reply, description: "Create a task"},
     %{subject: "gtd.task.update", type: :request_reply, description: "Update a task"},
     %{subject: "gtd.task.list", type: :request_reply, description: "List tasks"},
+    %{subject: "gtd.task.search", type: :request_reply, description: "Search tasks"},
     %{subject: "gtd.task.complete", type: :subscribe, description: "Task completion events"},
     %{subject: "gtd.task.command.defer", type: :subscribe, description: "Defer task"},
     %{subject: "gtd.task.command.delete", type: :subscribe, description: "Delete task"},
@@ -291,6 +292,60 @@ defmodule BotArmyGtd.NATS.Consumer do
 
           {:error, reason} ->
             BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
+        end
+
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.task.search", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span("gtd.task.search", Map.get(msg, :headers, []), fn ->
+      task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+
+      {tenant_id, query, filters, pagination} =
+        case Jason.decode(body) do
+          {:ok, params} ->
+            tid =
+              case params["tenant_id"] do
+                t when is_binary(t) and t != "" -> t
+                _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+              end
+
+            q = params["query"] || ""
+            f = Map.get(params, "filters", %{})
+
+            p = %{
+              "limit" => min(params["limit"] || 50, 500),
+              "offset" => params["offset"] || 0
+            }
+
+            {tid, q, f, p}
+
+          _ ->
+            {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), "", %{},
+             %{"limit" => 50, "offset" => 0}}
+        end
+
+      response =
+        case task_store.search(tenant_id, query, filters, pagination) do
+          {:ok, {tasks, total_count}} ->
+            BotArmyRuntime.NATS.Reply.ok(%{
+              "tasks" => tasks,
+              "total_count" => total_count,
+              "limit" => Map.get(pagination, "limit"),
+              "offset" => Map.get(pagination, "offset"),
+              "query" => query
+            })
+
+          {:error, reason} ->
+            BotArmyRuntime.NATS.Reply.error(inspect(reason), :search_failed)
         end
 
       reply_traced(state.conn, reply_to, response)

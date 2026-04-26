@@ -93,6 +93,19 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   @doc """
+  Search tasks for a tenant by query string.
+
+  Query matches against title and description (case-insensitive).
+  Supports optional filters: status, context, labels, project_id.
+  Supports pagination: limit (default 50), offset (default 0).
+
+  Returns `{:ok, {tasks, total_count}}`.
+  """
+  def search(tenant_id, query, filters \\ %{}, pagination \\ %{}) do
+    GenServer.call(@server, {:search, tenant_id, query, filters, pagination})
+  end
+
+  @doc """
   Clear all tasks (for testing).
 
   Returns `:ok`.
@@ -336,6 +349,102 @@ defmodule BotArmyGtd.TaskStore do
     # Clear database
     BotArmyGtd.Repo.delete_all(BotArmyGtd.Schemas.Task)
     {:reply, :ok, %{}}
+  end
+
+  @impl true
+  def handle_call({:search, tenant_id, query, filters, pagination}, _from, state) do
+    # Recover from database if state is empty
+    state_to_use =
+      if map_size(state) == 0 do
+        try do
+          tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
+          Logger.info("TaskStore recovered #{length(tasks)} tasks from database for search")
+
+          Enum.reduce(tasks, %{}, fn task, acc ->
+            Map.put(acc, task.id |> to_string(), schema_to_map(task))
+          end)
+        rescue
+          _ ->
+            Logger.warning("TaskStore recovery from database failed for search")
+            state
+        end
+      else
+        state
+      end
+
+    query_lower = String.downcase(query)
+    limit = Map.get(pagination, "limit", 50)
+    offset = Map.get(pagination, "offset", 0)
+
+    # Get all tasks for tenant, then filter by query and optional filters
+    all_tasks =
+      state_to_use
+      |> Map.values()
+      |> Enum.filter(&(&1["tenant_id"] == tenant_id))
+
+    # Filter by query (title and description)
+    filtered_tasks =
+      all_tasks
+      |> Enum.filter(fn task ->
+        title_match =
+          task["title"] && String.downcase(task["title"]) |> String.contains?(query_lower)
+
+        description_match =
+          task["description"] &&
+            String.downcase(task["description"]) |> String.contains?(query_lower)
+
+        title_match or description_match
+      end)
+
+    # Apply optional filters
+    filtered_tasks =
+      filtered_tasks
+      |> apply_filter(filters)
+
+    # Apply pagination
+    total_count = length(filtered_tasks)
+
+    paginated_tasks =
+      filtered_tasks
+      |> Enum.drop(offset)
+      |> Enum.take(limit)
+
+    {:reply, {:ok, {paginated_tasks, total_count}}, state_to_use}
+  end
+
+  defp apply_filter(tasks, filters) when is_map(filters) do
+    tasks
+    |> apply_status_filter(Map.get(filters, "status"))
+    |> apply_context_filter(Map.get(filters, "context"))
+    |> apply_labels_filter(Map.get(filters, "labels"))
+    |> apply_project_filter(Map.get(filters, "project_id"))
+  end
+
+  defp apply_status_filter(tasks, nil), do: tasks
+
+  defp apply_status_filter(tasks, status) when is_binary(status) do
+    Enum.filter(tasks, &(&1["status"] == status))
+  end
+
+  defp apply_context_filter(tasks, nil), do: tasks
+
+  defp apply_context_filter(tasks, context) when is_binary(context) do
+    Enum.filter(tasks, &(&1["context"] == context))
+  end
+
+  defp apply_labels_filter(tasks, nil), do: tasks
+
+  defp apply_labels_filter(tasks, labels) when is_list(labels) do
+    Enum.filter(tasks, fn task ->
+      task_labels = task["labels"] || []
+      Enum.any?(labels, &Enum.member?(task_labels, &1))
+    end)
+  end
+
+  defp apply_project_filter(tasks, nil), do: tasks
+
+  defp apply_project_filter(tasks, project_id) when is_binary(project_id) do
+    Enum.filter(tasks, &(&1["project_id"] == project_id))
   end
 
   # Convert string to UUID, handling both UUID strings and placeholder strings
