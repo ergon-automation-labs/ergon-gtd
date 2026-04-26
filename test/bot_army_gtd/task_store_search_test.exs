@@ -102,4 +102,37 @@ defmodule BotArmyGtd.TaskStoreSearchTest do
     assert length(tasks) == 1
     assert hd(tasks)["id"] == "task-3"
   end
+
+  test "search and filter match goal_id content" do
+    tenant_id = "00000000-0000-0000-0000-000000000001"
+
+    :sys.replace_state(BotArmyGtd.TaskStore, fn _ ->
+      %{
+        "task-4" => %{
+          "id" => "task-4",
+          "tenant_id" => tenant_id,
+          "title" => "Link to goal",
+          "description" => nil,
+          "status" => "active",
+          "priority" => "normal",
+          "context" => nil,
+          "source" => "claude",
+          "source_metadata" => %{},
+          "project_id" => nil,
+          "goal_id" => "goal-xyz-1",
+          "parent_task_id" => nil,
+          "labels" => []
+        }
+      }
+    end)
+
+    {:ok, {tasks, total_count}} = BotArmyGtd.TaskStore.search(tenant_id, "goal-xyz-1")
+    assert total_count == 1
+    assert length(tasks) == 1
+    assert hd(tasks)["id"] == "task-4"
+
+    {:ok, filtered} = BotArmyGtd.TaskStore.list(tenant_id, %{"goal_id" => "goal-xyz-1"})
+    assert length(filtered) == 1
+    assert hd(filtered)["goal_id"] == "goal-xyz-1"
+  end
 end

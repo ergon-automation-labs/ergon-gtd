@@ -20,6 +20,7 @@ defmodule BotArmyGtd.Schemas.Task do
     field(:due_date, :date)
     field(:completed_at, :naive_datetime)
     field(:project_id, :string)
+    field(:goal_id, :string)
     field(:parent_task_id, :string)
     field(:labels, {:array, :string}, default: [])
     field(:tenant_id, Ecto.UUID)
@@ -52,6 +53,7 @@ defmodule BotArmyGtd.Schemas.Task do
       :due_date,
       :completed_at,
       :project_id,
+      :goal_id,
       :parent_task_id,
       :labels,
       :tenant_id,

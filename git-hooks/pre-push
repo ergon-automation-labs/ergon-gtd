@@ -79,6 +79,13 @@ if [[ $remote_ref == "refs/heads/main" ]]; then
   }
   echo "✓ Release published to GitHub"
 
+  # Cleanup build artifacts created by this hook
+  echo ""
+  echo "🧹 Cleaning up local release artifacts..."
+  rm -f ./*.tar.gz
+  rm -rf ./_build
+  echo "✓ Cleanup complete"
+
   echo ""
   echo "✅ All checks passed, release built and published!"
   echo "📤 Proceeding with push..."

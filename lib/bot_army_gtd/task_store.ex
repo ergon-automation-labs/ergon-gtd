@@ -195,6 +195,7 @@ defmodule BotArmyGtd.TaskStore do
           "user_id" => if(user_id, do: convert_to_uuid(user_id), else: nil),
           "title" => payload["title"],
           "project_id" => payload["project_id"],
+          "goal_id" => payload["goal_id"],
           "description" => Map.get(payload, "description"),
           "status" => Map.get(payload, "status", "active"),
           "priority" => Map.get(payload, "priority", "normal"),
@@ -263,6 +264,8 @@ defmodule BotArmyGtd.TaskStore do
                          Map.get(payload, "source_metadata", db_task.source_metadata),
                        "due_date" => due_date || db_task.due_date,
                        "result" => Map.get(payload, "result", db_task.result),
+                       "project_id" => Map.get(payload, "project_id", db_task.project_id),
+                       "goal_id" => Map.get(payload, "goal_id", db_task.goal_id),
                        "parent_task_id" =>
                          Map.get(payload, "parent_task_id", db_task.parent_task_id),
                        "labels" => Map.get(payload, "labels", db_task.labels)
@@ -338,6 +341,8 @@ defmodule BotArmyGtd.TaskStore do
                            Map.get(payload, "source_metadata", db_task.source_metadata),
                          "due_date" => due_date || db_task.due_date,
                          "result" => Map.get(payload, "result", db_task.result),
+                         "project_id" => Map.get(payload, "project_id", db_task.project_id),
+                         "goal_id" => Map.get(payload, "goal_id", db_task.goal_id),
                          "parent_task_id" =>
                            Map.get(payload, "parent_task_id", db_task.parent_task_id),
                          "labels" => Map.get(payload, "labels", db_task.labels)
@@ -544,6 +549,7 @@ defmodule BotArmyGtd.TaskStore do
     |> apply_context_filter(Map.get(filters, "context"))
     |> apply_labels_filter(Map.get(filters, "labels"))
     |> apply_project_filter(Map.get(filters, "project_id"))
+    |> apply_goal_filter(Map.get(filters, "goal_id"))
   end
 
   defp apply_status_filter(tasks, nil), do: tasks
@@ -573,6 +579,12 @@ defmodule BotArmyGtd.TaskStore do
     Enum.filter(tasks, &(&1["project_id"] == project_id))
   end
 
+  defp apply_goal_filter(tasks, nil), do: tasks
+
+  defp apply_goal_filter(tasks, goal_id) when is_binary(goal_id) do
+    Enum.filter(tasks, &(&1["goal_id"] == goal_id))
+  end
+
   defp task_matches_query?(task, query_lower) do
     metadata_text =
       case task["source_metadata"] do
@@ -588,6 +600,7 @@ defmodule BotArmyGtd.TaskStore do
       task["id"],
       task["parent_task_id"],
       task["project_id"],
+      task["goal_id"],
       metadata_text
     ]
 
@@ -667,8 +680,9 @@ defmodule BotArmyGtd.TaskStore do
       "context" => task.context,
       "source" => task.source,
       "source_metadata" => task.source_metadata,
-      "project_id" => task.project_id |> to_string(),
-      "parent_task_id" => task.parent_task_id |> to_string(),
+      "project_id" => if(task.project_id, do: to_string(task.project_id), else: nil),
+      "goal_id" => if(task.goal_id, do: to_string(task.goal_id), else: nil),
+      "parent_task_id" => if(task.parent_task_id, do: to_string(task.parent_task_id), else: nil),
       "labels" => task.labels,
       "due_date" => if(task.due_date, do: task.due_date |> to_string(), else: nil),
       "completed_at" =>

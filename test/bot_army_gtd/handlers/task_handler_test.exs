@@ -25,6 +25,20 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
       assert {:ok, ^expected_task} = BotArmyGtd.Handlers.TaskHandler.handle_create(message)
     end
 
+    test "passes goal_id through create payload" do
+      expect(BotArmyGtd.TaskStoreMock, :create, fn payload when is_map(payload) ->
+        assert payload["goal_id"] == "goal-123"
+        {:ok, %{"id" => "task-1", "title" => payload["title"], "goal_id" => payload["goal_id"]}}
+      end)
+
+      message =
+        valid_create_message()
+        |> put_in(["payload", "goal_id"], "goal-123")
+
+      assert {:ok, %{"goal_id" => "goal-123"}} =
+               BotArmyGtd.Handlers.TaskHandler.handle_create(message)
+    end
+
     test "returns error for missing required field" do
       message =
         valid_create_message()
@@ -102,6 +116,32 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
       }
 
       BotArmyGtd.Handlers.TaskHandler.handle_update(update_msg)
+    end
+
+    test "passes goal_id through update payload" do
+      task_id = "test-task-id"
+
+      payload = %{
+        "task_id" => task_id,
+        "goal_id" => "goal-abc"
+      }
+
+      expect(BotArmyGtd.TaskStoreMock, :get, fn _tenant_id, ^task_id ->
+        {:ok, %{"id" => task_id, "status" => "inbox", "source_metadata" => %{}}}
+      end)
+
+      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, update_payload ->
+        assert update_payload["goal_id"] == "goal-abc"
+        {:ok, %{"id" => task_id, "goal_id" => "goal-abc"}}
+      end)
+
+      update_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.update",
+        "payload" => payload
+      }
+
+      assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_update(update_msg)
     end
 
     test "returns error when updating non-existent task" do
