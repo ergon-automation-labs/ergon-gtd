@@ -44,12 +44,23 @@ defmodule BotArmyGtd.PulsePublisher do
 
   @impl true
   def handle_info(:publish_pulse, state) do
-    Task.start(fn -> publish_pulse() end)
+    Logger.debug("[PulsePublisher] Publishing pulse")
+
+    Task.start(fn ->
+      try do
+        publish_pulse()
+      rescue
+        e ->
+          Logger.error("[PulsePublisher] Error publishing pulse: #{inspect(e)}")
+      end
+    end)
+
     Process.send_after(self(), :publish_pulse, @publish_interval_ms)
     {:noreply, state}
   end
 
   defp publish_pulse do
+    Logger.debug("[PulsePublisher] publish_pulse() called")
     default_tenant = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
 
     case TaskStore.list(default_tenant) do
@@ -127,9 +138,14 @@ defmodule BotArmyGtd.PulsePublisher do
   end
 
   defp publish_to_nats(pulse) do
+    Logger.debug("[PulsePublisher] publish_to_nats() called")
+
     try do
+      Logger.debug("[PulsePublisher] Getting NATS connection...")
+
       case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
         {:ok, conn} ->
+          Logger.debug("[PulsePublisher] Got NATS connection, encoding pulse...")
           json = Jason.encode!(pulse)
 
           case Gnat.pub(conn, "bot.gtd.pulse", json) do
