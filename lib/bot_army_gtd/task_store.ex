@@ -517,19 +517,10 @@ defmodule BotArmyGtd.TaskStore do
       |> Map.values()
       |> Enum.filter(&(&1["tenant_id"] == tenant_id))
 
-    # Filter by query (title and description)
+    # Filter by query across core text plus origin metadata for tracing.
     filtered_tasks =
       all_tasks
-      |> Enum.filter(fn task ->
-        title_match =
-          task["title"] && String.downcase(task["title"]) |> String.contains?(query_lower)
-
-        description_match =
-          task["description"] &&
-            String.downcase(task["description"]) |> String.contains?(query_lower)
-
-        title_match or description_match
-      end)
+      |> Enum.filter(&task_matches_query?(&1, query_lower))
 
     # Apply optional filters
     filtered_tasks =
@@ -580,6 +571,33 @@ defmodule BotArmyGtd.TaskStore do
 
   defp apply_project_filter(tasks, project_id) when is_binary(project_id) do
     Enum.filter(tasks, &(&1["project_id"] == project_id))
+  end
+
+  defp task_matches_query?(task, query_lower) do
+    metadata_text =
+      case task["source_metadata"] do
+        map when is_map(map) -> Jason.encode!(map) |> String.downcase()
+        _ -> ""
+      end
+
+    searchable_fields = [
+      task["title"],
+      task["description"],
+      task["source"],
+      task["context"],
+      task["id"],
+      task["parent_task_id"],
+      task["project_id"],
+      metadata_text
+    ]
+
+    Enum.any?(searchable_fields, fn
+      field when is_binary(field) and field != "" ->
+        String.contains?(String.downcase(field), query_lower)
+
+      _ ->
+        false
+    end)
   end
 
   defp apply_list_filters(tasks, filters) when is_map(filters) do
