@@ -88,7 +88,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
       :ok ->
         task_id = payload["task_id"]
 
-        case task_store().update(task_id, payload) do
+        case scoped_update(tenant_id, task_id, payload) do
           {:ok, task} ->
             Logger.info("Task updated: task_id=#{task_id}, event_id=#{event_id}")
 
@@ -131,7 +131,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
       :ok ->
         task_id = payload["task_id"]
 
-        case task_store().complete(task_id) do
+        case scoped_complete(tenant_id, task_id) do
           {:ok, task} ->
             Logger.info("Task completed: task_id=#{task_id}, event_id=#{event_id}")
 
@@ -175,7 +175,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         task_id = payload["task_id"]
         defer_until = payload["defer_until"]
 
-        case task_store().update(task_id, %{"due_date" => defer_until}) do
+        case scoped_update(tenant_id, task_id, %{"due_date" => defer_until}) do
           {:ok, task} ->
             Logger.info(
               "Task deferred: task_id=#{task_id}, until=#{defer_until}, event_id=#{event_id}"
@@ -220,7 +220,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
       :ok ->
         task_id = payload["task_id"]
 
-        case task_store().update(task_id, %{"status" => "deleted"}) do
+        case scoped_update(tenant_id, task_id, %{"status" => "deleted"}) do
           {:ok, task} ->
             Logger.info("Task deleted: task_id=#{task_id}, event_id=#{event_id}")
 
@@ -340,6 +340,27 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
   defp get_node_name do
     node() |> Atom.to_string()
+  end
+
+  # Use tenant-scoped store calls when available, but keep compatibility with existing mocks.
+  defp scoped_update(tenant_id, task_id, payload) do
+    store = task_store()
+
+    if function_exported?(store, :update, 3) do
+      store.update(tenant_id, task_id, payload)
+    else
+      store.update(task_id, payload)
+    end
+  end
+
+  defp scoped_complete(tenant_id, task_id) do
+    store = task_store()
+
+    if function_exported?(store, :complete, 2) do
+      store.complete(tenant_id, task_id)
+    else
+      store.complete(task_id)
+    end
   end
 
   defp maybe_trigger_decomposition(task, payload, tenant_id, user_id) do

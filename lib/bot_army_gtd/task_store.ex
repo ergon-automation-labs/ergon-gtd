@@ -45,12 +45,31 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   @doc """
+  Update an existing task scoped to a tenant.
+
+  Returns `{:ok, task}` with the updated task, or `{:error, reason}`.
+  """
+  def update(tenant_id, task_id, payload)
+      when is_binary(tenant_id) and is_binary(task_id) and is_map(payload) do
+    GenServer.call(@server, {:update_scoped, tenant_id, task_id, payload})
+  end
+
+  @doc """
   Mark a task as complete.
 
   Returns `{:ok, task}` with the completed task, or `{:error, reason}`.
   """
   def complete(task_id) when is_binary(task_id) do
     GenServer.call(@server, {:complete, task_id})
+  end
+
+  @doc """
+  Mark a task as complete scoped to a tenant.
+
+  Returns `{:ok, task}` with the completed task, or `{:error, reason}`.
+  """
+  def complete(tenant_id, task_id) when is_binary(tenant_id) and is_binary(task_id) do
+    GenServer.call(@server, {:complete_scoped, tenant_id, task_id})
   end
 
   @doc """
@@ -275,6 +294,82 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   @impl true
+  def handle_call({:update_scoped, tenant_id, task_id, payload}, _from, state) do
+    case Map.get(state, task_id) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      task ->
+        if task["tenant_id"] != tenant_id do
+          {:reply, {:error, :not_found}, state}
+        else
+          task_uuid = Ecto.UUID.cast!(task_id)
+
+          case BotArmyGtd.Repo.transaction(fn ->
+                 db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
+
+                 if db_task && db_task.tenant_id |> to_string() == tenant_id do
+                   due_date =
+                     case Map.get(payload, "due_date") do
+                       nil ->
+                         nil
+
+                       date_str when is_binary(date_str) ->
+                         case Date.from_iso8601(date_str) do
+                           {:ok, date} -> date
+                           {:error, _} -> nil
+                         end
+
+                       _ ->
+                         nil
+                     end
+
+                   changeset =
+                     BotArmyGtd.Schemas.Task.changeset(
+                       db_task,
+                       %{
+                         "title" => Map.get(payload, "title", db_task.title),
+                         "description" => Map.get(payload, "description", db_task.description),
+                         "status" => Map.get(payload, "status", db_task.status),
+                         "priority" => Map.get(payload, "priority", db_task.priority),
+                         "context" => Map.get(payload, "context", db_task.context),
+                         "source" => Map.get(payload, "source", db_task.source),
+                         "source_metadata" =>
+                           Map.get(payload, "source_metadata", db_task.source_metadata),
+                         "due_date" => due_date || db_task.due_date,
+                         "result" => Map.get(payload, "result", db_task.result),
+                         "parent_task_id" =>
+                           Map.get(payload, "parent_task_id", db_task.parent_task_id),
+                         "labels" => Map.get(payload, "labels", db_task.labels)
+                       }
+                     )
+
+                   case BotArmyGtd.Repo.update(changeset) do
+                     {:ok, updated} -> updated
+                     {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+                   end
+                 else
+                   BotArmyGtd.Repo.rollback(:not_found)
+                 end
+               end) do
+            {:ok, updated_db_task} ->
+              updated_task = schema_to_map(updated_db_task)
+              new_state = Map.put(state, task_id, updated_task)
+              Logger.info("Updated task in database (tenant scoped): #{task_id}")
+              {:reply, {:ok, updated_task}, new_state}
+
+            {:error, :not_found} ->
+              {:reply, {:error, :not_found}, state}
+
+            {:error, changeset} ->
+              Logger.error("Failed to update task (tenant scoped): #{inspect(changeset.errors)}")
+              {:reply, {:error, :database_error}, state}
+          end
+        end
+    end
+  end
+
+  @impl true
   def handle_call({:complete, task_id}, _from, state) do
     case Map.get(state, task_id) do
       nil ->
@@ -297,6 +392,41 @@ defmodule BotArmyGtd.TaskStore do
 
           {0, _} ->
             {:reply, {:error, :not_found}, state}
+        end
+    end
+  end
+
+  @impl true
+  def handle_call({:complete_scoped, tenant_id, task_id}, _from, state) do
+    case Map.get(state, task_id) do
+      nil ->
+        {:reply, {:error, :not_found}, state}
+
+      task ->
+        if task["tenant_id"] != tenant_id do
+          {:reply, {:error, :not_found}, state}
+        else
+          task_uuid = Ecto.UUID.cast!(task_id)
+          completed_at = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+          query =
+            from(t in BotArmyGtd.Schemas.Task,
+              where: t.id == ^task_uuid and t.tenant_id == ^Ecto.UUID.cast!(tenant_id)
+            )
+
+          case BotArmyGtd.Repo.update_all(query,
+                 set: [status: "completed", completed_at: completed_at]
+               ) do
+            {1, _} ->
+              db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
+              completed_task = schema_to_map(db_task)
+              new_state = Map.put(state, task_id, completed_task)
+              Logger.info("Completed task in database (tenant scoped): #{task_id}")
+              {:reply, {:ok, completed_task}, new_state}
+
+            {0, _} ->
+              {:reply, {:error, :not_found}, state}
+          end
         end
     end
   end
