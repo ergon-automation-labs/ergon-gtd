@@ -47,6 +47,14 @@ defmodule BotArmyGtd.TaskIntakeGuard do
 
   def suspicious_test_data?(_, _), do: false
 
+  def suspicious_outbound_created_event?(event) when is_map(event) do
+    event["event"] == "gtd.task.created" and
+      to_string(event["source_node"] || "") == "nonode@nohost" and
+      outbound_created_payload_suspicious?(event["payload"])
+  end
+
+  def suspicious_outbound_created_event?(_), do: false
+
   def caller_metadata(message) when is_map(message) do
     %{
       event_id: value_or_unknown(message["event_id"]),
@@ -68,6 +76,39 @@ defmodule BotArmyGtd.TaskIntakeGuard do
   end
 
   defp suspicious_identifier?(_), do: false
+
+  defp outbound_created_payload_suspicious?(payload) when is_map(payload) do
+    task = payload["task"]
+
+    suspicious_trigger? = placeholder_id?(payload["triggered_by_event_id"])
+
+    suspicious_task_id? =
+      case task do
+        task_map when is_map(task_map) ->
+          [task_map["id"], task_map["inbox_item_id"]]
+          |> Enum.any?(&suspicious_identifier?/1)
+
+        _ ->
+          false
+      end
+
+    blank_task_shape? =
+      case task do
+        task_map when is_map(task_map) ->
+          title = task_map["title"]
+          id = task_map["id"]
+          blank_title? = is_nil(title) or (is_binary(title) and String.trim(title) == "")
+          missing_id? = is_nil(id) or (is_binary(id) and String.trim(id) == "")
+          blank_title? or missing_id?
+
+        _ ->
+          true
+      end
+
+    suspicious_trigger? or suspicious_task_id? or blank_task_shape?
+  end
+
+  defp outbound_created_payload_suspicious?(_), do: true
 
   defp value_or_unknown(nil), do: "unknown"
   defp value_or_unknown(""), do: "unknown"

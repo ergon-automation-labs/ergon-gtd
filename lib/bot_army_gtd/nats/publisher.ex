@@ -36,27 +36,35 @@ defmodule BotArmyGtd.NATS.Publisher do
   Returns `:ok` if successful, or `{:error, reason}` on failure.
   """
   def publish(event) when is_map(event) do
-    try do
-      subject = derive_subject(event["event"])
-      body = Jason.encode!(event)
+    if BotArmyGtd.TaskIntakeGuard.suspicious_outbound_created_event?(event) do
+      Logger.warning(
+        "Dropped suspicious outbound gtd.task.created event: event_id=#{event["event_id"]} source_node=#{event["source_node"]} payload=#{inspect(event["payload"])}"
+      )
 
-      case do_publish(subject, body) do
-        {:ok, _subject} ->
-          Logger.debug("Published event to #{subject}")
-          {:ok, subject}
+      {:error, :dropped_suspected_test_data}
+    else
+      try do
+        subject = derive_subject(event["event"])
+        body = Jason.encode!(event)
 
-        :ok ->
-          Logger.debug("Published event to #{subject}")
-          {:ok, subject}
+        case do_publish(subject, body) do
+          {:ok, _subject} ->
+            Logger.debug("Published event to #{subject}")
+            {:ok, subject}
 
-        {:error, reason} ->
-          Logger.error("Failed to publish to #{subject}: #{inspect(reason)}")
-          {:error, reason}
+          :ok ->
+            Logger.debug("Published event to #{subject}")
+            {:ok, subject}
+
+          {:error, reason} ->
+            Logger.error("Failed to publish to #{subject}: #{inspect(reason)}")
+            {:error, reason}
+        end
+      rescue
+        e ->
+          Logger.error("Exception during publish: #{inspect(e)}")
+          {:error, e}
       end
-    rescue
-      e ->
-        Logger.error("Exception during publish: #{inspect(e)}")
-        {:error, e}
     end
   end
 
