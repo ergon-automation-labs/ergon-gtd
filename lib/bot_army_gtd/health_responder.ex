@@ -58,6 +58,17 @@ defmodule BotArmyGtd.HealthResponder do
           {:ok, subscription} ->
             BotArmyRuntime.NATS.Connection.subscribe_to_status()
             Logger.info("[Health] Subscribed to #{subject}")
+
+            # Register health check subject with the registry
+            health_subject = %{
+              subject: subject,
+              type: :request_reply,
+              description: "Health check for #{state.bot_name} bot",
+              timeout_ms: 5000
+            }
+
+            BotArmyRuntime.Registry.register(state.bot_name, [health_subject])
+
             {:noreply, %{state | connection: conn, subscription: subscription}}
 
           {:error, reason} ->

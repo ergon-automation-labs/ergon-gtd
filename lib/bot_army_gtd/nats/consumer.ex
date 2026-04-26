@@ -228,7 +228,7 @@ defmodule BotArmyGtd.NATS.Consumer do
             end)
             |> Enum.filter(&(not is_nil(&1)))
 
-          BotArmyRuntime.Health.Responder.register_subjects(@subjects)
+          BotArmyRuntime.Registry.register("gtd", @subjects)
           {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
         {:error, _reason} ->
