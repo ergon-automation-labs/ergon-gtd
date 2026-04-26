@@ -340,14 +340,14 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp process_approve(payload, event_id, _message, tenant_id, _user_id) do
+  defp process_approve(payload, event_id, _message, tenant_id, user_id) do
     decomposition_id = payload["decomposition_id"]
 
     case decomposition_store().get(tenant_id, decomposition_id) do
       {:ok, decomposition} ->
         subtask_list = get_subtask_list(decomposition)
 
-        # Create subtasks in TaskStore for each item in subtask_list
+        # Create subtasks through the standard gtd.task.create flow.
         parent_task_id = decomposition["parent_task_id"]
 
         created_subtasks =
@@ -360,9 +360,21 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
               "estimated_hours" => subtask["estimated_hours"]
             }
 
-            case task_store().create(subtask_payload) do
+            create_event = %{
+              "event" => "gtd.task.create",
+              "event_id" => UUID.uuid4(),
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+              "source" => "bot_army_gtd",
+              "source_node" => get_node_name(),
+              "triggered_by" => "gtd.bot",
+              "schema_version" => "1.0",
+              "tenant_id" => tenant_id,
+              "user_id" => user_id,
+              "payload" => subtask_payload
+            }
+
+            case BotArmyGtd.Handlers.TaskHandler.handle_create(create_event) do
               {:ok, task} ->
-                publish_task_created(task, event_id)
                 {:ok, task}
 
               {:error, reason} ->
@@ -808,27 +820,6 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
       {:error, reason} ->
         Logger.error("Failed to publish decomposition event: #{inspect(reason)}")
-    end
-  end
-
-  defp publish_task_created(task, event_id) do
-    event_data = %{
-      "event" => "gtd.task.created",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "payload" => %{
-        "task" => task,
-        "triggered_by_event_id" => event_id
-      }
-    }
-
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
-      {:ok, _subject} -> Logger.debug("Published task.created event for task #{task["id"]}")
-      {:error, reason} -> Logger.error("Failed to publish task.created event: #{inspect(reason)}")
     end
   end
 
