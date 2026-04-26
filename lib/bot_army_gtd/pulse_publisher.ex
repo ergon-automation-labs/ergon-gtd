@@ -54,21 +54,16 @@ defmodule BotArmyGtd.PulsePublisher do
 
     case TaskStore.list(default_tenant) do
       {:ok, tasks} ->
-        case BotArmyGtd.ProjectStore.list(default_tenant) do
-          {:ok, projects} ->
-            pulse = build_pulse(tasks, projects, default_tenant)
-            publish_to_nats(pulse)
-
-          {:error, reason} ->
-            Logger.warning("[PulsePublisher] Failed to list projects: #{inspect(reason)}")
-        end
+        # TODO: fetch projects from ProjectStore once stable
+        pulse = build_pulse(tasks, [], default_tenant)
+        publish_to_nats(pulse)
 
       {:error, reason} ->
         Logger.warning("[PulsePublisher] Failed to build pulse: #{inspect(reason)}")
     end
   end
 
-  defp build_pulse(tasks, projects, tenant_id) do
+  defp build_pulse(tasks, _projects, tenant_id) do
     now = DateTime.utc_now()
 
     goal_observations =
@@ -92,7 +87,7 @@ defmodule BotArmyGtd.PulsePublisher do
       "bot" => "gtd",
       "timestamp" => DateTime.to_iso8601(now),
       "tenant_id" => tenant_id,
-      "projects" => projects,
+      "projects" => [],
       "tasks" => tasks,
       "observations" => %{
         "goals" => goal_observations,
