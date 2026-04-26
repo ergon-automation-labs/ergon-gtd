@@ -194,4 +194,19 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandlerTest do
 
     assert :ok = InboxParsingHandler.handle_parse(message)
   end
+
+  test "rejects suspicious parsed payload from nonode source" do
+    message = %{
+      "event_id" => "parse-event-id",
+      "source_node" => "nonode@nohost",
+      "payload" => %{
+        "structured_data" => %{
+          "title" => "Call dentist"
+        },
+        "inbox_item_id" => "inbox-8"
+      }
+    }
+
+    assert :ok = InboxParsingHandler.handle_parse(message)
+  end
 end

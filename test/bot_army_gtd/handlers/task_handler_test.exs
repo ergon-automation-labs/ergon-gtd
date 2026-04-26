@@ -54,6 +54,17 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
 
       assert {:ok, ^expected_task} = BotArmyGtd.Handlers.TaskHandler.handle_create(message)
     end
+
+    test "rejects suspicious nonode test payloads" do
+      message =
+        valid_create_message()
+        |> Map.put("event_id", "parse-event-id")
+        |> Map.put("source_node", "nonode@nohost")
+        |> put_in(["payload", "task_id"], "task-1")
+
+      assert {:error, :rejected_suspected_test_data} =
+               BotArmyGtd.Handlers.TaskHandler.handle_create(message)
+    end
   end
 
   describe "handle_update/1" do

@@ -34,9 +34,25 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
     payload = message["payload"]
     %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
+    BotArmyGtd.TaskIntakeGuard.log_caller_metadata("llm.response.parsed", message)
+
     case validate_parse_payload(payload) do
       :ok ->
-        process_parse(payload, event_id, message, tenant_id, user_id)
+        if BotArmyGtd.TaskIntakeGuard.suspicious_test_data?(message, payload) do
+          Logger.warning(
+            "Rejected suspicious parsed payload: event_id=#{event_id} payload=#{inspect(payload)}"
+          )
+
+          publish_error(
+            event_id,
+            :rejected_suspected_test_data,
+            "Rejected suspicious test data",
+            tenant_id,
+            user_id
+          )
+        else
+          process_parse(payload, event_id, message, tenant_id, user_id)
+        end
 
       {:error, reason} ->
         Logger.warning("Invalid parse payload: #{inspect(reason)}")

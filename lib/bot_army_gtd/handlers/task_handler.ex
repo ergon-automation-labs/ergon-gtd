@@ -36,6 +36,8 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     payload = message["payload"]
     %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
 
+    BotArmyGtd.TaskIntakeGuard.log_caller_metadata("gtd.task.create", message)
+
     payload = maybe_stamp_active_until_for_create(payload)
 
     # Stamp tenant and user context into payload
@@ -47,28 +49,38 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
     case validate_create_payload(stamped_payload) do
       :ok ->
-        case task_store().create(stamped_payload) do
-          {:ok, task} ->
-            Logger.info("Task created: task_id=#{task["id"]}, event_id=#{event_id}")
+        if BotArmyGtd.TaskIntakeGuard.suspicious_test_data?(message, stamped_payload) do
+          Logger.warning(
+            "Rejected suspicious test task create payload: event_id=#{event_id} payload=#{inspect(stamped_payload)}"
+          )
 
-            publish_event(
-              "gtd.task.created",
-              stamped_payload,
-              task,
-              event_id,
-              message,
-              tenant_id,
-              user_id
-            )
+          reason = :rejected_suspected_test_data
+          publish_error(event_id, reason, "Rejected suspicious test data", tenant_id, user_id)
+          {:error, reason}
+        else
+          case task_store().create(stamped_payload) do
+            {:ok, task} ->
+              Logger.info("Task created: task_id=#{task["id"]}, event_id=#{event_id}")
 
-            maybe_trigger_decomposition(task, stamped_payload, tenant_id, user_id)
+              publish_event(
+                "gtd.task.created",
+                stamped_payload,
+                task,
+                event_id,
+                message,
+                tenant_id,
+                user_id
+              )
 
-            {:ok, task}
+              maybe_trigger_decomposition(task, stamped_payload, tenant_id, user_id)
 
-          {:error, reason} ->
-            Logger.error("Failed to create task: #{inspect(reason)}")
-            publish_error(event_id, reason, "Failed to create task", tenant_id, user_id)
-            {:error, reason}
+              {:ok, task}
+
+            {:error, reason} ->
+              Logger.error("Failed to create task: #{inspect(reason)}")
+              publish_error(event_id, reason, "Failed to create task", tenant_id, user_id)
+              {:error, reason}
+          end
         end
 
       {:error, reason} ->
