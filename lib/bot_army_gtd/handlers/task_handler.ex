@@ -17,6 +17,8 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   """
 
   require Logger
+  @active_until_key "active_until"
+  @active_until_window_days 7
 
   defp task_store do
     Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
@@ -33,6 +35,8 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     event_id = message["event_id"]
     payload = message["payload"]
     %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+
+    payload = maybe_stamp_active_until_for_create(payload)
 
     # Stamp tenant and user context into payload
     stamped_payload =
@@ -87,6 +91,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     case validate_update_payload(payload) do
       :ok ->
         task_id = payload["task_id"]
+        payload = maybe_apply_active_until_on_update(tenant_id, task_id, payload)
 
         case scoped_update(tenant_id, task_id, payload) do
           {:ok, task} ->
@@ -394,6 +399,175 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
             "Task created but failed to trigger decomposition for task_id=#{task["id"]}: #{inspect(reason)}"
           )
       end
+    end
+  end
+
+  def expire_active_tasks(tenant_id, user_id \\ nil) do
+    filters = %{"status" => ["active"]}
+
+    case task_store().list(tenant_id, filters) do
+      {:ok, tasks} ->
+        Enum.each(tasks, fn task ->
+          case parse_active_until(task) do
+            {:ok, active_until} ->
+              if DateTime.compare(active_until, DateTime.utc_now()) == :lt do
+                task_id = task["id"]
+                description = append_backlog_note(task["description"] || "")
+                source_metadata = clear_active_until(task["source_metadata"])
+
+                update_payload = %{
+                  "status" => "inbox",
+                  "description" => description,
+                  "source_metadata" => source_metadata
+                }
+
+                case scoped_update(tenant_id, task_id, update_payload) do
+                  {:ok, updated_task} ->
+                    publish_event(
+                      "gtd.task.updated",
+                      update_payload,
+                      updated_task,
+                      UUID.uuid4(),
+                      %{},
+                      tenant_id,
+                      user_id
+                    )
+
+                  {:error, reason} ->
+                    Logger.warning("Failed to auto-expire task #{task_id}: #{inspect(reason)}")
+                end
+              end
+
+            :none ->
+              :ok
+
+            {:error, _reason} ->
+              :ok
+          end
+        end)
+
+      {:error, reason} ->
+        Logger.warning("Failed to list active tasks for expiry: #{inspect(reason)}")
+    end
+  end
+
+  defp maybe_stamp_active_until_for_create(payload) when is_map(payload) do
+    status = Map.get(payload, "status", "active")
+
+    if status == "active" do
+      source_metadata = stamp_active_until(Map.get(payload, "source_metadata"))
+      Map.put(payload, "source_metadata", source_metadata)
+    else
+      payload
+    end
+  end
+
+  defp maybe_apply_active_until_on_update(tenant_id, task_id, payload) do
+    case task_store().get(tenant_id, task_id) do
+      {:ok, task} ->
+        incoming_status = Map.get(payload, "status")
+        current_status = Map.get(task, "status")
+
+        cond do
+          incoming_status == "active" ->
+            refresh_payload_active_until(payload, task)
+
+          current_status == "active" ->
+            case parse_active_until(task) do
+              {:ok, active_until} ->
+                if DateTime.compare(active_until, DateTime.utc_now()) == :lt do
+                  demote_payload_to_inbox(payload, task)
+                else
+                  refresh_payload_active_until(payload, task)
+                end
+
+              _ ->
+                refresh_payload_active_until(payload, task)
+            end
+
+          true ->
+            payload
+        end
+
+      {:error, _reason} ->
+        payload
+    end
+  end
+
+  defp refresh_payload_active_until(payload, task) do
+    source_metadata =
+      task
+      |> Map.get("source_metadata")
+      |> merge_source_metadata(Map.get(payload, "source_metadata"))
+      |> stamp_active_until()
+
+    Map.put(payload, "source_metadata", source_metadata)
+  end
+
+  defp demote_payload_to_inbox(payload, task) do
+    source_metadata =
+      task
+      |> Map.get("source_metadata")
+      |> merge_source_metadata(Map.get(payload, "source_metadata"))
+      |> clear_active_until()
+
+    description =
+      payload
+      |> Map.get("description", task["description"] || "")
+      |> append_backlog_note()
+
+    payload
+    |> Map.put("status", "inbox")
+    |> Map.put("description", description)
+    |> Map.put("source_metadata", source_metadata)
+  end
+
+  defp merge_source_metadata(existing, incoming) do
+    existing_map = if is_map(existing), do: existing, else: %{}
+    incoming_map = if is_map(incoming), do: incoming, else: %{}
+    Map.merge(existing_map, incoming_map)
+  end
+
+  defp stamp_active_until(source_metadata) do
+    metadata = if is_map(source_metadata), do: source_metadata, else: %{}
+
+    active_until =
+      DateTime.utc_now()
+      |> DateTime.add(@active_until_window_days * 24 * 60 * 60, :second)
+      |> DateTime.to_iso8601()
+
+    Map.put(metadata, @active_until_key, active_until)
+  end
+
+  defp clear_active_until(source_metadata) do
+    metadata = if is_map(source_metadata), do: source_metadata, else: %{}
+    Map.delete(metadata, @active_until_key)
+  end
+
+  defp parse_active_until(task) do
+    source_metadata = task["source_metadata"]
+
+    with true <- is_map(source_metadata),
+         active_until when is_binary(active_until) <- source_metadata[@active_until_key],
+         {:ok, dt, _offset} <- DateTime.from_iso8601(active_until) do
+      {:ok, dt}
+    else
+      false -> :none
+      nil -> :none
+      _ -> {:error, :invalid_active_until}
+    end
+  end
+
+  defp append_backlog_note(description) do
+    timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
+
+    note =
+      "[PUSHED_TO_BACKLOG #{timestamp}] active_until expired; moved to inbox for re-prioritization."
+
+    if String.contains?(description, "active_until expired; moved to inbox") do
+      description
+    else
+      (description <> "\n\n" <> note) |> String.trim()
     end
   end
 end

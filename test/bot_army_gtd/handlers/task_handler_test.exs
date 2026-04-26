@@ -74,7 +74,13 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
         "status" => "active"
       }
 
-      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, ^payload ->
+      expect(BotArmyGtd.TaskStoreMock, :get, fn _tenant_id, ^task_id ->
+        {:ok, %{"id" => task_id, "status" => "inbox", "source_metadata" => %{}}}
+      end)
+
+      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, update_payload ->
+        assert update_payload["title"] == payload["title"]
+        assert update_payload["priority"] == payload["priority"]
         {:ok, expected_task}
       end)
 
@@ -95,7 +101,12 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
         "title" => "Updated Title"
       }
 
-      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, ^payload ->
+      expect(BotArmyGtd.TaskStoreMock, :get, fn _tenant_id, ^task_id ->
+        {:ok, %{"id" => task_id, "status" => "inbox", "source_metadata" => %{}}}
+      end)
+
+      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, update_payload ->
+        assert update_payload["title"] == payload["title"]
         {:error, :not_found}
       end)
 
@@ -106,6 +117,71 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
       }
 
       assert {:error, :not_found} = BotArmyGtd.Handlers.TaskHandler.handle_update(update_msg)
+    end
+
+    test "refreshes active_until when updating active task" do
+      task_id = "active-task-id"
+
+      payload = %{
+        "task_id" => task_id,
+        "title" => "Still active"
+      }
+
+      expect(BotArmyGtd.TaskStoreMock, :get, fn _tenant_id, ^task_id ->
+        {:ok, %{"id" => task_id, "status" => "active", "source_metadata" => %{}}}
+      end)
+
+      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, update_payload ->
+        assert update_payload["source_metadata"]["active_until"]
+        {:ok, %{"id" => task_id, "status" => "active"}}
+      end)
+
+      update_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.update",
+        "payload" => payload
+      }
+
+      assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_update(update_msg)
+    end
+
+    test "demotes expired active task to inbox with backlog note" do
+      task_id = "expired-task-id"
+
+      expired =
+        DateTime.utc_now()
+        |> DateTime.add(-3600, :second)
+        |> DateTime.to_iso8601()
+
+      payload = %{
+        "task_id" => task_id,
+        "title" => "Old active task"
+      }
+
+      expect(BotArmyGtd.TaskStoreMock, :get, fn _tenant_id, ^task_id ->
+        {:ok,
+         %{
+           "id" => task_id,
+           "status" => "active",
+           "description" => "existing desc",
+           "source_metadata" => %{"active_until" => expired}
+         }}
+      end)
+
+      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, update_payload ->
+        assert update_payload["status"] == "inbox"
+        assert String.contains?(update_payload["description"], "PUSHED_TO_BACKLOG")
+        assert update_payload["source_metadata"]["active_until"] == nil
+        {:ok, %{"id" => task_id, "status" => "inbox"}}
+      end)
+
+      update_msg = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gtd.task.update",
+        "payload" => payload
+      }
+
+      assert :ok = BotArmyGtd.Handlers.TaskHandler.handle_update(update_msg)
     end
   end
 
@@ -167,7 +243,12 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
         "status" => "claimed"
       }
 
-      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, ^payload ->
+      expect(BotArmyGtd.TaskStoreMock, :get, fn _tenant_id, ^task_id ->
+        {:ok, %{"id" => task_id, "status" => "inbox", "source_metadata" => %{}}}
+      end)
+
+      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, update_payload ->
+        assert update_payload["status"] == payload["status"]
         {:ok, expected_task}
       end)
 
@@ -200,7 +281,13 @@ defmodule BotArmyGtd.Handlers.TaskHandlerTest do
         "result" => payload["result"]
       }
 
-      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, ^payload ->
+      expect(BotArmyGtd.TaskStoreMock, :get, fn _tenant_id, ^task_id ->
+        {:ok, %{"id" => task_id, "status" => "inbox", "source_metadata" => %{}}}
+      end)
+
+      expect(BotArmyGtd.TaskStoreMock, :update, fn ^task_id, update_payload ->
+        assert update_payload["status"] == payload["status"]
+        assert update_payload["result"] == payload["result"]
         {:ok, expected_task}
       end)
 

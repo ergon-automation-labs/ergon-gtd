@@ -104,35 +104,85 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
     parent_task_id = payload["parent_task_id"]
     labels = payload["labels"] || []
 
-    # Create task with Claude context
-    case task_store().create(%{
-           "tenant_id" => tenant_id,
-           "user_id" => user_id,
-           "title" => title,
-           "description" => description,
-           "project_id" => project_id,
-           "status" => "active",
-           "priority" => "normal",
-           "labels" => labels,
-           "source" => "claude",
-           "source_metadata" => %{
-             "triggered_by_event_id" => event_id,
-             "auto_generated" => true
-           },
-           "parent_task_id" => parent_task_id
-         }) do
-      {:ok, task} ->
-        Logger.info(
-          "Claude task created: task_id=#{task["id"]}, event_id=#{event_id}, auto_generated=true"
-        )
+    case find_existing_auto_task(tenant_id, title, description) do
+      {:ok, existing_task} ->
+        source_metadata =
+          existing_task
+          |> Map.get("source_metadata", %{})
+          |> Map.put("triggered_by_event_id", event_id)
+          |> Map.put("auto_generated", true)
 
-        publish_event("gtd.task.created", task, event_id, tenant_id, user_id)
-        :ok
+        update_payload = %{
+          "source_metadata" => source_metadata,
+          "labels" => labels
+        }
 
-      {:error, reason} ->
-        Logger.error("Failed to create Claude task: #{inspect(reason)}")
-        publish_error(event_id, reason, "Failed to create task", tenant_id, user_id)
-        {:error, reason}
+        case task_store().update(existing_task["id"], update_payload) do
+          {:ok, updated_task} ->
+            Logger.info(
+              "Claude task reused: task_id=#{updated_task["id"]}, event_id=#{event_id}, auto_generated=true"
+            )
+
+            publish_event("gtd.task.updated", updated_task, event_id, tenant_id, user_id)
+            :ok
+
+          {:error, reason} ->
+            Logger.error("Failed to update existing Claude task: #{inspect(reason)}")
+            publish_error(event_id, reason, "Failed to update existing task", tenant_id, user_id)
+            {:error, reason}
+        end
+
+      :not_found ->
+        # Create task with Claude context
+        case task_store().create(%{
+               "tenant_id" => tenant_id,
+               "user_id" => user_id,
+               "title" => title,
+               "description" => description,
+               "project_id" => project_id,
+               "status" => "active",
+               "priority" => "normal",
+               "labels" => labels,
+               "source" => "claude",
+               "source_metadata" => %{
+                 "triggered_by_event_id" => event_id,
+                 "auto_generated" => true
+               },
+               "parent_task_id" => parent_task_id
+             }) do
+          {:ok, task} ->
+            Logger.info(
+              "Claude task created: task_id=#{task["id"]}, event_id=#{event_id}, auto_generated=true"
+            )
+
+            publish_event("gtd.task.created", task, event_id, tenant_id, user_id)
+            :ok
+
+          {:error, reason} ->
+            Logger.error("Failed to create Claude task: #{inspect(reason)}")
+            publish_error(event_id, reason, "Failed to create task", tenant_id, user_id)
+            {:error, reason}
+        end
+    end
+  end
+
+  defp find_existing_auto_task(tenant_id, title, description) do
+    filters = %{"status" => ["active", "inbox", "pending", "claimed"]}
+
+    case task_store().list(tenant_id, filters) do
+      {:ok, tasks} ->
+        match =
+          Enum.find(tasks, fn task ->
+            task["source"] == "claude" and
+              task["title"] == title and
+              (task["description"] || "") == (description || "") and
+              (task["source_metadata"] || %{})["auto_generated"] == true
+          end)
+
+        if match, do: {:ok, match}, else: :not_found
+
+      {:error, _reason} ->
+        :not_found
     end
   end
 

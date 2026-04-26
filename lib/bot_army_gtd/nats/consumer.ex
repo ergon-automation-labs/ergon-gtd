@@ -280,6 +280,8 @@ defmodule BotArmyGtd.NATS.Consumer do
             {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), 100, 0, %{}}
         end
 
+      BotArmyGtd.Handlers.TaskHandler.expire_active_tasks(tenant_id, nil)
+
       response =
         case task_store.list_prioritized(tenant_id, filters) do
           {:ok, all_tasks} ->
