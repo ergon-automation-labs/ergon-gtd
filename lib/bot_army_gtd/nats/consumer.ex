@@ -40,6 +40,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     %{subject: "gtd.task.create", type: :request_reply, description: "Create a task"},
     %{subject: "gtd.task.update", type: :request_reply, description: "Update a task"},
     %{subject: "gtd.task.list", type: :request_reply, description: "List tasks"},
+    %{subject: "gtd.task.get", type: :request_reply, description: "Get single task by id"},
     %{subject: "gtd.task.search", type: :request_reply, description: "Search tasks"},
     %{subject: "gtd.task.complete", type: :subscribe, description: "Task completion events"},
     %{subject: "gtd.task.command.defer", type: :subscribe, description: "Defer task"},
@@ -292,6 +293,46 @@ defmodule BotArmyGtd.NATS.Consumer do
 
           {:error, reason} ->
             BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
+        end
+
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:msg, %{topic: "gtd.task.get", reply_to: reply_to, body: body} = msg}, state)
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span("gtd.task.get", Map.get(msg, :headers, []), fn ->
+      task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+
+      {tenant_id, task_id} =
+        case Jason.decode(body) do
+          {:ok, params} ->
+            tid =
+              case params["tenant_id"] do
+                t when is_binary(t) and t != "" -> t
+                _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+              end
+
+            {tid, params["task_id"]}
+
+          _ ->
+            {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), nil}
+        end
+
+      response =
+        if task_id do
+          case task_store.get(tenant_id, task_id) do
+            {:ok, task} ->
+              BotArmyRuntime.NATS.Reply.ok(%{"task" => task})
+
+            {:error, reason} ->
+              BotArmyRuntime.NATS.Reply.error(inspect(reason), :not_found)
+          end
+        else
+          BotArmyRuntime.NATS.Reply.error("task_id required", :missing_field)
         end
 
       reply_traced(state.conn, reply_to, response)
