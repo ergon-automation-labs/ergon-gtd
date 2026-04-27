@@ -6,6 +6,7 @@ config :bot_army_gtd, :project_store, BotArmyGtd.ProjectStoreMock
 config :bot_army_gtd, :inbox_item_store, BotArmyGtd.InboxItemStoreMock
 config :bot_army_gtd, :decomposition_store, BotArmyGtd.DecompositionStoreMock
 config :bot_army_gtd, :log_entry_store, BotArmyGtd.MockLogEntryStore
+config :bot_army_gtd, :reject_test_data, true
 config :bot_army_gtd, :daily_log_dir, "/tmp/test_daily_logs"
 
 # Test against Kubernetes PostgreSQL (via NodePort)
@@ -18,3 +19,13 @@ config :bot_army_gtd, BotArmyGtd.Repo,
   password: System.get_env("BOT_ARMY_GTD_DB_PASSWORD", "postgres"),
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 1
+
+# Test NATS should stay isolated from live/dev traffic.
+# Default to 4223 and allow override for ad-hoc runs.
+test_nats_port = System.get_env("NATS_PORT", "4223") |> String.to_integer()
+
+config :bot_army_runtime, :nats,
+  servers: [{"localhost", test_nats_port}],
+  ping_interval: 5000,
+  max_reconnect_attempts: 3,
+  reconnect_delay_ms: 100

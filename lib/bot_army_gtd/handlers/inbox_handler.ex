@@ -21,7 +21,6 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
     Application.get_env(:bot_army_gtd, :inbox_item_store, BotArmyGtd.InboxItemStore)
   end
 
-
   @doc """
   Handle inbox add event.
 
@@ -67,12 +66,12 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
 
     # Create inbox item
     case inbox_item_store().create(%{
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "raw_text" => raw_text,
-      "source" => source,
-      "source_metadata" => source_metadata
-    }) do
+           "tenant_id" => tenant_id,
+           "user_id" => user_id,
+           "raw_text" => raw_text,
+           "source" => source,
+           "source_metadata" => source_metadata
+         }) do
       {:ok, inbox_item} ->
         Logger.info("Inbox item created: item_id=#{inbox_item["id"]}, event_id=#{event_id}")
 
@@ -80,7 +79,15 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
         publish_inbox_item_added(inbox_item, event_id, tenant_id, user_id)
 
         # Request parsing from LLM bot
-        publish_parse_request(raw_text, inbox_item["id"], source, source_metadata, event_id, tenant_id, user_id)
+        publish_parse_request(
+          raw_text,
+          inbox_item["id"],
+          source,
+          source_metadata,
+          event_id,
+          tenant_id,
+          user_id
+        )
 
       {:error, reason} ->
         Logger.error("Failed to create inbox item: #{inspect(reason)}")
@@ -89,21 +96,16 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
   end
 
   defp publish_inbox_item_added(item, event_id, tenant_id, user_id) do
-    event_data = %{
-      "event" => "gtd.inbox.item.added",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "inbox_item" => item,
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_event(
+        "gtd.inbox.item.added",
+        %{
+          "inbox_item" => item,
+          "triggered_by_event_id" => event_id
+        },
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published inbox.item.added event")
@@ -111,7 +113,15 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
     end
   end
 
-  defp publish_parse_request(raw_text, inbox_item_id, source, source_metadata, event_id, tenant_id, user_id) do
+  defp publish_parse_request(
+         raw_text,
+         inbox_item_id,
+         source,
+         source_metadata,
+         event_id,
+         tenant_id,
+         user_id
+       ) do
     # Request LLM bot to parse the raw text into structured task data
     output_schema = %{
       "type" => "object",
@@ -122,29 +132,24 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
         "project" => %{"type" => "string"},
         "priority" => %{"enum" => ["low", "normal", "high"]},
         "due_date" => %{"type" => "string"},
-        "tags" => %{"type" => "array", "items" => %{"type" => "string"}}
+        "labels" => %{"type" => "array", "items" => %{"type" => "string"}}
       }
     }
 
-    event_data = %{
-      "event" => "llm.response.parse",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "text" => raw_text,
-        "output_schema" => output_schema,
-        "inbox_item_id" => inbox_item_id,
-        "source" => source,
-        "source_metadata" => source_metadata,
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_event(
+        "llm.response.parse",
+        %{
+          "text" => raw_text,
+          "output_schema" => output_schema,
+          "inbox_item_id" => inbox_item_id,
+          "source" => source,
+          "source_metadata" => source_metadata,
+          "triggered_by_event_id" => event_id
+        },
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
     case BotArmyRuntime.NATS.Publisher.publish("llm.response.parse", event_data) do
       {:ok, _subject} -> Logger.debug("Published parse request to LLM bot")
@@ -153,30 +158,15 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
   end
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
-    error_event = %{
-      "event" => "gtd.error",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "error" => message,
-        "reason" => inspect(reason),
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
-    case BotArmyGtd.NATS.Publisher.publish(error_event) do
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
-  end
-
-  defp get_node_name do
-    node() |> Atom.to_string()
   end
 end

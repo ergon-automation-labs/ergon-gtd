@@ -30,27 +30,37 @@ defmodule BotArmyGtd.TaskIntakeGuard do
   end
 
   def suspicious_test_data?(message, payload) when is_map(message) and is_map(payload) do
-    source_node = to_string(message["source_node"] || "")
+    # Only reject suspected test data when the config flag is enabled (test env)
+    # This prevents legitimate data in dev/prod from being silently rejected
+    if test_data_rejection_enabled?() do
+      source_node = to_string(message["source_node"] || "")
 
-    nonode_source? = source_node == "nonode@nohost"
+      nonode_source? = source_node == "nonode@nohost"
 
-    suspicious_event? = placeholder_id?(message["event_id"])
-    suspicious_trigger? = placeholder_id?(payload["triggered_by_event_id"])
+      suspicious_event? = placeholder_id?(message["event_id"])
+      suspicious_trigger? = placeholder_id?(payload["triggered_by_event_id"])
 
-    suspicious_payload_identifier? =
-      [payload["id"], payload["task_id"], payload["inbox_item_id"]]
-      |> Enum.any?(&suspicious_identifier?/1)
+      suspicious_payload_identifier? =
+        [payload["id"], payload["task_id"], payload["inbox_item_id"]]
+        |> Enum.any?(&suspicious_identifier?/1)
 
-    nonode_source? and
-      (suspicious_event? or suspicious_trigger? or suspicious_payload_identifier?)
+      nonode_source? and
+        (suspicious_event? or suspicious_trigger? or suspicious_payload_identifier?)
+    else
+      false
+    end
   end
 
   def suspicious_test_data?(_, _), do: false
 
   def suspicious_outbound_created_event?(event) when is_map(event) do
-    event["event"] == "gtd.task.created" and
-      to_string(event["source_node"] || "") == "nonode@nohost" and
-      outbound_created_payload_suspicious?(event["payload"])
+    if test_data_rejection_enabled?() do
+      event["event"] == "gtd.task.created" and
+        to_string(event["source_node"] || "") == "nonode@nohost" and
+        outbound_created_payload_suspicious?(event["payload"])
+    else
+      false
+    end
   end
 
   def suspicious_outbound_created_event?(_), do: false
@@ -113,4 +123,8 @@ defmodule BotArmyGtd.TaskIntakeGuard do
   defp value_or_unknown(nil), do: "unknown"
   defp value_or_unknown(""), do: "unknown"
   defp value_or_unknown(value), do: to_string(value)
+
+  defp test_data_rejection_enabled? do
+    Application.get_env(:bot_army_gtd, :reject_test_data, false)
+  end
 end

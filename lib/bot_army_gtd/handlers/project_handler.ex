@@ -145,21 +145,16 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
          tenant_id,
          user_id
        ) do
-    event_data = %{
-      "event" => event_type,
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "project" => project,
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_event(
+        event_type,
+        %{
+          "project" => project,
+          "triggered_by_event_id" => event_id
+        },
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published event: #{event_type}")
@@ -169,31 +164,16 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
   end
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
-    error_event = %{
-      "event" => "gtd.error",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "error" => message,
-        "reason" => inspect(reason),
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
-    case BotArmyGtd.NATS.Publisher.publish(error_event) do
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event")
       :ok -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
-  end
-
-  defp get_node_name do
-    node() |> Atom.to_string()
   end
 end

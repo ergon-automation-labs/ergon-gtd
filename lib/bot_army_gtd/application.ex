@@ -10,6 +10,9 @@ defmodule BotArmyGtd.Application do
 
   use Application
 
+  # Derive version from mix.exs at compile time (available in releases via @attrs)
+  @version Mix.Project.config()[:version]
+
   # Use System.get_env for runtime (Mix not available in releases)
   @env String.to_atom(System.get_env("MIX_ENV") || "prod")
 
@@ -69,7 +72,7 @@ defmodule BotArmyGtd.Application do
     if @env == :test,
       do: children,
       else: [
-        {BotArmyGtd.HealthResponder, [bot_name: :gtd, repo: BotArmyGtd.Repo, version: "0.4.8"]}
+        {BotArmyGtd.HealthResponder, [bot_name: :gtd, repo: BotArmyGtd.Repo, version: @version]}
       ]
   end
 

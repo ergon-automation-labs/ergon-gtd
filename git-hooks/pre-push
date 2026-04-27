@@ -42,8 +42,8 @@ if [[ $remote_ref == "refs/heads/main" ]]; then
 
   # Run tests (required before release)
   echo ""
-  echo "🧪 Running tests..."
-  $MIX_BIN test || {
+  echo "🧪 Running tests (NATS_PORT=4223)..."
+  NATS_PORT=4223 $MIX_BIN test || {
     echo "❌ Tests failed - push aborted"
     exit 1
   }

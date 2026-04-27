@@ -7,6 +7,31 @@ import Config
 # This is needed when starting the application manually (not via supervisor)
 config :bot_army_runtime, :auto_start_services, true
 
+# Keep test traffic isolated from shared dev/prod NATS.
+nats_host = System.get_env("NATS_HOST", "localhost")
+
+nats_port =
+  if config_env() == :test do
+    4223
+  else
+    String.to_integer(System.get_env("NATS_PORT", "4222"))
+  end
+
+config :bot_army_runtime, :nats,
+  servers: [{nats_host, nats_port}],
+  ping_interval: 5000,
+  max_reconnect_attempts: 3,
+  reconnect_delay_ms: 100
+
+# Guard against accidental test fixture/event pollution by default.
+# Set GTD_REJECT_TEST_DATA=false to disable if needed.
+reject_test_data =
+  System.get_env("GTD_REJECT_TEST_DATA", "true")
+  |> String.downcase()
+  |> then(&(&1 in ["1", "true", "yes", "on"]))
+
+config :bot_army_gtd, :reject_test_data, reject_test_data
+
 # Database configuration at runtime
 # Priority: BOT_ARMY_GTD_DB_* (set by Salt/Jenkins) > DATABASE_* (from .env for local dev) > defaults
 config :bot_army_gtd, BotArmyGtd.Repo,

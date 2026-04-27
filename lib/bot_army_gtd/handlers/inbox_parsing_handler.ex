@@ -95,7 +95,7 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
     project = structured_data["project"] || "_inbox"
     priority = structured_data["priority"] || "normal"
     due_date = structured_data["due_date"] || nil
-    tags = structured_data["tags"] || []
+    labels = structured_data["labels"] || structured_data["tags"] || []
 
     # Create task with parsed data
     case task_store().create(%{
@@ -107,7 +107,7 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
            "status" => "inbox",
            "priority" => priority,
            "due_date" => due_date,
-           "tags" => tags,
+           "labels" => labels,
            "source" => source,
            "source_metadata" => source_metadata,
            "inbox_item_id" => inbox_item_id
@@ -131,27 +131,17 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
 
   # Private publishing
 
-  defp publish_task_created(task, event_id) do
-    default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
-    publish_task_created(task, event_id, default_tenant_id, nil)
-  end
-
   defp publish_task_created(task, event_id, tenant_id, user_id) do
-    event_data = %{
-      "event" => "gtd.task.created",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "task" => task,
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_event(
+        "gtd.task.created",
+        %{
+          "task" => task,
+          "triggered_by_event_id" => event_id
+        },
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published task.created event from parsed inbox")
@@ -159,36 +149,16 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
     end
   end
 
-  defp publish_error(event_id, reason, message) do
-    default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
-    publish_error(event_id, reason, message, default_tenant_id, nil)
-  end
-
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
-    error_event = %{
-      "event" => "gtd.error",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "error" => message,
-        "reason" => inspect(reason),
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
-    case BotArmyGtd.NATS.Publisher.publish(error_event) do
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event from parsing handler")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
-  end
-
-  defp get_node_name do
-    node() |> Atom.to_string()
   end
 end

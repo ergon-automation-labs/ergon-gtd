@@ -16,7 +16,7 @@ defmodule BotArmyGtd do
   - `gtd.project.update` - Update project
   """
 
-  @version "0.1.1"
+  @version Mix.Project.config()[:version]
 
   def version do
     @version

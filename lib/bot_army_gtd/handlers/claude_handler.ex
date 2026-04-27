@@ -205,22 +205,18 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
         )
 
         # Publish completion event
-        event_data = %{
-          "event" => "gtd.task.completed",
-          "event_id" => UUID.uuid4(),
-          "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-          "source" => "bot_army_gtd",
-          "source_node" => get_node_name(),
-          "triggered_by" => "claude",
-          "schema_version" => "1.0",
-          "tenant_id" => tenant_id,
-          "user_id" => user_id,
-          "payload" => %{
-            "task" => task,
-            "triggered_by_event_id" => event_id,
-            "auto_completed" => true
-          }
-        }
+        event_data =
+          BotArmyGtd.EventBuilder.build_event(
+            "gtd.task.completed",
+            %{
+              "task" => task,
+              "triggered_by_event_id" => event_id,
+              "auto_completed" => true
+            },
+            tenant_id: tenant_id,
+            user_id: user_id,
+            triggered_by: "claude"
+          )
 
         case BotArmyGtd.NATS.Publisher.publish(event_data) do
           {:ok, _subject} ->
@@ -242,22 +238,18 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
   # Private publishing
 
   defp publish_event(event_type, task, event_id, tenant_id, user_id) do
-    event_data = %{
-      "event" => event_type,
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "claude",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "task" => task,
-        "triggered_by_event_id" => event_id,
-        "auto_generated" => true
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_event(
+        event_type,
+        %{
+          "task" => task,
+          "triggered_by_event_id" => event_id,
+          "auto_generated" => true
+        },
+        tenant_id: tenant_id,
+        user_id: user_id,
+        triggered_by: "claude"
+      )
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published task event from Claude handler")
@@ -266,30 +258,16 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
   end
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
-    error_event = %{
-      "event" => "gtd.error",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "claude",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "error" => message,
-        "reason" => inspect(reason),
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+        tenant_id: tenant_id,
+        user_id: user_id,
+        triggered_by: "claude"
+      )
 
-    case BotArmyGtd.NATS.Publisher.publish(error_event) do
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event from Claude handler")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
-  end
-
-  defp get_node_name do
-    node() |> Atom.to_string()
   end
 end

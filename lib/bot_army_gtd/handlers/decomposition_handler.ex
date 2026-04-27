@@ -360,18 +360,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
               "estimated_hours" => subtask["estimated_hours"]
             }
 
-            create_event = %{
-              "event" => "gtd.task.create",
-              "event_id" => UUID.uuid4(),
-              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-              "source" => "bot_army_gtd",
-              "source_node" => get_node_name(),
-              "triggered_by" => "gtd.bot",
-              "schema_version" => "1.0",
-              "tenant_id" => tenant_id,
-              "user_id" => user_id,
-              "payload" => subtask_payload
-            }
+            create_event =
+              BotArmyGtd.EventBuilder.build_event("gtd.task.create", subtask_payload,
+                tenant_id: tenant_id,
+                user_id: user_id
+              )
 
             case BotArmyGtd.Handlers.TaskHandler.handle_create(create_event) do
               {:ok, task} ->
@@ -769,15 +762,8 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
          event_id,
          registry_snapshot
        ) do
-    event_data = %{
-      "event" => "llm.inference.chain",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "payload" => %{
+    event_data =
+      BotArmyGtd.EventBuilder.build_event("llm.inference.chain", %{
         "chain_id" => chain_id,
         "steps" => steps,
         "initial_input" => initial_input,
@@ -788,8 +774,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
           "registry_snapshot" => registry_snapshot
         },
         "triggered_by_event_id" => event_id
-      }
-    }
+      })
 
     case BotArmyRuntime.NATS.Publisher.publish("llm.inference.chain", event_data) do
       {:ok, _subject} -> Logger.debug("Published decomposition chain request to LLM bot")
@@ -798,21 +783,16 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp publish_decomposition_completed(decomposition, event_id, tenant_id, user_id) do
-    event_data = %{
-      "event" => "gtd.decomposition.completed",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "decomposition" => decomposition,
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_event(
+        "gtd.decomposition.completed",
+        %{
+          "decomposition" => decomposition,
+          "triggered_by_event_id" => event_id
+        },
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} ->
@@ -824,19 +804,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp publish_decomposition_approved(decomposition, event_id) do
-    event_data = %{
-      "event" => "gtd.decomposition.approved",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "payload" => %{
+    event_data =
+      BotArmyGtd.EventBuilder.build_event("gtd.decomposition.approved", %{
         "decomposition" => decomposition,
         "triggered_by_event_id" => event_id
-      }
-    }
+      })
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} ->
@@ -848,19 +820,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp publish_decomposition_reviewed(decomposition, event_id) do
-    event_data = %{
-      "event" => "gtd.decomposition.reviewed",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "payload" => %{
+    event_data =
+      BotArmyGtd.EventBuilder.build_event("gtd.decomposition.reviewed", %{
         "decomposition" => decomposition,
         "triggered_by_event_id" => event_id
-      }
-    }
+      })
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} ->
@@ -872,21 +836,16 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp publish_decomposition_ready_for_review(decomposition, event_id, tenant_id, user_id) do
-    event_data = %{
-      "event" => "gtd.decomposition.ready_for_review",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "decomposition" => decomposition,
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_event(
+        "gtd.decomposition.ready_for_review",
+        %{
+          "decomposition" => decomposition,
+          "triggered_by_event_id" => event_id
+        },
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} ->
@@ -903,31 +862,16 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
-    error_event = %{
-      "event" => "gtd.error",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "error" => message,
-        "reason" => inspect(reason),
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
-    case BotArmyGtd.NATS.Publisher.publish(error_event) do
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event from decomposition handler")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
-  end
-
-  defp get_node_name do
-    node() |> Atom.to_string()
   end
 
   defp get_registry_snapshot(task_title, description) do

@@ -309,21 +309,16 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   end
 
   defp publish_event(event_type, _payload, task, event_id, _original_message, tenant_id, user_id) do
-    event_data = %{
-      "event" => event_type,
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "task" => task,
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_event(
+        event_type,
+        %{
+          "task" => task,
+          "triggered_by_event_id" => event_id
+        },
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published event: #{event_type}")
@@ -332,31 +327,16 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   end
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
-    error_event = %{
-      "event" => "gtd.error",
-      "event_id" => UUID.uuid4(),
-      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "source" => "bot_army_gtd",
-      "source_node" => get_node_name(),
-      "triggered_by" => "gtd.bot",
-      "schema_version" => "1.0",
-      "tenant_id" => tenant_id,
-      "user_id" => user_id,
-      "payload" => %{
-        "error" => message,
-        "reason" => inspect(reason),
-        "triggered_by_event_id" => event_id
-      }
-    }
+    event_data =
+      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
-    case BotArmyGtd.NATS.Publisher.publish(error_event) do
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
-  end
-
-  defp get_node_name do
-    node() |> Atom.to_string()
   end
 
   # Use tenant-scoped store calls when available, but keep compatibility with existing mocks.
@@ -382,25 +362,20 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
   defp maybe_trigger_decomposition(task, payload, tenant_id, user_id) do
     if Map.get(payload, "decompose", false) == true do
-      decompose_event = %{
-        "event_id" => UUID.uuid4(),
-        "event" => "gtd.task.decompose",
-        "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-        "source" => "bot_army_gtd",
-        "source_node" => get_node_name(),
-        "triggered_by" => "gtd.bot",
-        "schema_version" => "1.0",
-        "tenant_id" => tenant_id,
-        "user_id" => user_id,
-        "payload" =>
-          %{
-            "task_id" => task["id"],
-            "model" => Map.get(payload, "decompose_model"),
-            "chain_id" => Map.get(payload, "decompose_chain_id")
-          }
-          |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-          |> Map.new()
-      }
+      decom_payload =
+        %{
+          "task_id" => task["id"],
+          "model" => Map.get(payload, "decompose_model"),
+          "chain_id" => Map.get(payload, "decompose_chain_id")
+        }
+        |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+        |> Map.new()
+
+      decompose_event =
+        BotArmyGtd.EventBuilder.build_event("gtd.task.decompose", decom_payload,
+          tenant_id: tenant_id,
+          user_id: user_id
+        )
 
       case BotArmyRuntime.NATS.Publisher.publish("gtd.task.decompose", decompose_event) do
         {:ok, _} ->

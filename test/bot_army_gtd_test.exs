@@ -3,7 +3,8 @@ defmodule BotArmyGtdTest do
   @moduletag :handlers
   doctest BotArmyGtd
 
-  test "version" do
-    assert BotArmyGtd.version() == "0.1.1"
+  test "version matches mix.exs" do
+    expected = Mix.Project.config()[:version]
+    assert BotArmyGtd.version() == expected
   end
 end
