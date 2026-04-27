@@ -33,6 +33,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   require Logger
 
   @reconnect_delay_ms 5000
+  @version Mix.Project.config()[:version]
 
   # Register subjects for the registry
   @subjects [
@@ -82,6 +83,29 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "claude.operation.success",
       type: :subscribe,
       description: "Claude operation success"
+    },
+    # Cross-bot conversation protocol
+    %{
+      subject: "conv.request.gtd.*",
+      type: :subscribe,
+      description: "Cross-bot conversation requests",
+      capabilities: ["task.query", "task.count", "context.summary", "inbox.add"],
+      conversation_support: %{
+        supported: true,
+        message_types: ["query", "command", "confirm", "gossip"],
+        max_turns: 3
+      }
+    },
+    %{
+      subject: "conv.mailbox.gtd",
+      type: :subscribe,
+      description: "Cross-bot mailbox messages",
+      capabilities: ["gossip.check_in"]
+    },
+    %{
+      subject: "conv.followup.*",
+      type: :subscribe,
+      description: "Multi-turn conversation followups"
     }
   ]
 
@@ -100,66 +124,82 @@ defmodule BotArmyGtd.NATS.Consumer do
   def route_message(message) do
     event = message["event"]
 
-    case event do
-      "gtd.inbox.add" ->
-        BotArmyGtd.Handlers.InboxHandler.handle_add(message)
+    # Conversation events use prefix matching (not case-exact event types)
+    cond do
+      is_binary(event) and String.starts_with?(event, "conv.request.gtd.") ->
+        BotArmyGtd.Handlers.ConversationHandler.handle_request(message)
 
-      "gtd.task.create" ->
-        BotArmyGtd.Handlers.TaskHandler.handle_create(message)
+      is_binary(event) and String.starts_with?(event, "conv.followup.") ->
+        BotArmyGtd.Handlers.ConversationHandler.handle_request(message)
 
-      "gtd.task.update" ->
-        BotArmyGtd.Handlers.TaskHandler.handle_update(message)
+      event == "conv.mailbox.gtd" ->
+        BotArmyGtd.Handlers.ConversationHandler.handle_mailbox(message)
 
-      "gtd.task.complete" ->
-        BotArmyGtd.Handlers.TaskHandler.handle_complete(message)
+      true ->
+        case event do
+          "gtd.inbox.add" ->
+            BotArmyGtd.Handlers.InboxHandler.handle_add(message)
 
-      "gtd.task.command.defer" ->
-        BotArmyGtd.Handlers.TaskHandler.handle_defer(message)
+          "gtd.task.create" ->
+            BotArmyGtd.Handlers.TaskHandler.handle_create(message)
 
-      "gtd.task.command.delete" ->
-        BotArmyGtd.Handlers.TaskHandler.handle_delete(message)
+          "gtd.task.update" ->
+            BotArmyGtd.Handlers.TaskHandler.handle_update(message)
 
-      "gtd.task.decompose" ->
-        BotArmyGtd.Handlers.DecompositionHandler.handle_decompose(message)
+          "gtd.task.complete" ->
+            BotArmyGtd.Handlers.TaskHandler.handle_complete(message)
 
-      "gtd.decomposition.approve" ->
-        BotArmyGtd.Handlers.DecompositionHandler.handle_approve(message)
+          "gtd.task.command.defer" ->
+            BotArmyGtd.Handlers.TaskHandler.handle_defer(message)
 
-      "gtd.decomposition.reject" ->
-        BotArmyGtd.Handlers.DecompositionHandler.handle_reject(message)
+          "gtd.task.command.delete" ->
+            BotArmyGtd.Handlers.TaskHandler.handle_delete(message)
 
-      "gtd.decomposition.review" ->
-        BotArmyGtd.Handlers.DecompositionHandler.handle_review(message)
+          "gtd.task.decompose" ->
+            BotArmyGtd.Handlers.DecompositionHandler.handle_decompose(message)
 
-      "gtd.decomposition.request_review" ->
-        BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
+          "gtd.decomposition.approve" ->
+            BotArmyGtd.Handlers.DecompositionHandler.handle_approve(message)
 
-      "gtd.project.create" ->
-        BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
+          "gtd.decomposition.reject" ->
+            BotArmyGtd.Handlers.DecompositionHandler.handle_reject(message)
 
-      "gtd.project.update" ->
-        BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
+          "gtd.decomposition.review" ->
+            BotArmyGtd.Handlers.DecompositionHandler.handle_review(message)
 
-      "gtd.log.create" ->
-        BotArmyGtd.Handlers.LogEntryHandler.handle_create(message)
+          "gtd.decomposition.request_review" ->
+            BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
 
-      "llm.response.parsed" ->
-        case get_in(message, ["payload", "enrichment_source"]) do
-          "log_enrichment" -> BotArmyGtd.Handlers.LogEnrichmentHandler.handle_enriched(message)
-          _ -> BotArmyGtd.Handlers.InboxParsingHandler.handle_parse(message)
+          "gtd.project.create" ->
+            BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
+
+          "gtd.project.update" ->
+            BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
+
+          "gtd.log.create" ->
+            BotArmyGtd.Handlers.LogEntryHandler.handle_create(message)
+
+          "llm.response.parsed" ->
+            case get_in(message, ["payload", "enrichment_source"]) do
+              "log_enrichment" ->
+                BotArmyGtd.Handlers.LogEnrichmentHandler.handle_enriched(message)
+
+              _ ->
+                BotArmyGtd.Handlers.InboxParsingHandler.handle_parse(message)
+            end
+
+          "llm.chain.completed" ->
+            BotArmyGtd.Handlers.DecompositionHandler.handle_chain_completed(message)
+
+          "claude.task.create" ->
+            BotArmyGtd.Handlers.ClaudeHandler.handle_task_create(message)
+
+          "claude.operation.success" ->
+            BotArmyGtd.Handlers.ClaudeHandler.handle_operation_success(message)
+
+          _ ->
+            Logger.debug("Unknown event type: #{event}")
         end
-
-      "llm.chain.completed" ->
-        BotArmyGtd.Handlers.DecompositionHandler.handle_chain_completed(message)
-
-      "claude.task.create" ->
-        BotArmyGtd.Handlers.ClaudeHandler.handle_task_create(message)
-
-      "claude.operation.success" ->
-        BotArmyGtd.Handlers.ClaudeHandler.handle_operation_success(message)
-
-      _ ->
-        Logger.debug("Unknown event type: #{event}")
     end
   end
 
@@ -215,7 +255,10 @@ defmodule BotArmyGtd.NATS.Consumer do
               "gtd.task.list",
               "gtd.decomposition.list_due",
               "claude.task.create",
-              "claude.operation.success"
+              "claude.operation.success",
+              "conv.request.gtd.>",
+              "conv.mailbox.gtd",
+              "conv.followup.>"
             ]
             |> Enum.map(fn subject ->
               case Gnat.sub(conn, self(), subject) do
@@ -230,7 +273,7 @@ defmodule BotArmyGtd.NATS.Consumer do
             end)
             |> Enum.filter(&(not is_nil(&1)))
 
-          BotArmyRuntime.Registry.register("gtd", @subjects)
+          BotArmyRuntime.Registry.register("gtd", @subjects, @version)
           {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
         {:error, _reason} ->
