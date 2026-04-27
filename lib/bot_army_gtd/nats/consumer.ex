@@ -106,6 +106,11 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "conv.followup.*",
       type: :subscribe,
       description: "Multi-turn conversation followups"
+    },
+    %{
+      subject: "ops.deploy.>",
+      type: :subscribe,
+      description: "Deploy lifecycle events"
     }
   ]
 
@@ -258,7 +263,8 @@ defmodule BotArmyGtd.NATS.Consumer do
               "claude.operation.success",
               "conv.request.gtd.>",
               "conv.mailbox.gtd",
-              "conv.followup.>"
+              "conv.followup.>",
+              "ops.deploy.>"
             ]
             |> Enum.map(fn subject ->
               case Gnat.sub(conn, self(), subject) do
@@ -496,6 +502,25 @@ defmodule BotArmyGtd.NATS.Consumer do
   end
 
   @impl true
+  def handle_info({:msg, %{topic: "ops.deploy.complete", body: body} = msg}, state) do
+    BotArmyRuntime.Tracing.with_consumer_span(
+      "ops.deploy.complete",
+      Map.get(msg, :headers, []),
+      fn ->
+        case BotArmyCore.NATS.Decoder.decode(body) do
+          {:ok, decoded} ->
+            handle_deploy_complete(decoded)
+
+          {:error, reason} ->
+            Logger.warning("Failed to decode deploy complete message: #{inspect(reason)}")
+        end
+      end
+    )
+
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info({:msg, msg}, state) do
     topic = msg.topic
     reply_to = Map.get(msg, :reply_to)
@@ -671,6 +696,95 @@ defmodule BotArmyGtd.NATS.Consumer do
       end
 
     reply_traced(state.conn, reply_to, response)
+  end
+
+  # Deploy event integration
+
+  defp handle_deploy_complete(message) do
+    payload = message["payload"] || %{}
+    bot = payload["bot"]
+    status = payload["status"]
+    error = payload["error"]
+
+    if is_nil(bot) do
+      Logger.warning("[DeployConsumer] ops.deploy.complete missing bot name")
+      :ok
+    else
+      case status do
+        "success" ->
+          Logger.info("[DeployConsumer] Deploy succeeded for #{bot}, completing waiting task")
+          complete_waiting_task(bot)
+
+        "failure" ->
+          Logger.info("[DeployConsumer] Deploy failed for #{bot}, creating incident task")
+          create_incident_task(bot, error)
+
+        _ ->
+          Logger.warning("[DeployConsumer] Unknown deploy status: #{status}")
+      end
+    end
+  end
+
+  defp complete_waiting_task(bot) do
+    task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+    tenant_id = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+    filters = %{"status" => "active"}
+
+    case task_store.list(tenant_id, filters) do
+      {:ok, tasks} ->
+        match =
+          Enum.find(tasks, fn t ->
+            t["title"] == bot and t["context"] == "waiting"
+          end)
+
+        if match do
+          task_id = match["id"]
+
+          case task_store.complete(tenant_id, task_id) do
+            {:ok, _} ->
+              Logger.info("[DeployConsumer] Completed waiting task #{task_id} for #{bot}")
+
+            {:error, reason} ->
+              Logger.error(
+                "[DeployConsumer] Failed to complete task #{task_id}: #{inspect(reason)}"
+              )
+          end
+        else
+          Logger.debug("[DeployConsumer] No waiting task found for #{bot}")
+        end
+
+      {:error, reason} ->
+        Logger.error("[DeployConsumer] Failed to list tasks: #{inspect(reason)}")
+    end
+  end
+
+  defp create_incident_task(bot, error) do
+    task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+
+    description =
+      if error do
+        "Deploy of #{bot} failed with error:\n\n#{error}\n\nCheck Jenkins logs at http://localhost:18080/job/Ergon%20Automation%20Labs/job/ergon-#{bot}/"
+      else
+        "Deploy of #{bot} failed. Check Jenkins logs at http://localhost:18080/job/Ergon%20Automation%20Labs/job/ergon-#{bot}/"
+      end
+
+    payload = %{
+      "title" => "[INCIDENT] #{bot} deploy failed",
+      "description" => description,
+      "context" => "next",
+      "priority" => "high",
+      "labels" => ["incident", "deploy", bot],
+      "status" => "active"
+    }
+
+    case task_store.create(payload) do
+      {:ok, _} ->
+        Logger.info("[DeployConsumer] Created incident task for #{bot} deploy failure")
+
+      {:error, reason} ->
+        Logger.error("[DeployConsumer] Failed to create incident task: #{inspect(reason)}")
+    end
   end
 
   defp reply_traced(conn, reply_to, body) do
