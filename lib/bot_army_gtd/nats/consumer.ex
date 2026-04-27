@@ -258,6 +258,8 @@ defmodule BotArmyGtd.NATS.Consumer do
               "events.llm.response.parsed",
               "events.llm.chain.completed",
               "gtd.task.list",
+              "gtd.task.get",
+              "gtd.task.search",
               "gtd.decomposition.list_due",
               "claude.task.create",
               "claude.operation.success",
