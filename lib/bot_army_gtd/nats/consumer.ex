@@ -34,6 +34,7 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @reconnect_delay_ms 5000
   @version Mix.Project.config()[:version]
+  @registry_heartbeat_ms 20_000
 
   # Register subjects for the registry
   @subjects [
@@ -282,6 +283,7 @@ defmodule BotArmyGtd.NATS.Consumer do
             |> Enum.filter(&(not is_nil(&1)))
 
           BotArmyRuntime.Registry.register("gtd", @subjects, @version)
+        Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
           {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
         {:error, _reason} ->
@@ -814,4 +816,14 @@ defmodule BotArmyGtd.NATS.Consumer do
     Logger.info("Attempting to reconnect to NATS")
     {:noreply, state, {:continue, :connect}}
   end
+  @impl true
+  def handle_info(:registry_heartbeat, state) do
+    if length(state.subscriptions) > 0 do
+      BotArmyRuntime.Registry.register("gtd", @subjects, @version)
+      Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
+    end
+
+    {:noreply, state}
+  end
+
 end
