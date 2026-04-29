@@ -22,7 +22,8 @@ defmodule BotArmyGtd.ReviewScheduler do
   use GenServer
   require Logger
 
-  @default_interval_seconds 300  # 5 minutes
+  # 5 minutes
+  @default_interval_seconds 300
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -31,7 +32,10 @@ defmodule BotArmyGtd.ReviewScheduler do
   @impl true
   def init(_opts) do
     enabled = Application.get_env(:bot_army_gtd, __MODULE__, [])[:enabled] || false
-    interval = Application.get_env(:bot_army_gtd, __MODULE__, [])[:interval_seconds] || @default_interval_seconds
+
+    interval =
+      Application.get_env(:bot_army_gtd, __MODULE__, [])[:interval_seconds] ||
+        @default_interval_seconds
 
     Logger.info("ReviewScheduler: enabled=#{enabled}, interval=#{interval}s")
 
@@ -65,6 +69,7 @@ defmodule BotArmyGtd.ReviewScheduler do
   """
   def get_due do
     default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+
     with {:ok, decompositions} <- get_store().list(default_tenant_id) do
       now = DateTime.utc_now()
 
@@ -79,8 +84,10 @@ defmodule BotArmyGtd.ReviewScheduler do
           due_at = parse_datetime(Map.get(d, "due_at"))
           due_at && DateTime.compare(due_at, now) in [:lt, :eq]
         end)
-        |> Enum.sort_by(fn d ->
-          parse_datetime(Map.get(d, "due_at"))
+        |> Enum.sort(fn a, b ->
+          due_a = parse_datetime(Map.get(a, "due_at"))
+          due_b = parse_datetime(Map.get(b, "due_at"))
+          DateTime.compare(due_a, due_b) != :gt
         end)
 
       {:ok, due}
@@ -92,6 +99,7 @@ defmodule BotArmyGtd.ReviewScheduler do
   """
   def get_upcoming(days \\ 7) do
     default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+
     with {:ok, decompositions} <- get_store().list(default_tenant_id) do
       now = DateTime.utc_now()
       future = DateTime.add(now, days, :day)
@@ -105,11 +113,14 @@ defmodule BotArmyGtd.ReviewScheduler do
         end)
         |> Enum.filter(fn d ->
           due_at = parse_datetime(Map.get(d, "due_at"))
+
           due_at && DateTime.compare(due_at, now) in [:gt, :eq] and
             DateTime.compare(due_at, future) in [:lt, :eq]
         end)
-        |> Enum.sort_by(fn d ->
-          parse_datetime(Map.get(d, "due_at"))
+        |> Enum.sort(fn a, b ->
+          due_a = parse_datetime(Map.get(a, "due_at"))
+          due_b = parse_datetime(Map.get(b, "due_at"))
+          DateTime.compare(due_a, due_b) != :gt
         end)
 
       {:ok, upcoming}
