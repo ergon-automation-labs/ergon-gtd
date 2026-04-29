@@ -217,7 +217,7 @@ defmodule BotArmyGtd.TaskStore do
 
       {:error, changeset} ->
         Logger.error("Failed to create task: #{inspect(changeset.errors)}")
-        {:reply, {:error, :database_error}, state}
+        {:reply, {:error, changeset_error_reason(changeset)}, state}
     end
   end
 
@@ -291,7 +291,7 @@ defmodule BotArmyGtd.TaskStore do
 
           {:error, changeset} ->
             Logger.error("Failed to update task: #{inspect(changeset.errors)}")
-            {:reply, {:error, :database_error}, state}
+            {:reply, {:error, changeset_error_reason(changeset)}, state}
         end
     end
   end
@@ -368,7 +368,7 @@ defmodule BotArmyGtd.TaskStore do
 
             {:error, changeset} ->
               Logger.error("Failed to update task (tenant scoped): #{inspect(changeset.errors)}")
-              {:reply, {:error, :database_error}, state}
+              {:reply, {:error, changeset_error_reason(changeset)}, state}
           end
         end
     end
@@ -649,6 +649,18 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   defp apply_list_labels_filter(tasks, _), do: tasks
+
+  defp changeset_error_reason(%Ecto.Changeset{} = changeset) do
+    {:validation_error, Ecto.Changeset.traverse_errors(changeset, &translate_error/1)}
+  end
+
+  defp changeset_error_reason(_), do: :database_error
+
+  defp translate_error({msg, opts}) do
+    Enum.reduce(opts, msg, fn {key, value}, acc ->
+      String.replace(acc, "%{#{key}}", to_string(value))
+    end)
+  end
 
   # Convert string to UUID, handling both UUID strings and placeholder strings
   defp convert_to_uuid(value) when is_binary(value) do

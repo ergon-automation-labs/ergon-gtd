@@ -74,6 +74,6 @@ defmodule BotArmyGtd.Schemas.Task do
       "completed",
       "archived"
     ])
-    |> validate_inclusion(:priority, ["low", "normal", "high"])
+    |> validate_inclusion(:priority, ["low", "normal", "high", "urgent"])
   end
 end
