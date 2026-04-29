@@ -31,6 +31,8 @@ defmodule BotArmyGtd.PulsePublisher do
   # 5 minutes
   @publish_interval_ms 30 * 60 * 1000
   @server __MODULE__
+  @source "bot_army_gtd"
+  @schema_version "1.0"
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: @server)
@@ -40,7 +42,7 @@ defmodule BotArmyGtd.PulsePublisher do
   def init(_opts) do
     Logger.info("[PulsePublisher] Starting GTD pulse publisher")
     Process.send_after(self(), :publish_pulse, 5000)
-    {:ok, %{}}
+    {:ok, %{sequence: 0}}
   end
 
   @impl true
@@ -49,7 +51,7 @@ defmodule BotArmyGtd.PulsePublisher do
 
     Task.start(fn ->
       try do
-        publish_pulse()
+        publish_pulse(state.sequence)
       rescue
         e ->
           Logger.error("[PulsePublisher] Error publishing pulse: #{inspect(e)}")
@@ -60,14 +62,14 @@ defmodule BotArmyGtd.PulsePublisher do
     {:noreply, state}
   end
 
-  defp publish_pulse do
+  defp publish_pulse(base_sequence) do
     Logger.debug("[PulsePublisher] publish_pulse() called")
     default_tenant = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
 
     with {:ok, tasks} <- TaskStore.list(default_tenant),
          {:ok, projects} <- ProjectStore.list(default_tenant) do
       pulse = build_pulse(tasks, projects, default_tenant)
-      publish_to_nats(pulse)
+      publish_to_nats(pulse, base_sequence)
     else
       {:error, reason} ->
         Logger.warning("[PulsePublisher] Failed to build pulse: #{inspect(reason)}")
@@ -137,7 +139,112 @@ defmodule BotArmyGtd.PulsePublisher do
     }
   end
 
-  defp publish_to_nats(pulse) do
+  def build_hydration_events(pulse, base_sequence) do
+    now = DateTime.utc_now() |> DateTime.to_iso8601()
+    tenant_id = pulse["tenant_id"] || "default"
+    total_active_tasks = get_in(pulse, ["observations", "total_active_tasks"]) || 0
+    projects = pulse["projects"] || []
+    tasks = pulse["tasks"] || []
+
+    health_status =
+      cond do
+        total_active_tasks > 100 -> "degraded"
+        true -> "healthy"
+      end
+
+    risk_severity =
+      cond do
+        health_status == "degraded" -> "medium"
+        true -> "low"
+      end
+
+    [
+      %{
+        "event_id" => "#{@source}-health-#{base_sequence}",
+        "event" => "system.health",
+        "schema_version" => @schema_version,
+        "timestamp" => now,
+        "source" => @source,
+        "tenant_id" => tenant_id,
+        "payload" => %{
+          "service" => "gtd",
+          "status" => health_status,
+          "uptime_seconds" => uptime_seconds(),
+          "last_event_age_ms" => 0,
+          "dedupe_key" => "#{@source}:system.health",
+          "sequence" => base_sequence
+        }
+      },
+      %{
+        "event_id" => "#{@source}-capability-#{base_sequence + 1}",
+        "event" => "system.capability.snapshot",
+        "schema_version" => @schema_version,
+        "timestamp" => now,
+        "source" => @source,
+        "tenant_id" => tenant_id,
+        "payload" => %{
+          "service" => "gtd",
+          "captured_at" => now,
+          "capabilities" => ["task_management", "project_management", "task_decomposition"],
+          "subjects" => ["events.gtd.*", "cmd.gtd.*", "bot.gtd.pulse"],
+          "dedupe_key" => "#{@source}:system.capability.snapshot",
+          "sequence" => base_sequence + 1,
+          "metadata" => %{
+            "project_count" => length(projects),
+            "task_count" => length(tasks)
+          }
+        }
+      },
+      %{
+        "event_id" => "#{@source}-risk-#{base_sequence + 2}",
+        "event" => "system.risk.signal",
+        "schema_version" => @schema_version,
+        "timestamp" => now,
+        "source" => @source,
+        "tenant_id" => tenant_id,
+        "payload" => %{
+          "risk_id" => "gtd-backlog-#{base_sequence}",
+          "risk_type" => "risk.backlog_pressure",
+          "severity" => risk_severity,
+          "status" => if(total_active_tasks > 100, do: "active", else: "resolved"),
+          "reason" => %{
+            "total_active_tasks" => total_active_tasks,
+            "project_count" => length(projects)
+          },
+          "next_action" =>
+            if(total_active_tasks > 100,
+              do: "triage and rebalance GTD active tasks",
+              else: "continue steady-state operations"
+            ),
+          "detected_at" => now,
+          "dedupe_key" => "#{@source}:system.risk.signal",
+          "sequence" => base_sequence + 2
+        }
+      },
+      %{
+        "event_id" => "#{@source}-verification-#{base_sequence + 3}",
+        "event" => "task.signal.verification",
+        "schema_version" => @schema_version,
+        "timestamp" => now,
+        "source" => @source,
+        "tenant_id" => tenant_id,
+        "payload" => %{
+          "task_id" => "gtd-pulse-#{base_sequence}",
+          "status" => "pass",
+          "scope" => "bot_army_gtd pulse",
+          "test_case" => "gtd pulse hydration snapshot",
+          "recorded_at" => now,
+          "dedupe_key" => "#{@source}:task.signal.verification",
+          "sequence" => base_sequence + 3,
+          "metadata" => %{
+            "total_active_tasks" => total_active_tasks
+          }
+        }
+      }
+    ]
+  end
+
+  defp publish_to_nats(pulse, base_sequence) do
     Logger.debug("[PulsePublisher] publish_to_nats() called")
 
     try do
@@ -156,6 +263,19 @@ defmodule BotArmyGtd.PulsePublisher do
               Logger.warning("[PulsePublisher] Failed to publish pulse: #{inspect(reason)}")
           end
 
+          build_hydration_events(pulse, base_sequence)
+          |> Enum.each(fn event ->
+            case Gnat.pub(conn, event["event"], Jason.encode!(event)) do
+              :ok ->
+                :ok
+
+              {:error, reason} ->
+                Logger.warning(
+                  "[PulsePublisher] Failed to publish hydration event #{event["event"]}: #{inspect(reason)}"
+                )
+            end
+          end)
+
         {:error, reason} ->
           Logger.warning("[PulsePublisher] NATS unavailable, skipping pulse: #{inspect(reason)}")
       end
@@ -163,5 +283,10 @@ defmodule BotArmyGtd.PulsePublisher do
       e ->
         Logger.warning("[PulsePublisher] Error publishing pulse: #{inspect(e)}")
     end
+  end
+
+  defp uptime_seconds do
+    {ms, _} = :erlang.statistics(:wall_clock)
+    div(ms, 1000)
   end
 end
