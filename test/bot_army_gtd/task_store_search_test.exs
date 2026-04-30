@@ -7,7 +7,13 @@ defmodule BotArmyGtd.TaskStoreSearchTest do
     original_state = :sys.get_state(BotArmyGtd.TaskStore)
 
     on_exit(fn ->
-      :sys.replace_state(BotArmyGtd.TaskStore, fn _ -> original_state end)
+      case Process.whereis(BotArmyGtd.TaskStore) do
+        nil ->
+          :ok
+
+        _pid ->
+          :sys.replace_state(BotArmyGtd.TaskStore, fn _ -> original_state end)
+      end
     end)
 
     :ok
