@@ -21,7 +21,7 @@ defmodule BotArmyGtd.Schemas.Task do
     field(:completed_at, :naive_datetime)
     field(:project_id, :string)
     field(:goal_id, :string)
-    field(:parent_task_id, :string)
+    field(:parent_task_id, Ecto.UUID)
     field(:labels, {:array, :string}, default: [])
     field(:tenant_id, Ecto.UUID)
     field(:user_id, Ecto.UUID)
