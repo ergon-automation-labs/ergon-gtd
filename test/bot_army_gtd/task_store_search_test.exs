@@ -3,6 +3,7 @@ defmodule BotArmyGtd.TaskStoreSearchTest do
   @moduletag :stores
 
   setup do
+    ensure_task_store_started!()
     original_state = :sys.get_state(BotArmyGtd.TaskStore)
 
     on_exit(fn ->
@@ -10,6 +11,17 @@ defmodule BotArmyGtd.TaskStoreSearchTest do
     end)
 
     :ok
+  end
+
+  defp ensure_task_store_started! do
+    case Process.whereis(BotArmyGtd.TaskStore) do
+      nil ->
+        start_supervised!({BotArmyGtd.TaskStore, []})
+        :ok
+
+      _pid ->
+        :ok
+    end
   end
 
   test "search matches source_metadata content" do
