@@ -112,6 +112,16 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "ops.deploy.>",
       type: :subscribe,
       description: "Deploy lifecycle events"
+    },
+    %{
+      subject: "gossip.intent.proposed",
+      type: :subscribe,
+      description: "Topic-agnostic gossip intent proposals"
+    },
+    %{
+      subject: "gossip.social.invite",
+      type: :subscribe,
+      description: "Adaptive social gossip invites"
     }
   ]
 
@@ -267,7 +277,9 @@ defmodule BotArmyGtd.NATS.Consumer do
               "conv.request.gtd.>",
               "conv.mailbox.gtd",
               "conv.followup.>",
-              "ops.deploy.>"
+              "ops.deploy.>",
+              "gossip.intent.proposed",
+              "gossip.social.invite"
             ]
             |> Enum.map(fn subject ->
               case Gnat.sub(conn, self(), subject) do
@@ -283,7 +295,7 @@ defmodule BotArmyGtd.NATS.Consumer do
             |> Enum.filter(&(not is_nil(&1)))
 
           BotArmyRuntime.Registry.register("gtd", @subjects, @version)
-        Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
+          Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
           {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
         {:error, _reason} ->
@@ -546,6 +558,12 @@ defmodule BotArmyGtd.NATS.Consumer do
         "gtd.project.list" when is_binary(reply_to) and reply_to != "" ->
           handle_project_list_request(msg, reply_to, state)
 
+        "gossip.intent.proposed" ->
+          handle_gossip_message(msg, :intent_proposed)
+
+        "gossip.social.invite" ->
+          handle_gossip_message(msg, :social_invite)
+
         _ ->
           Logger.debug("Received NATS message on subject: #{topic}")
 
@@ -560,6 +578,19 @@ defmodule BotArmyGtd.NATS.Consumer do
     end)
 
     {:noreply, state}
+  end
+
+  defp handle_gossip_message(msg, type) do
+    case Jason.decode(msg.body) do
+      {:ok, decoded} ->
+        case type do
+          :intent_proposed -> BotArmyGtd.Gossip.handle_intent_proposed(decoded)
+          :social_invite -> BotArmyGtd.Gossip.handle_social_invite(decoded)
+        end
+
+      {:error, reason} ->
+        Logger.warning("Failed to decode gossip message from #{msg.topic}: #{inspect(reason)}")
+    end
   end
 
   defp handle_task_create_request(msg, reply_to, state) do
@@ -816,6 +847,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     Logger.info("Attempting to reconnect to NATS")
     {:noreply, state, {:continue, :connect}}
   end
+
   @impl true
   def handle_info(:registry_heartbeat, state) do
     if length(state.subscriptions) > 0 do
@@ -825,5 +857,4 @@ defmodule BotArmyGtd.NATS.Consumer do
 
     {:noreply, state}
   end
-
 end
