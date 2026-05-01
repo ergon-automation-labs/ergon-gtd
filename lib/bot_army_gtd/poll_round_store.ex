@@ -171,11 +171,11 @@ defmodule BotArmyGtd.PollRoundStore do
       "vote_budget_per_bot" => round.vote_budget_per_bot,
       "snapshot" => round.snapshot_json,
       "status" => round.status,
-      "closes_at" => round.closes_at && DateTime.to_iso8601(round.closes_at),
+      "closes_at" => round.closes_at && to_iso8601(round.closes_at),
       "tenant_id" => to_string(round.tenant_id),
       "user_id" => round.user_id && to_string(round.user_id),
-      "inserted_at" => round.inserted_at && DateTime.to_iso8601(round.inserted_at),
-      "updated_at" => round.updated_at && DateTime.to_iso8601(round.updated_at)
+      "inserted_at" => round.inserted_at && to_iso8601(round.inserted_at),
+      "updated_at" => round.updated_at && to_iso8601(round.updated_at)
     }
   end
 
@@ -214,4 +214,7 @@ defmodule BotArmyGtd.PollRoundStore do
   end
 
   defp parse_datetime(_), do: nil
+
+  defp to_iso8601(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp to_iso8601(%NaiveDateTime{} = ndt), do: NaiveDateTime.to_iso8601(ndt)
 end
