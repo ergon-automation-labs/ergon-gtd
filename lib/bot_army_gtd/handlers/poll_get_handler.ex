@@ -10,10 +10,13 @@ defmodule BotArmyGtd.Handlers.PollGetHandler do
   end
 
   def handle_get(message) do
-    tenant_id =
-      message["tenant_id"] || Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+    params = message["payload"] || message
 
-    poll_id = message["poll_id"]
+    tenant_id =
+      params["tenant_id"] || message["tenant_id"] ||
+        Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+    poll_id = params["poll_id"]
 
     with {:ok, poll} <- get_poll(tenant_id, poll_id),
          {:ok, vote_totals} <- poll_vote_store().vote_totals_by_poll(tenant_id, poll_id),

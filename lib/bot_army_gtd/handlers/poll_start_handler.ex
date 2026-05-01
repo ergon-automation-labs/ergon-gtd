@@ -6,12 +6,15 @@ defmodule BotArmyGtd.Handlers.PollStartHandler do
   end
 
   def handle_create(message) do
-    tenant_id =
-      message["tenant_id"] || Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+    params = message["payload"] || message
 
-    name = message["name"]
-    snapshot = message["snapshot"]
-    vote_budget = Map.get(message, "vote_budget_per_bot", 3)
+    tenant_id =
+      params["tenant_id"] || message["tenant_id"] ||
+        Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+    name = params["name"]
+    snapshot = params["snapshot"]
+    vote_budget = Map.get(params, "vote_budget_per_bot", 3)
 
     with :ok <- validate_name(name),
          :ok <- validate_snapshot(snapshot),
@@ -21,8 +24,8 @@ defmodule BotArmyGtd.Handlers.PollStartHandler do
         "snapshot" => snapshot,
         "vote_budget_per_bot" => vote_budget,
         "tenant_id" => tenant_id,
-        "user_id" => Map.get(message, "user_id"),
-        "closes_at" => Map.get(message, "closes_at")
+        "user_id" => Map.get(params, "user_id") || Map.get(message, "user_id"),
+        "closes_at" => Map.get(params, "closes_at") || Map.get(message, "closes_at")
       }
 
       case poll_round_store().create(payload) do

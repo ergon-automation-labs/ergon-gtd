@@ -10,13 +10,16 @@ defmodule BotArmyGtd.Handlers.PollVoteHandler do
   end
 
   def handle_submit(message) do
-    tenant_id =
-      message["tenant_id"] || Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+    params = message["payload"] || message
 
-    poll_id = message["poll_id"]
-    voter_type = message["voter_type"]
-    voter_id = message["voter_id"]
-    allocations = message["allocations"] || []
+    tenant_id =
+      params["tenant_id"] || message["tenant_id"] ||
+        Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+    poll_id = params["poll_id"]
+    voter_type = params["voter_type"]
+    voter_id = params["voter_id"]
+    allocations = params["allocations"] || []
 
     with :ok <- validate_required_fields(poll_id, voter_type, voter_id),
          :ok <- validate_voter_type(voter_type),

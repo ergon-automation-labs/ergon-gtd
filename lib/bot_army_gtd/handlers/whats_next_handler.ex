@@ -2,12 +2,15 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
   require Logger
 
   def handle_request(message) do
-    tenant_id =
-      message["tenant_id"] || Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+    params = message["payload"] || message
 
-    limit_human = Map.get(message, "limit_human", 5)
-    limit_bot = Map.get(message, "limit_bot", 10)
-    include = Map.get(message, "include", ["tasks", "projects", "goals"])
+    tenant_id =
+      params["tenant_id"] || message["tenant_id"] ||
+        Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+    limit_human = Map.get(params, "limit_human", 5)
+    limit_bot = Map.get(params, "limit_bot", 10)
+    include = Map.get(params, "include", ["tasks", "projects", "goals"])
 
     scores = query_scores(tenant_id)
 
