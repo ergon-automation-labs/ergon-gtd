@@ -122,6 +122,36 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "gossip.social.invite",
       type: :subscribe,
       description: "Adaptive social gossip invites"
+    },
+    %{
+      subject: "gtd.whats_next",
+      type: :request_reply,
+      description: "Get what's-next ranking snapshot"
+    },
+    %{
+      subject: "gtd.poll.start",
+      type: :request_reply,
+      description: "Start a new poll round"
+    },
+    %{
+      subject: "gtd.poll.vote.submit",
+      type: :request_reply,
+      description: "Submit vote allocations for a poll"
+    },
+    %{
+      subject: "gtd.poll.get",
+      type: :request_reply,
+      description: "Get poll status and results"
+    },
+    %{
+      subject: "gtd.poll.close",
+      type: :request_reply,
+      description: "Close a poll round and compute scores"
+    },
+    %{
+      subject: "gossip.poll.broadcast",
+      type: :subscribe,
+      description: "Army general poll broadcast messages"
     }
   ]
 
@@ -279,7 +309,13 @@ defmodule BotArmyGtd.NATS.Consumer do
               "conv.followup.>",
               "ops.deploy.>",
               "gossip.intent.proposed",
-              "gossip.social.invite"
+              "gossip.social.invite",
+              "gossip.poll.broadcast",
+              "gtd.whats_next",
+              "gtd.poll.start",
+              "gtd.poll.vote.submit",
+              "gtd.poll.get",
+              "gtd.poll.close"
             ]
             |> Enum.map(fn subject ->
               case Gnat.sub(conn, self(), subject) do
@@ -517,6 +553,108 @@ defmodule BotArmyGtd.NATS.Consumer do
     {:noreply, state}
   end
 
+  # --- GTD Voting V1 request/reply handlers ---
+
+  @impl true
+  def handle_info({:msg, %{topic: "gtd.whats_next", reply_to: reply_to, body: body} = msg}, state)
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span("gtd.whats_next", Map.get(msg, :headers, []), fn ->
+      params = decode_body(body)
+
+      response =
+        case BotArmyGtd.Handlers.WhatsNextHandler.handle_request(params) do
+          {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
+          {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :whats_next_failed)
+        end
+
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:msg, %{topic: "gtd.poll.start", reply_to: reply_to, body: body} = msg}, state)
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span("gtd.poll.start", Map.get(msg, :headers, []), fn ->
+      params = decode_body(body)
+
+      response =
+        case BotArmyGtd.Handlers.PollStartHandler.handle_create(params) do
+          {:ok, poll} -> BotArmyRuntime.NATS.Reply.ok(poll)
+          {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :poll_start_failed)
+        end
+
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.poll.vote.submit", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span(
+      "gtd.poll.vote.submit",
+      Map.get(msg, :headers, []),
+      fn ->
+        params = decode_body(body)
+
+        response =
+          case BotArmyGtd.Handlers.PollVoteHandler.handle_submit(params) do
+            {:ok, result} ->
+              BotArmyRuntime.NATS.Reply.ok(result)
+
+            {:error, reason} ->
+              BotArmyRuntime.NATS.Reply.error(inspect(reason), :vote_submit_failed)
+          end
+
+        reply_traced(state.conn, reply_to, response)
+      end
+    )
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:msg, %{topic: "gtd.poll.get", reply_to: reply_to, body: body} = msg}, state)
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span("gtd.poll.get", Map.get(msg, :headers, []), fn ->
+      params = decode_body(body)
+
+      response =
+        case BotArmyGtd.Handlers.PollGetHandler.handle_get(params) do
+          {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
+          {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :poll_get_failed)
+        end
+
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:msg, %{topic: "gtd.poll.close", reply_to: reply_to, body: body} = msg}, state)
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span("gtd.poll.close", Map.get(msg, :headers, []), fn ->
+      params = decode_body(body)
+
+      response =
+        case BotArmyGtd.Handlers.PollCloseHandler.handle_close(params) do
+          {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
+          {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :poll_close_failed)
+        end
+
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
   @impl true
   def handle_info({:msg, %{topic: "ops.deploy.complete", body: body} = msg}, state) do
     BotArmyRuntime.Tracing.with_consumer_span(
@@ -564,6 +702,9 @@ defmodule BotArmyGtd.NATS.Consumer do
         "gossip.social.invite" ->
           handle_gossip_message(msg, :social_invite)
 
+        "gossip.poll.broadcast" ->
+          handle_gossip_message(msg, :poll_broadcast)
+
         _ ->
           Logger.debug("Received NATS message on subject: #{topic}")
 
@@ -586,6 +727,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         case type do
           :intent_proposed -> BotArmyGtd.Gossip.handle_intent_proposed(decoded)
           :social_invite -> BotArmyGtd.Gossip.handle_social_invite(decoded)
+          :poll_broadcast -> BotArmyGtd.Gossip.handle_poll_broadcast(decoded)
         end
 
       {:error, reason} ->
@@ -829,6 +971,16 @@ defmodule BotArmyGtd.NATS.Consumer do
     end
   end
 
+  defp decode_body(body) when is_binary(body) do
+    case Jason.decode(body) do
+      {:ok, params} -> params
+      {:error, _} -> %{}
+    end
+  end
+
+  defp decode_body(body) when is_map(body), do: body
+  defp decode_body(_), do: %{}
+
   @impl true
   def handle_info({:nats, :disconnected}, state) do
     Logger.warning("Disconnected from NATS, will attempt to reconnect")
@@ -852,6 +1004,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   def handle_info(:registry_heartbeat, state) do
     if length(state.subscriptions) > 0 do
       BotArmyRuntime.Registry.register("gtd", @subjects, @version)
+      BotArmyGtd.Gossip.maybe_vote_on_heartbeat()
       Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
     end
 
