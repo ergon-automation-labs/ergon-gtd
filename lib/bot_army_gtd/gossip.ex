@@ -165,11 +165,11 @@ defmodule BotArmyGtd.Gossip do
       "tenant_id" => tenant_id
     }
 
-    case BotArmyRuntime.NATS.Publisher.request("gtd.poll.vote.submit", payload, timeout_ms: 5_000) do
-      {:ok, reply} ->
-        Logger.info(
-          "[GTD Gossip] submitted GTD poll vote poll_id=#{poll_id} reply=#{inspect(reply)}"
-        )
+    # Call handler directly — GTD bot serves gtd.poll.vote.submit,
+    # so NATS request/reply would deadlock (GenServer calling itself).
+    case BotArmyGtd.Handlers.PollVoteHandler.handle_submit(payload) do
+      {:ok, result} ->
+        Logger.info("[GTD Gossip] submitted GTD poll vote poll_id=#{poll_id}")
 
       {:error, reason} ->
         Logger.warning(
