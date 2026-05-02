@@ -31,6 +31,7 @@ defmodule BotArmyGtd.Handlers.PollVoteHandler do
         Enum.map(allocations, fn alloc ->
           payload = %{
             "poll_id" => poll_id,
+            "tenant_id" => tenant_id,
             "voter_type" => voter_type,
             "voter_id" => voter_id,
             "item_type" => Map.get(alloc, "item_type"),
@@ -98,8 +99,13 @@ defmodule BotArmyGtd.Handlers.PollVoteHandler do
     Enum.all?(allocations, fn alloc ->
       item_type = Map.get(alloc, "item_type")
       item_id = Map.get(alloc, "item_id")
-      type_list = Map.get(snapshot, item_type, [])
-      item_id in type_list
+      type_list = Map.get(snapshot, item_type)
+
+      if is_list(type_list) do
+        to_string(item_id) in Enum.map(type_list, &to_string/1)
+      else
+        true
+      end
     end)
     |> if(do: :ok, else: {:error, :item_not_in_snapshot})
   end

@@ -52,6 +52,7 @@ defmodule BotArmyGtd.PollVoteStore do
   @impl true
   def handle_call({:submit, payload}, _from, state) do
     poll_id = Map.get(payload, "poll_id")
+    tenant_id = Map.get(payload, "tenant_id")
     voter_type = Map.get(payload, "voter_type")
     voter_id = Map.get(payload, "voter_id")
     item_type = Map.get(payload, "item_type")
@@ -63,6 +64,7 @@ defmodule BotArmyGtd.PollVoteStore do
         %BotArmyGtd.Schemas.PollVote{id: Ecto.UUID.generate()},
         %{
           "poll_id" => poll_id,
+          "tenant_id" => tenant_id,
           "voter_type" => voter_type,
           "voter_id" => voter_id,
           "item_type" => item_type,
@@ -87,7 +89,7 @@ defmodule BotArmyGtd.PollVoteStore do
       state
       |> Map.values()
       |> Enum.filter(fn vote ->
-        vote["poll_id"] == poll_id
+        vote["tenant_id"] == tenant_id and vote["poll_id"] == poll_id
       end)
 
     {:reply, {:ok, votes}, state}
@@ -99,7 +101,8 @@ defmodule BotArmyGtd.PollVoteStore do
       state
       |> Map.values()
       |> Enum.filter(fn vote ->
-        vote["poll_id"] == poll_id and
+        vote["tenant_id"] == tenant_id and
+          vote["poll_id"] == poll_id and
           vote["voter_type"] == voter_type and
           vote["voter_id"] == voter_id
       end)
@@ -113,7 +116,7 @@ defmodule BotArmyGtd.PollVoteStore do
     totals =
       state
       |> Map.values()
-      |> Enum.filter(fn vote -> vote["poll_id"] == poll_id end)
+      |> Enum.filter(fn vote -> vote["tenant_id"] == tenant_id and vote["poll_id"] == poll_id end)
       |> Enum.group_by(fn vote -> {vote["item_type"], vote["item_id"]} end)
       |> Enum.map(fn {{item_type, item_id}, votes} ->
         %{
@@ -142,13 +145,14 @@ defmodule BotArmyGtd.PollVoteStore do
     %{
       "id" => to_string(vote.id),
       "poll_id" => to_string(vote.poll_id),
+      "tenant_id" => to_string(vote.tenant_id),
       "voter_type" => vote.voter_type,
       "voter_id" => vote.voter_id,
       "item_type" => vote.item_type,
       "item_id" => to_string(vote.item_id),
       "votes" => vote.votes,
-      "inserted_at" => vote.inserted_at && DateTime.to_iso8601(vote.inserted_at),
-      "updated_at" => vote.updated_at && DateTime.to_iso8601(vote.updated_at)
+      "inserted_at" => vote.inserted_at && to_iso8601(vote.inserted_at),
+      "updated_at" => vote.updated_at && to_iso8601(vote.updated_at)
     }
   end
 
@@ -163,4 +167,7 @@ defmodule BotArmyGtd.PollVoteStore do
       String.replace(acc, "%{#{key}}", to_string(value))
     end)
   end
+
+  defp to_iso8601(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp to_iso8601(%NaiveDateTime{} = ndt), do: NaiveDateTime.to_iso8601(ndt)
 end

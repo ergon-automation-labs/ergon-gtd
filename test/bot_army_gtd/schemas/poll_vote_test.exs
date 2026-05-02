@@ -48,4 +48,11 @@ defmodule BotArmyGtd.Schemas.PollVoteTest do
     valid = PollVote.changeset(%PollVote{}, Map.put(@valid_attrs, "votes", 3))
     assert valid.valid?
   end
+
+  test "tenant_id is included in changeset" do
+    attrs = Map.put(@valid_attrs, "tenant_id", Ecto.UUID.generate())
+    changeset = PollVote.changeset(%PollVote{}, attrs)
+    assert changeset.valid?
+    assert Map.get(changeset.changes, :tenant_id)
+  end
 end

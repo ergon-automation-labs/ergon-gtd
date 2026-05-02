@@ -11,6 +11,7 @@ defmodule BotArmyGtd.Schemas.PollVote do
     field(:item_type, :string)
     field(:item_id, Ecto.UUID)
     field(:votes, :integer, default: 1)
+    field(:tenant_id, Ecto.UUID)
 
     belongs_to(:poll_round, BotArmyGtd.Schemas.PollRound, foreign_key: :poll_id)
 
@@ -19,7 +20,7 @@ defmodule BotArmyGtd.Schemas.PollVote do
 
   def changeset(poll_vote, attrs) do
     poll_vote
-    |> cast(attrs, [:poll_id, :voter_type, :voter_id, :item_type, :item_id, :votes])
+    |> cast(attrs, [:poll_id, :voter_type, :voter_id, :item_type, :item_id, :votes, :tenant_id])
     |> validate_required([:poll_id, :voter_type, :voter_id, :item_type, :item_id, :votes])
     |> validate_inclusion(:voter_type, ["bot", "human"])
     |> validate_inclusion(:item_type, ["task", "project", "goal"])
