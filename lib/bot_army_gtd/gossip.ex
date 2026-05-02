@@ -214,7 +214,7 @@ defmodule BotArmyGtd.Gossip do
 
   defp active_task_count do
     task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
-    tenant_id = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+    tenant_id = BotArmyRuntime.Tenant.default_tenant_id()
 
     case task_store.list_prioritized(tenant_id, %{"status" => "active"}) do
       {:ok, tasks} when is_list(tasks) -> length(tasks)
@@ -224,7 +224,7 @@ defmodule BotArmyGtd.Gossip do
 
   defp top_task_ids(limit) do
     task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
-    tenant_id = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+    tenant_id = BotArmyRuntime.Tenant.default_tenant_id()
 
     case task_store.list_prioritized(tenant_id, %{"status" => "active"}) do
       {:ok, tasks} ->

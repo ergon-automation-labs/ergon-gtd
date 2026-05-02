@@ -14,7 +14,7 @@ defmodule BotArmyGtd.Handlers.PollVoteHandler do
 
     tenant_id =
       params["tenant_id"] || message["tenant_id"] ||
-        Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+        BotArmyRuntime.Tenant.default_tenant_id()
 
     poll_id = params["poll_id"]
     voter_type = params["voter_type"]

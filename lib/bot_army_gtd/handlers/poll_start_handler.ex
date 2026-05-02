@@ -10,7 +10,7 @@ defmodule BotArmyGtd.Handlers.PollStartHandler do
 
     tenant_id =
       params["tenant_id"] || message["tenant_id"] ||
-        Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+        BotArmyRuntime.Tenant.default_tenant_id()
 
     name = params["name"]
     snapshot = params["snapshot"]
