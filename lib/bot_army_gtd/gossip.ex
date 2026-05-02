@@ -8,6 +8,8 @@ defmodule BotArmyGtd.Gossip do
 
   require Logger
 
+  @table :gtd_gossip_poll_state
+
   def handle_intent_proposed(message) when is_map(message) do
     payload = Map.get(message, "payload", %{})
     intent_key = Map.get(payload, "intent_key", "")
@@ -63,6 +65,129 @@ defmodule BotArmyGtd.Gossip do
     BotArmyRuntime.NATS.Publisher.publish("gossip.social.reply", reply)
   end
 
+  def handle_poll_broadcast(message) when is_map(message) do
+    ensure_table!()
+    payload = Map.get(message, "payload", %{})
+    poll_id = Map.get(payload, "poll_id")
+    topic = Map.get(payload, "topic", "unknown")
+    ttl_seconds = Map.get(payload, "ttl_seconds", 60)
+
+    if is_binary(poll_id) and poll_id != "" do
+      expires_at = System.system_time(:second) + ttl_seconds
+
+      :ets.insert(
+        @table,
+        {:active_poll, %{poll_id: poll_id, topic: topic, expires_at: expires_at}}
+      )
+
+      Logger.info("[GTD Gossip] tracked poll broadcast poll_id=#{poll_id} topic=#{topic}")
+    end
+  end
+
+  def maybe_vote_on_heartbeat do
+    ensure_table!()
+
+    case :ets.lookup(@table, :active_poll) do
+      [{:active_poll, %{poll_id: poll_id, topic: topic, expires_at: expires_at}}] ->
+        now = System.system_time(:second)
+        voted_key = {:voted, poll_id}
+
+        cond do
+          now > expires_at ->
+            :ets.delete(@table, :active_poll)
+            :ok
+
+          :ets.lookup(@table, voted_key) != [] ->
+            :ok
+
+          true ->
+            publish_poll_vote(poll_id, topic)
+            :ets.insert(@table, {voted_key, true})
+        end
+
+      _ ->
+        :ok
+    end
+
+    maybe_vote_on_gtd_poll()
+  end
+
+  def handle_gtd_poll_broadcast(message) when is_map(message) do
+    ensure_table!()
+    payload = Map.get(message, "payload", message)
+    poll_id = Map.get(payload, "poll_id")
+    choices = Map.get(payload, "choices", %{})
+    budget = Map.get(payload, "vote_budget_per_bot", 3)
+    tenant_id = Map.get(payload, "tenant_id", BotArmyRuntime.Tenant.default_tenant_id())
+
+    if is_binary(poll_id) and poll_id != "" do
+      :ets.insert(
+        @table,
+        {:active_gtd_poll,
+         %{poll_id: poll_id, choices: choices, budget: budget, tenant_id: tenant_id}}
+      )
+
+      Logger.info("[GTD Gossip] tracked GTD poll broadcast poll_id=#{poll_id}")
+    end
+  end
+
+  def maybe_vote_on_gtd_poll do
+    ensure_table!()
+
+    case :ets.lookup(@table, :active_gtd_poll) do
+      [
+        {:active_gtd_poll,
+         %{poll_id: poll_id, choices: choices, budget: budget, tenant_id: tenant_id}}
+      ] ->
+        voted_key = {:gtd_poll_voted, poll_id}
+
+        if :ets.lookup(@table, voted_key) == [] do
+          allocations = BotArmyRuntime.GtdPollAllocator.allocate(choices, :gtd, budget)
+
+          if allocations != [] do
+            submit_gtd_vote(poll_id, allocations, tenant_id)
+          end
+
+          :ets.insert(@table, {voted_key, true})
+        end
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp submit_gtd_vote(poll_id, allocations, tenant_id) do
+    payload = %{
+      "poll_id" => poll_id,
+      "voter_type" => "bot",
+      "voter_id" => "gtd",
+      "allocations" => allocations,
+      "tenant_id" => tenant_id
+    }
+
+    case BotArmyRuntime.NATS.Publisher.request("gtd.poll.vote.submit", payload, timeout_ms: 5_000) do
+      {:ok, reply} ->
+        Logger.info(
+          "[GTD Gossip] submitted GTD poll vote poll_id=#{poll_id} reply=#{inspect(reply)}"
+        )
+
+      {:error, reason} ->
+        Logger.warning(
+          "[GTD Gossip] GTD poll vote failed poll_id=#{poll_id} reason=#{inspect(reason)}"
+        )
+
+        if poll_closed_error?(reason) do
+          :ets.delete(@table, :active_gtd_poll)
+        end
+    end
+  end
+
+  defp poll_closed_error?(reason) when is_binary(reason),
+    do: String.contains?(reason, "poll_not_open")
+
+  defp poll_closed_error?(%{"error" => _}), do: true
+  defp poll_closed_error?(_), do: false
+
   defp stance_for(summary) do
     active_count = active_task_count()
     low_summary = String.downcase(summary || "")
@@ -110,5 +235,44 @@ defmodule BotArmyGtd.Gossip do
   defp social_accept? do
     active_count = active_task_count()
     active_count < 30 and :rand.uniform() < 0.4
+  end
+
+  defp publish_poll_vote(poll_id, topic) do
+    vote_message = %{
+      "event_id" => UUID.uuid4(),
+      "event" => "gossip.poll.vote",
+      "schema_version" => "1.0",
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => "bot_army_gtd",
+      "tenant_id" => BotArmyRuntime.Tenant.default_tenant_id(),
+      "conversation_id" => poll_id,
+      "payload" => %{
+        "poll_id" => poll_id,
+        "topic" => topic,
+        "voter" => "gtd_bot",
+        "vote" => vote_for(topic),
+        "reason" => "voted_on_heartbeat_wakeup"
+      }
+    }
+
+    BotArmyRuntime.NATS.Publisher.publish("gossip.poll.vote", vote_message)
+    Logger.info("[GTD Gossip] emitted poll vote poll_id=#{poll_id}")
+  end
+
+  defp vote_for(topic) do
+    active_count = active_task_count()
+
+    case {topic, active_count} do
+      {"priorities", count} when count > 20 -> "downvote"
+      {"focus", count} when count > 15 -> "downvote"
+      _ -> "upvote"
+    end
+  end
+
+  defp ensure_table! do
+    case :ets.whereis(@table) do
+      :undefined -> :ets.new(@table, [:named_table, :set, :public, read_concurrency: true])
+      _ -> :ok
+    end
   end
 end

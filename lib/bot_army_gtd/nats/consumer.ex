@@ -152,6 +152,11 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "gossip.poll.broadcast",
       type: :subscribe,
       description: "Army general poll broadcast messages"
+    },
+    %{
+      subject: "synapse.army_general.poll.broadcast",
+      type: :subscribe,
+      description: "GTD poll broadcast from PollOrchestrator"
     }
   ]
 
@@ -315,7 +320,8 @@ defmodule BotArmyGtd.NATS.Consumer do
               "gtd.poll.start",
               "gtd.poll.vote.submit",
               "gtd.poll.get",
-              "gtd.poll.close"
+              "gtd.poll.close",
+              "synapse.army_general.poll.broadcast"
             ]
             |> Enum.map(fn subject ->
               case Gnat.sub(conn, self(), subject) do
@@ -705,6 +711,9 @@ defmodule BotArmyGtd.NATS.Consumer do
         "gossip.poll.broadcast" ->
           handle_gossip_message(msg, :poll_broadcast)
 
+        "synapse.army_general.poll.broadcast" ->
+          handle_gtd_poll_broadcast(msg)
+
         _ ->
           Logger.debug("Received NATS message on subject: #{topic}")
 
@@ -732,6 +741,16 @@ defmodule BotArmyGtd.NATS.Consumer do
 
       {:error, reason} ->
         Logger.warning("Failed to decode gossip message from #{msg.topic}: #{inspect(reason)}")
+    end
+  end
+
+  defp handle_gtd_poll_broadcast(msg) do
+    case Jason.decode(msg.body) do
+      {:ok, decoded} ->
+        BotArmyGtd.Gossip.handle_gtd_poll_broadcast(decoded)
+
+      {:error, reason} ->
+        Logger.warning("Failed to decode GTD poll broadcast: #{inspect(reason)}")
     end
   end
 
