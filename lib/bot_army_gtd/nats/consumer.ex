@@ -163,7 +163,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   # API
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__, debug: [:trace])
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @doc """
