@@ -9,7 +9,7 @@ defmodule BotArmyGtd.Schemas.PollVote do
     field(:voter_type, :string)
     field(:voter_id, :string)
     field(:item_type, :string)
-    field(:item_id, Ecto.UUID)
+    field(:item_id, :string)
     field(:votes, :integer, default: 1)
     field(:tenant_id, Ecto.UUID)
 
