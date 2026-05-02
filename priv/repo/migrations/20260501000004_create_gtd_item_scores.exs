@@ -8,7 +8,7 @@ defmodule BotArmyGtd.Repo.Migrations.CreateGtdItemScores do
       add(:item_id, :uuid, null: false)
       add(:why_next_score, :float, default: 0.0, null: false)
       add(:why_next_reason, :string)
-      add(:top_evidence, :map, default: [])
+      add(:top_evidence, :map, default: "{}")
       add(:score_version, :string, default: "v1", null: false)
       add(:tenant_id, :uuid, null: false)
 
