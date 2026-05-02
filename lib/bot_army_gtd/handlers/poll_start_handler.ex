@@ -24,7 +24,9 @@ defmodule BotArmyGtd.Handlers.PollStartHandler do
         "snapshot" => snapshot,
         "vote_budget_per_bot" => vote_budget,
         "tenant_id" => tenant_id,
-        "user_id" => Map.get(params, "user_id") || Map.get(message, "user_id"),
+        "user_id" =>
+          Map.get(params, "user_id") || Map.get(message, "user_id") ||
+            BotArmyCore.Tenant.default_user_id(),
         "closes_at" => Map.get(params, "closes_at") || Map.get(message, "closes_at")
       }
 
