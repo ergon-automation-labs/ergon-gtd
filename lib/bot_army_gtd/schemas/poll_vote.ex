@@ -23,7 +23,7 @@ defmodule BotArmyGtd.Schemas.PollVote do
     |> cast(attrs, [:poll_id, :voter_type, :voter_id, :item_type, :item_id, :votes, :tenant_id])
     |> validate_required([:poll_id, :voter_type, :voter_id, :item_type, :item_id, :votes])
     |> validate_inclusion(:voter_type, ["bot", "human"])
-    |> validate_inclusion(:item_type, ["task", "project", "goal"])
+    |> validate_inclusion(:item_type, ["task", "project", "goal", "theme", "vibe", "mechanic"])
     |> validate_number(:votes, greater_than: 0)
     |> unique_constraint([:poll_id, :voter_type, :voter_id, :item_type, :item_id],
       name: :poll_votes_unique_allocation
