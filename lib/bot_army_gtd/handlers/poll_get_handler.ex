@@ -19,8 +19,9 @@ defmodule BotArmyGtd.Handlers.PollGetHandler do
     poll_id = params["poll_id"]
 
     with {:ok, poll} <- get_poll(tenant_id, poll_id),
-         {:ok, vote_totals} <- poll_vote_store().vote_totals_by_poll(tenant_id, poll_id),
-         {:ok, all_votes} <- poll_vote_store().list_by_poll(tenant_id, poll_id) do
+         poll_tenant_id <- poll["tenant_id"] || tenant_id,
+         {:ok, vote_totals} <- poll_vote_store().vote_totals_by_poll(poll_tenant_id, poll_id),
+         {:ok, all_votes} <- poll_vote_store().list_by_poll(poll_tenant_id, poll_id) do
       voters =
         all_votes
         |> Enum.map(fn v -> {v["voter_type"], v["voter_id"]} end)
