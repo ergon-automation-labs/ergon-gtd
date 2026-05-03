@@ -1,6 +1,6 @@
 SCRIPTS_DIRECTORY ?= $(abspath $(CURDIR)/../scripts)
 
-.PHONY: setup help deps test test-handlers test-stores test-nats test-integration test-full credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db logs
+.PHONY: setup help deps test test-handlers test-stores test-nats test-integration test-full credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db logs push-and-publish
 
 help:
 	@echo "BotArmyGtd - GTD Bot"
@@ -23,12 +23,13 @@ help:
 	@echo "Operations (deployed server logs):"
 	@echo "  make logs            - Tail gtd_bot log with grc (brew install grc; make -C .. install-grc)"
 	@echo ""
-	@echo "Release commands (normally automatic via git hook):"
-	@echo "  make release         - Build OTP release locally (manual, if needed)"
-	@echo "  make publish-release - Build, package, and publish to GitHub (manual, if needed)"
+	@echo "Release commands:"
+	@echo "  make release         - Build OTP release locally"
+	@echo "  make publish-release - Build, package, and publish to GitHub"
 	@echo ""
 	@echo "Normal workflow:"
-	@echo "  git push             - Pre-push hook validates, builds, and publishes automatically"
+	@echo "  git push             - Fast compile+test validation"
+	@echo "  make push-and-publish - Push then publish release asset"
 	@echo ""
 
 setup: init deps setup-hooks setup-db
@@ -141,5 +142,8 @@ publish-release: release
 	echo ""
 
 ## Tail production log with grc (paths: $(SCRIPTS_DIRECTORY)/tail_bot_log.sh)
+push-and-publish:
+	@git push && $(MAKE) publish-release
+
 logs:
 	@$(SCRIPTS_DIRECTORY)/tail_bot_log.sh
