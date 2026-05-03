@@ -30,6 +30,7 @@ defmodule BotArmyGtd.PulsePublisher do
 
   # 5 minutes
   @publish_interval_ms 30 * 60 * 1000
+  @health_interval_ms 30 * 1000
   @server __MODULE__
   @source "bot_army_gtd"
   @schema_version "1.0"
@@ -42,7 +43,26 @@ defmodule BotArmyGtd.PulsePublisher do
   def init(_opts) do
     Logger.info("[PulsePublisher] Starting GTD pulse publisher")
     Process.send_after(self(), :publish_pulse, 5000)
+    Process.send_after(self(), :publish_health, 2_000)
     {:ok, %{sequence: 0}}
+  end
+
+  @impl true
+  def handle_info(:publish_health, state) do
+    tenant_id =
+      Application.get_env(:bot_army_gtd, :default_tenant_id) ||
+        BotArmyRuntime.Tenant.default_tenant_id()
+
+    BotArmyRuntime.SynapseHealth.publish(
+      source: @source,
+      service: "gtd",
+      status: "healthy",
+      tenant_id: tenant_id,
+      sequence: state.sequence
+    )
+
+    Process.send_after(self(), :publish_health, @health_interval_ms)
+    {:noreply, state}
   end
 
   @impl true
