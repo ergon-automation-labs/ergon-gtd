@@ -119,22 +119,27 @@ publish-release: release
 	@echo "==============================================="
 	@echo ""
 
-	# Get version from release metadata
-	VERSION=$$(cat _build/prod/rel/gtd_bot/releases/RELEASES | tail -1 | cut -d' ' -f2); \
+	@set -e; \
+	VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
+	if [ -z "$$VERSION" ]; then \
+		echo "Failed to resolve version from mix.exs"; \
+		exit 1; \
+	fi; \
+	TARBALL=gtd_bot-$$VERSION.tar.gz; \
 	echo "Version: $$VERSION"; \
-	\
-	# Create tarball
 	echo "Creating release tarball..."; \
-	tar -czf gtd_bot-$$VERSION.tar.gz -C _build/prod/rel gtd_bot/; \
-	echo "✓ Tarball created: gtd_bot-$$VERSION.tar.gz"; \
+	tar -czf "$$TARBALL" -C _build/prod/rel gtd_bot/; \
+	echo "✓ Tarball created: $$TARBALL"; \
 	echo ""; \
-	\
-	# Create GitHub release
 	echo "Creating GitHub release v$$VERSION..."; \
-	gh release create v$$VERSION gtd_bot-$$VERSION.tar.gz \
-		--title "Release v$$VERSION" \
-		--notes "GTD Bot Elixir release v$$VERSION. Download and deploy with Jenkins." \
-		--draft=false; \
+	if gh release view "v$$VERSION" >/dev/null 2>&1; then \
+		gh release upload "v$$VERSION" "$$TARBALL" --clobber; \
+	else \
+		gh release create "v$$VERSION" "$$TARBALL" \
+			--title "Release v$$VERSION" \
+			--notes "GTD Bot Elixir release v$$VERSION. Download and deploy with Jenkins." \
+			--draft=false; \
+	fi; \
 	echo "✓ Release published to GitHub"; \
 	echo ""; \
 	echo "Next steps:"; \
