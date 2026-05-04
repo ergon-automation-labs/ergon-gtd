@@ -31,6 +31,7 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_review_scheduler()
       |> maybe_add_army_context_consumer()
       |> maybe_add_pulse_publisher()
+      |> maybe_add_intent_evaluator()
 
     children = base_children ++ maybe_add_consumer([]) ++ maybe_add_health_responder([])
 
@@ -92,5 +93,9 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_pulse_publisher(children) do
     if @env == :test, do: children, else: [{BotArmyGtd.PulsePublisher, []} | children]
+  end
+
+  defp maybe_add_intent_evaluator(children) do
+    if @env == :test, do: children, else: [{BotArmyGtd.IntentEvaluator, []} | children]
   end
 end

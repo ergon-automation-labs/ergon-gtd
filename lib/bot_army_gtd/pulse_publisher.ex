@@ -71,7 +71,11 @@ defmodule BotArmyGtd.PulsePublisher do
 
     Task.start(fn ->
       try do
-        publish_pulse(state.sequence)
+        pulse = publish_pulse(state.sequence)
+
+        if pulse do
+          BotArmyGtd.IntentEvaluator.record_observations(pulse)
+        end
       rescue
         e ->
           Logger.error("[PulsePublisher] Error publishing pulse: #{inspect(e)}")
@@ -90,9 +94,11 @@ defmodule BotArmyGtd.PulsePublisher do
          {:ok, projects} <- ProjectStore.list(default_tenant) do
       pulse = build_pulse(tasks, projects, default_tenant)
       publish_to_nats(pulse, base_sequence)
+      pulse
     else
       {:error, reason} ->
         Logger.warning("[PulsePublisher] Failed to build pulse: #{inspect(reason)}")
+        nil
     end
   end
 

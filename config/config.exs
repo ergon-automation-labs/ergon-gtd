@@ -20,7 +20,15 @@ config :bot_army_gtd, ecto_repos: [BotArmyGtd.Repo]
 # ReviewScheduler: Periodic discovery of decompositions due for review
 config :bot_army_gtd, BotArmyGtd.ReviewScheduler,
   enabled: true,
-  interval_seconds: 300  # Every 5 minutes
+  # Every 5 minutes
+  interval_seconds: 300
+
+# Intent thresholds for autonomous heartbeat decisions
+config :bot_army_gtd, :intent_thresholds, %{
+  stale_task_count: %{min: 3, weight: 0.6},
+  idle_minutes: %{min: 30, weight: 0.3},
+  random_threshold: 0.5
+}
 
 # Database configuration — defaults only, overridden by config/runtime.exs at startup
 config :bot_army_gtd, BotArmyGtd.Repo,

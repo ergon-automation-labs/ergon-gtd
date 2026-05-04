@@ -157,6 +157,16 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "synapse.army_general.poll.broadcast",
       type: :subscribe,
       description: "GTD poll broadcast from PollOrchestrator"
+    },
+    %{
+      subject: "bot_army.gtd.intent.nudge",
+      type: :subscribe,
+      description: "Intent: nudge user about stale tasks"
+    },
+    %{
+      subject: "bot_army.gtd.intent.remind",
+      type: :subscribe,
+      description: "Intent: remind user about deadlines/idle projects"
     }
   ]
 
