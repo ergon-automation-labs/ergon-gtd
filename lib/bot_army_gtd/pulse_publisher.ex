@@ -118,7 +118,7 @@ defmodule BotArmyGtd.PulsePublisher do
     health_signal =
       cond do
         total_active == 0 -> "nominal"
-        Enum.count(goal_observations) == 0 -> "nominal"
+        goal_observations == [] -> "nominal"
         true -> "nominal"
       end
 

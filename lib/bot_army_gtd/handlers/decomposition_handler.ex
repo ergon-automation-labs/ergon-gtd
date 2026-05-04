@@ -188,7 +188,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     with :ok <- require_field(payload, "chain_id"),
          :ok <- require_field(payload, "steps") do
       case payload do
-        %{"steps" => steps} when is_list(steps) and length(steps) > 0 -> :ok
+        %{"steps" => steps} when is_list(steps) and steps != [] -> :ok
         _ -> {:error, :steps_invalid}
       end
     end

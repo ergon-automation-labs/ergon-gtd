@@ -39,6 +39,9 @@ config :bot_army_gtd, BotArmyGtd.Repo,
   password: "postgres",
   pool_size: 10
 
+# Logger metadata keys used by IntentEvaluator and other modules
+config :logger, :default_formatter, metadata: [:action, :score, :reason]
+
 # Import environment-specific config
 if File.exists?("config/#{Mix.env()}.exs") do
   import_config "#{Mix.env()}.exs"

@@ -22,7 +22,7 @@ defmodule BotArmyGtd.IntentEvaluatorTest do
       observations = IntentEvaluator.extract_observations(pulse)
 
       stale_entries = Enum.filter(observations, &(&1.type == :stale_task_count))
-      assert length(stale_entries) >= 1
+      assert stale_entries != []
 
       total_value =
         Enum.filter(stale_entries, &(Map.get(&1.metadata, :source) == "pulse"))

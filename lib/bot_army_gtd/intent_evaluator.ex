@@ -109,9 +109,14 @@ defmodule BotArmyGtd.IntentEvaluator do
                threshold_result: details,
                context_snapshot: %{entry_count: context.entry_count}
              }) do
-          {:proceed, intent_id} ->
-            Logger.info("[IntentEvaluator] Proceeding with #{action} (intent_id=#{intent_id})")
-            [{:acted, action, intent_id, details}]
+          {:proceed, intent_id, endorsements} ->
+            endorsers = Enum.map(endorsements, fn {bot, _} -> bot end)
+
+            Logger.info(
+              "[IntentEvaluator] Proceeding with #{action} (intent_id=#{intent_id}, endorsed_by=#{inspect(endorsers)})"
+            )
+
+            [{:acted, action, intent_id, details, endorsements}]
 
           {:vetoed, vetoing_bot, reason} ->
             Logger.info("[IntentEvaluator] #{action} vetoed by #{vetoing_bot}: #{reason}")
