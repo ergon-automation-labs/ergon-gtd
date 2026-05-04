@@ -5,6 +5,11 @@ defmodule BotArmyGtd.IntentEvaluator do
   Called from PulsePublisher after each pulse tick. Reads accumulated context,
   applies threshold rules, and publishes intents when conditions are met.
 
+  When an intent is deferred (threshold not met but score is close), starts
+  an LLM conversation to compose a softer, context-aware message instead of
+  doing nothing. The LLM-composed message is delivered via the notification
+  router at "ambient" urgency.
+
   Current intents:
   - `nudge` — suggest user action on stale tasks
   - `remind` — remind about upcoming deadlines or long-idle projects
@@ -22,6 +27,8 @@ defmodule BotArmyGtd.IntentEvaluator do
   require Logger
 
   alias BotArmyRuntime.Intent.AccumulatedContext
+  alias BotArmyRuntime.Intent.DeferHandler
+  alias BotArmyRuntime.Intent.DeferRateLimiter
   alias BotArmyRuntime.Intent.Publisher
   alias BotArmyRuntime.Intent.ThresholdModel
 
@@ -61,7 +68,7 @@ defmodule BotArmyGtd.IntentEvaluator do
   @impl true
   def init(_opts) do
     Process.send_after(self(), :evaluate, @evaluate_interval_ms)
-    {:ok, %{last_evaluation: nil}}
+    {:ok, %{last_evaluation: nil, pending_defers: %{}}}
   end
 
   @impl true
@@ -80,8 +87,39 @@ defmodule BotArmyGtd.IntentEvaluator do
   @impl true
   def handle_info(:evaluate, state) do
     results = do_evaluate()
+    new_pending = process_defer_results(results, state.pending_defers)
     Process.send_after(self(), :evaluate, @evaluate_interval_ms)
-    {:noreply, %{state | last_evaluation: DateTime.utc_now()}}
+    {:noreply, %{state | last_evaluation: DateTime.utc_now(), pending_defers: new_pending}}
+  end
+
+  @impl true
+  def handle_info({:conv_reply, conversation_id, body}, state) do
+    case Map.get(state.pending_defers, conversation_id) do
+      nil ->
+        Logger.debug(
+          "[IntentEvaluator] Ignoring conv_reply for unknown conversation #{String.slice(conversation_id, 0..7)}"
+        )
+
+        {:noreply, state}
+
+      {action, details, config} ->
+        DeferHandler.process_reply(@bot_name, conversation_id, body, details, config)
+
+        {:noreply, %{state | pending_defers: Map.delete(state.pending_defers, conversation_id)}}
+    end
+  end
+
+  @impl true
+  def handle_info({:conv_timeout, conversation_id}, state) do
+    if Map.has_key?(state.pending_defers, conversation_id) do
+      Logger.debug(
+        "[IntentEvaluator] Defer conversation #{String.slice(conversation_id, 0..7)} timed out"
+      )
+
+      {:noreply, %{state | pending_defers: Map.delete(state.pending_defers, conversation_id)}}
+    else
+      {:noreply, state}
+    end
   end
 
   # ───────────────────────────────────────────────────────────────────────────
@@ -132,7 +170,7 @@ defmodule BotArmyGtd.IntentEvaluator do
           "[IntentEvaluator] Deferring #{action} (score=#{details.score}, reason=#{details.reason})"
         )
 
-        []
+        [{:deferred, action, details, context}]
 
       {:ok, :abort, details} ->
         Logger.debug(
@@ -147,6 +185,107 @@ defmodule BotArmyGtd.IntentEvaluator do
       {:error, reason} ->
         Logger.warning("[IntentEvaluator] Error evaluating #{action}: #{inspect(reason)}")
         []
+    end
+  end
+
+  defp process_defer_results(results, pending_defers) do
+    Enum.reduce(results, pending_defers, fn
+      {:deferred, action, details, context}, acc ->
+        config = defer_config(action)
+
+        if config do
+          case DeferHandler.handle_defer(@bot_name, action, details, context, config) do
+            {:ok, conversation_id} ->
+              Map.put(acc, conversation_id, {action, details, config})
+
+            _ ->
+              acc
+          end
+        else
+          acc
+        end
+
+      _result, acc ->
+        acc
+    end)
+  end
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Defer Configuration
+  # ───────────────────────────────────────────────────────────────────────────
+
+  defp defer_config("nudge") do
+    [
+      prompt_builder: &__MODULE__.build_nudge_defer_prompt/3,
+      delivery_fn: &__MODULE__.deliver_defer_message/4,
+      llm_intent: "classify",
+      timeout_ms: 15_000
+    ]
+  end
+
+  defp defer_config("remind") do
+    [
+      prompt_builder: &__MODULE__.build_remind_defer_prompt/3,
+      delivery_fn: &__MODULE__.deliver_defer_message/4,
+      llm_intent: "classify",
+      timeout_ms: 15_000
+    ]
+  end
+
+  defp defer_config(_), do: nil
+
+  @doc false
+  def build_nudge_defer_prompt(action, details, context) do
+    stale_count = get_in(context, [:summary, :stale_task_count]) || 0
+
+    %{
+      "intent" => "classify",
+      "text" =>
+        "The user has #{stale_count} stale tasks but conditions don't warrant a full nudge " <>
+          "(score #{Float.round(details.score, 2)}, reason: #{details.reason}). " <>
+          "Write a one-sentence gentle reminder about their stale tasks. " <>
+          "If not useful, respond: skip"
+    }
+  end
+
+  @doc false
+  def build_remind_defer_prompt(action, details, context) do
+    idle_minutes = get_in(context, [:summary, :idle_minutes]) || 0
+
+    %{
+      "intent" => "classify",
+      "text" =>
+        "The user has been idle for #{div(trunc(idle_minutes), 60)} hours but " <>
+          "conditions don't warrant a full reminder (score #{Float.round(details.score, 2)}, " <>
+          "reason: #{details.reason}). " <>
+          "Write a one-sentence soft prompt about their projects. " <>
+          "If not useful, respond: skip"
+    }
+  end
+
+  @doc false
+  def deliver_defer_message(bot_name, action, llm_response, details) do
+    message =
+      case llm_response do
+        %{"response" => "skip"} -> nil
+        %{"response" => text} when is_binary(text) -> String.trim(text)
+        _ -> nil
+      end
+
+    if message do
+      BotArmyRuntime.NATS.Publisher.publish("notification.route.request", %{
+        "event_id" => UUID.uuid4(),
+        "triggered_by" => bot_name,
+        "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+        "category" => "task",
+        "urgency" => "ambient",
+        "title" => "#{String.capitalize(action)} suggestion",
+        "body" => message
+      })
+
+      :ok
+    else
+      :ok
     end
   end
 
