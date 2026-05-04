@@ -84,7 +84,7 @@ test-full:
 	$(MIX) test --include integration --include nats_live --trace
 
 credo:
-	$(MIX) credo
+	$(MIX) credo --min-priority normal
 
 dialyzer: deps
 	$(MIX) dialyzer
