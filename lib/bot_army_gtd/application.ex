@@ -32,6 +32,7 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_army_context_consumer()
       |> maybe_add_pulse_publisher()
       |> maybe_add_intent_evaluator()
+      |> maybe_add_veto_listener()
 
     children = base_children ++ maybe_add_consumer([]) ++ maybe_add_health_responder([])
 
@@ -97,5 +98,29 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_intent_evaluator(children) do
     if @env == :test, do: children, else: [{BotArmyGtd.IntentEvaluator, []} | children]
+  end
+
+  defp maybe_add_veto_listener(children) do
+    if @env == :test do
+      children
+    else
+      veto_rules = [
+        [
+          bot: "fitness",
+          action: "suggest_workout",
+          custom: &BotArmyGtd.VetoRules.veto_fitness_suggest_when_stale_tasks/1,
+          reason: "user has 5+ stale tasks, focus on clearing backlog first"
+        ],
+        [
+          bot: "chore",
+          action: "remind_overdue",
+          custom: &BotArmyGtd.VetoRules.veto_chore_remind_when_no_tasks/1,
+          reason: "user has no active task context, chore reminder won't land well"
+        ]
+      ]
+
+      child = {BotArmyRuntime.Intent.VetoListener, rules: veto_rules, bot_name: "gtd"}
+      [child | children]
+    end
   end
 end
