@@ -167,6 +167,11 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "bot_army.gtd.intent.remind",
       type: :subscribe,
       description: "Intent: remind user about deadlines/idle projects"
+    },
+    %{
+      subject: "gtd.army.opinion.vote",
+      type: :request_reply,
+      description: "Army opinion collect voter (persona-style choice)"
     }
   ]
 
@@ -331,7 +336,8 @@ defmodule BotArmyGtd.NATS.Consumer do
               "gtd.poll.vote.submit",
               "gtd.poll.get",
               "gtd.poll.close",
-              "synapse.army_general.poll.broadcast"
+              "synapse.army_general.poll.broadcast",
+              "gtd.army.opinion.vote"
             ]
             |> Enum.map(fn subject ->
               case Gnat.sub(conn, self(), subject) do
@@ -371,6 +377,24 @@ defmodule BotArmyGtd.NATS.Consumer do
   @impl true
   def handle_info(:connect_retry, state) do
     {:noreply, state, {:continue, :connect}}
+  end
+
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.army.opinion.vote", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span(
+      "gtd.army.opinion.vote",
+      Map.get(msg, :headers, []),
+      fn ->
+        resp = BotArmyRuntime.Intent.ArmyOpinionVote.build_reply(:gtd, body)
+        reply_traced(state.conn, reply_to, Jason.encode!(resp))
+      end
+    )
+
+    {:noreply, state}
   end
 
   @impl true
