@@ -44,7 +44,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     %{subject: "gtd.task.list", type: :request_reply, description: "List tasks"},
     %{subject: "gtd.task.get", type: :request_reply, description: "Get single task by id"},
     %{subject: "gtd.task.search", type: :request_reply, description: "Search tasks"},
-    %{subject: "gtd.task.complete", type: :subscribe, description: "Task completion events"},
+    %{subject: "gtd.task.complete", type: :request_reply, description: "Complete a task"},
     %{subject: "gtd.task.command.defer", type: :subscribe, description: "Defer task"},
     %{subject: "gtd.task.command.delete", type: :subscribe, description: "Delete task"},
     %{subject: "gtd.task.decompose", type: :subscribe, description: "Decompose task"},
@@ -727,6 +727,9 @@ defmodule BotArmyGtd.NATS.Consumer do
         "gtd.task.update" when is_binary(reply_to) and reply_to != "" ->
           handle_task_update_request(msg, reply_to, state)
 
+        "gtd.task.complete" when is_binary(reply_to) and reply_to != "" ->
+          handle_task_complete_request(msg, reply_to, state)
+
         "gtd.project.create" when is_binary(reply_to) and reply_to != "" ->
           handle_project_create_request(msg, reply_to, state)
 
@@ -823,6 +826,26 @@ defmodule BotArmyGtd.NATS.Consumer do
 
       {:error, reason} ->
         Logger.warning("Failed to decode task update message: #{inspect(reason)}")
+        error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
+        reply_traced(state.conn, reply_to, error_response)
+    end
+  end
+
+  defp handle_task_complete_request(msg, reply_to, state) do
+    case BotArmyCore.NATS.Decoder.decode(msg.body) do
+      {:ok, decoded_message} ->
+        case BotArmyGtd.Handlers.TaskHandler.handle_complete(decoded_message) do
+          :ok ->
+            response = BotArmyRuntime.NATS.Reply.ok(%{})
+            reply_traced(state.conn, reply_to, response)
+
+          {:error, reason} ->
+            error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :complete_failed)
+            reply_traced(state.conn, reply_to, error_response)
+        end
+
+      {:error, reason} ->
+        Logger.warning("Failed to decode task complete message: #{inspect(reason)}")
         error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
