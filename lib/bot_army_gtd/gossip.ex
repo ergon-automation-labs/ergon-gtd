@@ -16,7 +16,8 @@ defmodule BotArmyGtd.Gossip do
     summary = Map.get(payload, "summary", "")
     conversation_id = Map.get(message, "conversation_id", "")
 
-    {stance, reason, suggested_task_ids} = stance_for(summary)
+    active_count = active_task_count()
+    {stance, reason, suggested_task_ids} = llm_stance_or_fallback(summary, active_count)
 
     answer = %{
       "event_id" => UUID.uuid4(),
@@ -244,6 +245,9 @@ defmodule BotArmyGtd.Gossip do
   end
 
   defp publish_poll_vote(poll_id, topic) do
+    active_count = active_task_count()
+    vote = llm_vote_or_fallback(poll_id, topic, active_count)
+
     vote_message = %{
       "event_id" => UUID.uuid4(),
       "event" => "gossip.poll.vote",
@@ -256,13 +260,13 @@ defmodule BotArmyGtd.Gossip do
         "poll_id" => poll_id,
         "topic" => topic,
         "voter" => "gtd_bot",
-        "vote" => vote_for(topic),
-        "reason" => "voted_on_heartbeat_wakeup"
+        "vote" => vote,
+        "reason" => "heartbeat_deliberation"
       }
     }
 
     BotArmyRuntime.NATS.Publisher.publish("gossip.poll.vote", vote_message)
-    Logger.info("[GTD Gossip] emitted poll vote poll_id=#{poll_id}")
+    Logger.info("[GTD Gossip] emitted poll vote poll_id=#{poll_id} vote=#{vote}")
   end
 
   defp vote_for(topic) do
@@ -272,6 +276,87 @@ defmodule BotArmyGtd.Gossip do
       {"priorities", count} when count > 20 -> "downvote"
       {"focus", count} when count > 15 -> "downvote"
       _ -> "upvote"
+    end
+  end
+
+  defp llm_vote_or_fallback(_poll_id, topic, active_count) do
+    prompt = """
+    You are the GTD bot. A poll is active on topic "#{topic}".
+    You have #{active_count} active tasks.
+    What should you vote? Reply with JSON only: {"vote": "<option>", "reason": "<one sentence>"}
+    """
+
+    case call_llm_fast(prompt, 10_000) do
+      {:ok, text} ->
+        case Jason.decode(text) do
+          {:ok, %{"vote" => vote}} when is_binary(vote) -> vote
+          _ -> vote_for(topic)
+        end
+
+      _ ->
+        vote_for(topic)
+    end
+  end
+
+  defp llm_stance_or_fallback(summary, active_count) do
+    task =
+      Task.async(fn ->
+        prompt = """
+        You are the GTD bot. A bot proposes: "#{summary}".
+        You have #{active_count} active tasks.
+        Reply JSON only: {"stance": "safe_to_create|need_more_context|already_have_equivalent", "reason": "<one sentence>"}
+        """
+
+        call_llm_fast(prompt, 5_000)
+      end)
+
+    case Task.await(task, 5_500) do
+      {:ok, text} ->
+        case Jason.decode(text) do
+          {:ok, %{"stance" => s, "reason" => r}} when is_binary(s) and is_binary(r) ->
+            {s, r, []}
+
+          _ ->
+            {stance, reason, ids} = stance_for(summary)
+            {stance, reason, ids}
+        end
+
+      _ ->
+        {stance, reason, ids} = stance_for(summary)
+        {stance, reason, ids}
+    end
+  end
+
+  defp call_llm_fast(prompt, timeout_ms) do
+    try do
+      case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+        {:ok, conn} ->
+          request_body =
+            Jason.encode!(%{
+              "prompt" => prompt,
+              "model" => "fast",
+              "max_tokens" => 200
+            })
+
+          case Gnat.request(conn, "llm.prompt.submit", request_body, timeout_ms) do
+            {:ok, %{body: response_body}} ->
+              case Jason.decode(response_body) do
+                {:ok, %{"completion" => %{"text" => text}}} -> {:ok, text}
+                {:ok, %{"completion" => text}} when is_binary(text) -> {:ok, text}
+                _ -> :error
+              end
+
+            _ ->
+              :error
+          end
+
+        _ ->
+          :error
+      end
+    rescue
+      _ -> :error
+    catch
+      _ -> :error
     end
   end
 
