@@ -26,8 +26,6 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_inbox_item_store()
       |> maybe_add_decomposition_store()
       |> maybe_add_log_entry_store()
-      |> maybe_add_poll_round_store()
-      |> maybe_add_poll_vote_store()
       |> maybe_add_review_scheduler()
       |> maybe_add_army_context_consumer()
       |> maybe_add_pulse_publisher()
@@ -66,14 +64,6 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_review_scheduler(children) do
     if @env == :test, do: children, else: [{BotArmyGtd.ReviewScheduler, []} | children]
-  end
-
-  defp maybe_add_poll_round_store(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.PollRoundStore, []} | children]
-  end
-
-  defp maybe_add_poll_vote_store(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.PollVoteStore, []} | children]
   end
 
   defp maybe_add_consumer(children) do

@@ -129,26 +129,6 @@ defmodule BotArmyGtd.NATS.Consumer do
       description: "Get what's-next ranking snapshot"
     },
     %{
-      subject: "gtd.poll.start",
-      type: :request_reply,
-      description: "Start a new poll round"
-    },
-    %{
-      subject: "gtd.poll.vote.submit",
-      type: :request_reply,
-      description: "Submit vote allocations for a poll"
-    },
-    %{
-      subject: "gtd.poll.get",
-      type: :request_reply,
-      description: "Get poll status and results"
-    },
-    %{
-      subject: "gtd.poll.close",
-      type: :request_reply,
-      description: "Close a poll round and compute scores"
-    },
-    %{
       subject: "gossip.poll.broadcast",
       type: :subscribe,
       description: "Army general poll broadcast messages"
@@ -332,10 +312,6 @@ defmodule BotArmyGtd.NATS.Consumer do
               "gossip.social.invite",
               "gossip.poll.broadcast",
               "gtd.whats_next",
-              "gtd.poll.start",
-              "gtd.poll.vote.submit",
-              "gtd.poll.get",
-              "gtd.poll.close",
               "synapse.army_general.poll.broadcast",
               "gtd.army.opinion.vote"
             ]
@@ -605,88 +581,6 @@ defmodule BotArmyGtd.NATS.Consumer do
         case BotArmyGtd.Handlers.WhatsNextHandler.handle_request(params) do
           {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
           {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :whats_next_failed)
-        end
-
-      reply_traced(state.conn, reply_to, response)
-    end)
-
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:msg, %{topic: "gtd.poll.start", reply_to: reply_to, body: body} = msg}, state)
-      when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span("gtd.poll.start", Map.get(msg, :headers, []), fn ->
-      params = decode_body(body)
-
-      response =
-        case BotArmyGtd.Handlers.PollStartHandler.handle_create(params) do
-          {:ok, poll} -> BotArmyRuntime.NATS.Reply.ok(poll)
-          {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :poll_start_failed)
-        end
-
-      reply_traced(state.conn, reply_to, response)
-    end)
-
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info(
-        {:msg, %{topic: "gtd.poll.vote.submit", reply_to: reply_to, body: body} = msg},
-        state
-      )
-      when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span(
-      "gtd.poll.vote.submit",
-      Map.get(msg, :headers, []),
-      fn ->
-        params = decode_body(body)
-
-        response =
-          case BotArmyGtd.Handlers.PollVoteHandler.handle_submit(params) do
-            {:ok, result} ->
-              BotArmyRuntime.NATS.Reply.ok(result)
-
-            {:error, reason} ->
-              BotArmyRuntime.NATS.Reply.error(inspect(reason), :vote_submit_failed)
-          end
-
-        reply_traced(state.conn, reply_to, response)
-      end
-    )
-
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:msg, %{topic: "gtd.poll.get", reply_to: reply_to, body: body} = msg}, state)
-      when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span("gtd.poll.get", Map.get(msg, :headers, []), fn ->
-      params = decode_body(body)
-
-      response =
-        case BotArmyGtd.Handlers.PollGetHandler.handle_get(params) do
-          {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
-          {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :poll_get_failed)
-        end
-
-      reply_traced(state.conn, reply_to, response)
-    end)
-
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:msg, %{topic: "gtd.poll.close", reply_to: reply_to, body: body} = msg}, state)
-      when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span("gtd.poll.close", Map.get(msg, :headers, []), fn ->
-      params = decode_body(body)
-
-      response =
-        case BotArmyGtd.Handlers.PollCloseHandler.handle_close(params) do
-          {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
-          {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :poll_close_failed)
         end
 
       reply_traced(state.conn, reply_to, response)
