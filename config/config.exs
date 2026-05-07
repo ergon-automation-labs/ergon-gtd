@@ -40,7 +40,8 @@ config :bot_army_gtd, BotArmyGtd.Repo,
   pool_size: 10
 
 # Logger metadata keys used by IntentEvaluator and other modules
-config :logger, :default_formatter, metadata: [:action, :score, :reason]
+config :logger, :default_formatter,
+  metadata: [:action, :score, :reason, :item_type, :item_id, :error]
 
 # Import environment-specific config
 if File.exists?("config/#{Mix.env()}.exs") do
