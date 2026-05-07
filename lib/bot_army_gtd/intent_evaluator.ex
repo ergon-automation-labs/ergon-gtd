@@ -178,6 +178,8 @@ defmodule BotArmyGtd.IntentEvaluator do
           "[IntentEvaluator] Aborting #{action} (score=#{details.score}, reason=#{details.reason})"
         )
 
+        publish_aborted_event(@bot_name, action, details)
+
         []
 
       {:error, :disabled} ->
@@ -409,6 +411,28 @@ defmodule BotArmyGtd.IntentEvaluator do
       end) ++ observations
 
     observations
+  end
+
+  defp publish_aborted_event(bot_name, action, details) do
+    event = %{
+      "event_id" => UUID.uuid4(),
+      "event" => "events.bot_army.intent.aborted",
+      "schema_version" => "1.0",
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => "bot_army_gtd",
+      "source_node" => Atom.to_string(node()),
+      "payload" => %{
+        "bot_name" => bot_name,
+        "action" => action,
+        "score" => details.score,
+        "reason" => Atom.to_string(details.reason),
+        "aborted_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+      }
+    }
+
+    Task.start(fn ->
+      BotArmyRuntime.NATS.Publisher.publish("events.bot_army.intent.aborted", event)
+    end)
   end
 
   defp get_thresholds do

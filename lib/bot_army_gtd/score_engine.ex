@@ -25,7 +25,14 @@ defmodule BotArmyGtd.ScoreEngine do
       )
       |> BotArmyGtd.Repo.all()
     rescue
-      _ -> []
+      e ->
+        Logger.warning("[ScoreEngine] Failed to query signals",
+          item_type: item_type,
+          item_id: item_id,
+          error: inspect(e)
+        )
+
+        []
     end
   end
 
@@ -76,7 +83,13 @@ defmodule BotArmyGtd.ScoreEngine do
           |> BotArmyGtd.Repo.update()
       end
     rescue
-      e -> Logger.warning("Failed to upsert score: #{inspect(e)}")
+      e ->
+        Logger.warning("[ScoreEngine] Failed to upsert score",
+          item_type: item_type,
+          item_id: item_id,
+          score: score,
+          error: inspect(e)
+        )
     end
   end
 end
