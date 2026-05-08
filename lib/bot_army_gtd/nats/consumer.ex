@@ -162,6 +162,21 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "gtd.para.cleanup",
       type: :request_reply,
       description: "Sweep and archive stale PARA projects"
+    },
+    %{
+      subject: "gtd.review.weekly",
+      type: :request_reply,
+      description: "Generate weekly review summary"
+    },
+    %{
+      subject: "gtd.review.inbox_aging",
+      type: :request_reply,
+      description: "Find stale inbox items"
+    },
+    %{
+      subject: "gtd.review.coherence",
+      type: :request_reply,
+      description: "Check project-task coherence"
     }
   ]
 
@@ -325,7 +340,10 @@ defmodule BotArmyGtd.NATS.Consumer do
               "synapse.army_general.poll.broadcast",
               "gtd.army.opinion.vote",
               "gtd.para.backfill",
-              "gtd.para.cleanup"
+              "gtd.para.cleanup",
+              "gtd.review.weekly",
+              "gtd.review.inbox_aging",
+              "gtd.review.coherence"
             ]
             |> Enum.map(fn subject ->
               case Gnat.sub(conn, self(), subject) do
@@ -670,6 +688,102 @@ defmodule BotArmyGtd.NATS.Consumer do
   end
 
   @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.review.weekly", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span(
+      "gtd.review.weekly",
+      Map.get(msg, :headers, []),
+      fn ->
+        params = decode_body(body)
+
+        tenant_id =
+          params["tenant_id"] || Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+        window_days = params["window_days"]
+        opts = if window_days, do: [window_days: window_days], else: []
+
+        response =
+          case BotArmyGtd.ReviewEngine.weekly_review(tenant_id, opts) do
+            {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
+            {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :review_failed)
+          end
+
+        reply_traced(state.conn, reply_to, response)
+      end
+    )
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.review.inbox_aging", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span(
+      "gtd.review.inbox_aging",
+      Map.get(msg, :headers, []),
+      fn ->
+        params = decode_body(body)
+
+        tenant_id =
+          params["tenant_id"] || Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+        threshold = params["threshold_hours"]
+        opts = if threshold, do: [threshold_hours: threshold], else: []
+
+        response =
+          case BotArmyGtd.ReviewEngine.inbox_aging(tenant_id, opts) do
+            {:ok, result} ->
+              BotArmyRuntime.NATS.Reply.ok(result)
+
+            {:error, reason} ->
+              BotArmyRuntime.NATS.Reply.error(inspect(reason), :inbox_aging_failed)
+          end
+
+        reply_traced(state.conn, reply_to, response)
+      end
+    )
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.review.coherence", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span(
+      "gtd.review.coherence",
+      Map.get(msg, :headers, []),
+      fn ->
+        params = decode_body(body)
+
+        tenant_id =
+          params["tenant_id"] || Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+        response =
+          case BotArmyGtd.ReviewEngine.project_coherence(tenant_id) do
+            {:ok, result} ->
+              BotArmyRuntime.NATS.Reply.ok(result)
+
+            {:error, reason} ->
+              BotArmyRuntime.NATS.Reply.error(inspect(reason), :coherence_failed)
+          end
+
+        reply_traced(state.conn, reply_to, response)
+      end
+    )
+
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info({:msg, %{topic: "ops.deploy.complete", body: body} = msg}, state) do
     BotArmyRuntime.Tracing.with_consumer_span(
       "ops.deploy.complete",
@@ -941,6 +1055,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         "success" ->
           Logger.info("[DeployConsumer] Deploy succeeded for #{bot}, completing waiting task")
           complete_waiting_task(bot)
+          schedule_post_deploy_verification(bot, payload["version"])
 
         "failure" ->
           Logger.info("[DeployConsumer] Deploy failed for #{bot}, creating incident task")
@@ -1014,6 +1129,13 @@ defmodule BotArmyGtd.NATS.Consumer do
     end
   end
 
+  defp schedule_post_deploy_verification(bot, version) when is_binary(bot) do
+    # Give the bot 5 seconds to register with the registry after restart
+    Process.send_after(self(), {:verify_deploy, bot, version || "unknown"}, 5_000)
+  end
+
+  defp schedule_post_deploy_verification(_, _), do: :ok
+
   defp reply_traced(conn, reply_to, body) do
     if conn do
       headers = BotArmyRuntime.Tracing.inject_trace_context([])
@@ -1048,6 +1170,26 @@ defmodule BotArmyGtd.NATS.Consumer do
   def handle_info(:reconnect, state) do
     Logger.info("Attempting to reconnect to NATS")
     {:noreply, state, {:continue, :connect}}
+  end
+
+  @impl true
+  def handle_info({:verify_deploy, bot, version}, state) do
+    Task.start(fn ->
+      case BotArmyGtd.ReviewEngine.verify_deploy(bot, version) do
+        {:ok, %{"healthy" => true}} ->
+          Logger.info("[PostDeploy] ✅ #{bot} v#{version} verified healthy")
+
+        {:ok, result} ->
+          Logger.warning("[PostDeploy] ⚠️ #{bot} v#{version} verification: #{inspect(result)}")
+
+        _ ->
+          Logger.warning(
+            "[PostDeploy] #{bot} v#{version} verification returned unexpected result"
+          )
+      end
+    end)
+
+    {:noreply, state}
   end
 
   @impl true
