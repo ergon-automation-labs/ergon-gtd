@@ -142,4 +142,69 @@ defmodule BotArmyGtd.ParaExporterTest do
       assert length(result.planned) == 1
     end
   end
+
+  describe "sweep_stale/2" do
+    test "dry-run finds completed projects to archive" do
+      projects = [
+        %{"id" => "aaa", "name" => "Active Project", "status" => "active"},
+        %{"id" => "bbb", "name" => "Finished Work", "status" => "completed"},
+        %{"id" => "ccc", "name" => "Old Sprint", "status" => "done"},
+        %{"id" => "ddd", "name" => "Still Going", "status" => "active"}
+      ]
+
+      Mox.expect(BotArmyGtd.ProjectStoreMock, :list, fn _tenant_id ->
+        {:ok, projects}
+      end)
+
+      {:ok, result} = ParaExporter.sweep_stale("default", apply: false)
+
+      assert result.mode == "dry-run"
+      assert result.total_projects == 4
+      assert result.completed_count == 2
+      assert length(result.to_archive) == 2
+      assert result.archived == []
+
+      slugs = Enum.map(result.to_archive, & &1["slug"])
+      assert "finished_work" in slugs
+      assert "old_sprint" in slugs
+    end
+
+    test "skips already-archived slugs" do
+      projects = [
+        %{"id" => "aaa", "name" => "Done Project", "status" => "completed"},
+        %{"id" => "bbb", "name" => "Also Done", "status" => "completed"}
+      ]
+
+      Mox.expect(BotArmyGtd.ProjectStoreMock, :list, fn _tenant_id ->
+        {:ok, projects}
+      end)
+
+      {:ok, result} =
+        ParaExporter.sweep_stale("default",
+          existing_archive_slugs: ["done_project"],
+          apply: false
+        )
+
+      assert length(result.to_archive) == 1
+      assert hd(result.to_archive)["slug"] == "also_done"
+      assert result.already_archived == ["done_project"]
+    end
+
+    test "filters smoke tests from sweep" do
+      projects = [
+        %{"id" => "aaa", "name" => "Real Done", "status" => "completed"},
+        %{"id" => "bbb", "name" => "[SMOKE] Bridge test", "status" => "completed"},
+        %{"id" => "ccc", "name" => "smoke_test_123", "status" => "completed"}
+      ]
+
+      Mox.expect(BotArmyGtd.ProjectStoreMock, :list, fn _tenant_id ->
+        {:ok, projects}
+      end)
+
+      {:ok, result} = ParaExporter.sweep_stale("default", apply: false)
+
+      assert length(result.to_archive) == 1
+      assert hd(result.to_archive)["slug"] == "real_done"
+    end
+  end
 end

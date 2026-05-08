@@ -68,6 +68,10 @@ defmodule BotArmyGtd.Handlers.ProjectHandlerTest do
         "status" => "archived"
       }
 
+      expect(BotArmyGtd.ProjectStoreMock, :get, fn _tenant_id, ^project_id ->
+        {:ok, %{"id" => project_id, "status" => "active"}}
+      end)
+
       expect(BotArmyGtd.ProjectStoreMock, :update, fn ^project_id, ^payload ->
         {:ok, expected_project}
       end)
@@ -90,6 +94,10 @@ defmodule BotArmyGtd.Handlers.ProjectHandlerTest do
         "project_id" => project_id,
         "name" => "Updated Name"
       }
+
+      expect(BotArmyGtd.ProjectStoreMock, :get, fn _tenant_id, ^project_id ->
+        {:error, :not_found}
+      end)
 
       expect(BotArmyGtd.ProjectStoreMock, :update, fn ^project_id, ^payload ->
         {:error, :not_found}
@@ -118,6 +126,10 @@ defmodule BotArmyGtd.Handlers.ProjectHandlerTest do
         "id" => project_id,
         "labels" => ["updated", "labels"]
       }
+
+      expect(BotArmyGtd.ProjectStoreMock, :get, fn _tenant_id, ^project_id ->
+        {:ok, %{"id" => project_id, "status" => "active"}}
+      end)
 
       expect(BotArmyGtd.ProjectStoreMock, :update, fn ^project_id, ^payload ->
         {:ok, expected_project}

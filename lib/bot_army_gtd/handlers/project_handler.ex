@@ -86,6 +86,13 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
       :ok ->
         project_id = payload["project_id"]
 
+        # Capture pre-update status for archive detection
+        old_status =
+          case project_store().get(tenant_id, project_id) do
+            {:ok, existing} -> existing["status"]
+            _ -> nil
+          end
+
         case project_store().update(project_id, payload) do
           {:ok, project} ->
             Logger.info("Project updated: project_id=#{project_id}, event_id=#{event_id}")
@@ -99,6 +106,8 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
               tenant_id,
               user_id
             )
+
+            maybe_archive_para(project, old_status)
 
             {:ok, project}
 
@@ -116,6 +125,20 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
   end
 
   # Private functions
+
+  @archive_statuses ["completed", "done", "archived"]
+
+  defp maybe_archive_para(project, old_status) do
+    new_status = project["status"]
+
+    if new_status in @archive_statuses and old_status not in @archive_statuses do
+      try do
+        BotArmyGtd.ParaExporter.archive_project(project)
+      rescue
+        _ -> :ok
+      end
+    end
+  end
 
   defp validate_create_payload(payload) when is_map(payload) do
     with :ok <- require_field(payload, "name") do

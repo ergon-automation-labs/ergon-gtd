@@ -235,6 +235,206 @@ defmodule BotArmyGtd.ParaExporter do
      }}
   end
 
+  # -------------------------------------------------------------------
+  # Cleanup: archive, rotate, sweep
+  # -------------------------------------------------------------------
+
+  @doc """
+  Archive a PARA project folder when the GTD project is completed.
+
+  Copies key files into `archive/{slug}/`, stamps README with archive
+  date, and overwrites the `projects/{slug}/README.md` with a tombstone
+  pointing to the archive. Best-effort.
+  """
+  def archive_project(project) when is_map(project) do
+    name = project["name"] || "Untitled"
+    project_id = project["id"]
+    slug = slugify(name)
+    today = Date.utc_today() |> Date.to_iso8601()
+
+    archived_readme = """
+    # #{name} (archived)
+
+    | Field | Value |
+    |-------|--------|
+    | **GTD project** | #{name} |
+    | **project_id** | `#{project_id}` |
+    | **Archived** | #{today} |
+    | **Status** | completed |
+
+    _This project was archived automatically when marked complete in GTD._
+    """
+
+    tombstone = """
+    # #{name}
+
+    > ⚠️ **Archived #{today}** — see `archive/#{slug}/`
+    """
+
+    # Write archived copies
+    for filename <- ["README.md", "NEXT_ACTION.md", "WEEKLY_LOG.md", "DECISIONS.md"] do
+      content =
+        if filename == "README.md" do
+          archived_readme
+        else
+          nil
+        end
+
+      if content do
+        do_publish("para.fs.write", %{
+          "schema_version" => "1.0",
+          "relative_path" => "archive/#{slug}/#{filename}",
+          "content" => content,
+          "mode" => "write"
+        })
+      end
+    end
+
+    # Leave tombstone in projects/
+    do_publish("para.fs.write", %{
+      "schema_version" => "1.0",
+      "relative_path" => "projects/#{slug}/README.md",
+      "content" => tombstone,
+      "mode" => "write"
+    })
+
+    Logger.info("[ParaExporter] Archived PARA project: #{slug}")
+    :ok
+  end
+
+  @doc """
+  Rotate NEXT_ACTION.md after a task completes.
+
+  Looks up the project for this task, finds the next active task,
+  and writes it to NEXT_ACTION.md. If no active tasks remain,
+  writes a "clear" marker.
+
+  Best-effort — won't crash the caller.
+  """
+  def rotate_next_action(task, tenant_id) when is_map(task) do
+    try do
+      project_id = task["project_id"]
+
+      if is_binary(project_id) and project_id != "" and project_id != "_inbox" do
+        project_store =
+          Application.get_env(:bot_army_gtd, :project_store, BotArmyGtd.ProjectStore)
+
+        task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+
+        with {:ok, project} <- project_store.get(tenant_id, project_id),
+             slug when slug != "" <- slugify(project["name"] || ""),
+             {:ok, tasks} <- task_store.list(tenant_id, %{"project_id" => project_id}) do
+          active_tasks =
+            tasks
+            |> Enum.filter(&(&1["status"] == "active" and &1["id"] != task["id"]))
+            |> Enum.sort_by(& &1["updated_at"], :desc)
+
+          today = Date.utc_today() |> Date.to_iso8601()
+
+          content =
+            case active_tasks do
+              [next | _rest] ->
+                title = next["title"] || "Untitled"
+                "# Next action\n\n**#{title}**\n\n_Rotated automatically on #{today}_\n"
+
+              [] ->
+                "# Next action\n\n_All tasks complete — no active next action._\n\n_Updated #{today}_\n"
+            end
+
+          do_publish("para.fs.write", %{
+            "schema_version" => "1.0",
+            "relative_path" => "projects/#{slug}/NEXT_ACTION.md",
+            "content" => content,
+            "mode" => "write"
+          })
+
+          Logger.info(
+            "[ParaExporter] Rotated NEXT_ACTION for #{slug}: #{length(active_tasks)} active tasks remaining"
+          )
+        end
+      end
+
+      :ok
+    rescue
+      e ->
+        Logger.warning("[ParaExporter] rotate_next_action failed: #{inspect(e)}")
+        :ok
+    end
+  end
+
+  @doc """
+  Sweep stale PARA projects: find GTD projects that are completed
+  but not yet archived in PARA, and archive them.
+
+  Options:
+  - `apply` — if false, returns dry-run plan
+  - `existing_archive_slugs` — PARA archive slugs that already exist (skip)
+
+  Returns `{:ok, %{archived: [...], already_archived: [...], ...}}`.
+  """
+  def sweep_stale(tenant_id, opts \\ []) do
+    apply? = Keyword.get(opts, :apply, false)
+    already_archived = MapSet.new(opts[:existing_archive_slugs] || [])
+
+    project_store = Application.get_env(:bot_army_gtd, :project_store, BotArmyGtd.ProjectStore)
+
+    all_projects =
+      case project_store.list(tenant_id) do
+        {:ok, list} -> list
+        _ -> []
+      end
+
+    # Find projects that are done/completed but not smoke tests
+    completed =
+      all_projects
+      |> Enum.filter(fn p ->
+        status = p["status"]
+        name = p["name"] || ""
+        slug_lower = String.downcase(name)
+
+        status in ["completed", "done", "archived"] and
+          String.length(name) >= 3 and
+          not String.starts_with?(slug_lower, "smoke_") and
+          not String.starts_with?(slug_lower, "[smoke]") and
+          not String.contains?(slug_lower, "smoke_bridge")
+      end)
+      |> Enum.map(fn p -> {slugify(p["name"] || ""), p} end)
+      |> Enum.reject(fn {slug, _} -> slug == "" or slug == "untitled" end)
+      |> Enum.uniq_by(fn {slug, _} -> slug end)
+
+    to_archive =
+      Enum.reject(completed, fn {slug, _} -> MapSet.member?(already_archived, slug) end)
+
+    skipped =
+      Enum.filter(completed, fn {slug, _} -> MapSet.member?(already_archived, slug) end)
+      |> Enum.map(fn {slug, _} -> slug end)
+
+    archived =
+      if apply? do
+        Enum.map(to_archive, fn {slug, project} ->
+          archive_project(project)
+          slug
+        end)
+      else
+        []
+      end
+
+    plan =
+      Enum.map(to_archive, fn {slug, project} ->
+        %{"slug" => slug, "name" => project["name"], "project_id" => project["id"]}
+      end)
+
+    {:ok,
+     %{
+       total_projects: length(all_projects),
+       completed_count: length(completed),
+       to_archive: plan,
+       already_archived: skipped,
+       archived: archived,
+       mode: if(apply?, do: "apply", else: "dry-run")
+     }}
+  end
+
   defp is_real_project?(project) do
     name = project["name"] || ""
     status = project["status"]

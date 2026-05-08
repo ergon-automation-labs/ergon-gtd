@@ -170,6 +170,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
             )
 
             BotArmyGtd.ParaExporter.notify_completed(task)
+            BotArmyGtd.ParaExporter.rotate_next_action(task, tenant_id)
 
             :ok
 

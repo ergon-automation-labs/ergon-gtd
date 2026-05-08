@@ -157,6 +157,11 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "gtd.para.backfill",
       type: :request_reply,
       description: "Backfill PARA folders for existing GTD projects"
+    },
+    %{
+      subject: "gtd.para.cleanup",
+      type: :request_reply,
+      description: "Sweep and archive stale PARA projects"
     }
   ]
 
@@ -319,7 +324,8 @@ defmodule BotArmyGtd.NATS.Consumer do
               "gtd.whats_next",
               "synapse.army_general.poll.broadcast",
               "gtd.army.opinion.vote",
-              "gtd.para.backfill"
+              "gtd.para.backfill",
+              "gtd.para.cleanup"
             ]
             |> Enum.map(fn subject ->
               case Gnat.sub(conn, self(), subject) do
@@ -620,6 +626,40 @@ defmodule BotArmyGtd.NATS.Consumer do
                ) do
             {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
             {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :backfill_failed)
+          end
+
+        reply_traced(state.conn, reply_to, response)
+      end
+    )
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.para.cleanup", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span(
+      "gtd.para.cleanup",
+      Map.get(msg, :headers, []),
+      fn ->
+        params = decode_body(body)
+
+        tenant_id =
+          params["tenant_id"] || Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+        existing_archive_slugs = params["existing_archive_slugs"] || []
+        apply? = params["apply"] == true
+
+        response =
+          case BotArmyGtd.ParaExporter.sweep_stale(tenant_id,
+                 existing_archive_slugs: existing_archive_slugs,
+                 apply: apply?
+               ) do
+            {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
+            {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :cleanup_failed)
           end
 
         reply_traced(state.conn, reply_to, response)
