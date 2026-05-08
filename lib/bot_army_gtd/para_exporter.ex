@@ -239,10 +239,14 @@ defmodule BotArmyGtd.ParaExporter do
     name = project["name"] || ""
     status = project["status"]
 
+    slug = String.downcase(name)
+
     cond do
       status != "active" -> false
-      String.starts_with?(name, "smoke_") -> false
-      String.starts_with?(name, "project-debug") -> false
+      String.starts_with?(slug, "smoke_") -> false
+      String.starts_with?(slug, "[smoke]") -> false
+      String.contains?(slug, "smoke_bridge") -> false
+      String.starts_with?(slug, "project-debug") -> false
       String.length(name) < 3 -> false
       true -> true
     end
