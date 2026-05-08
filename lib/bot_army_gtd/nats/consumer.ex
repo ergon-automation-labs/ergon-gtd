@@ -152,6 +152,11 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "gtd.army.opinion.vote",
       type: :request_reply,
       description: "Army opinion collect voter (persona-style choice)"
+    },
+    %{
+      subject: "gtd.para.backfill",
+      type: :request_reply,
+      description: "Backfill PARA folders for existing GTD projects"
     }
   ]
 
@@ -313,7 +318,8 @@ defmodule BotArmyGtd.NATS.Consumer do
               "gossip.poll.broadcast",
               "gtd.whats_next",
               "synapse.army_general.poll.broadcast",
-              "gtd.army.opinion.vote"
+              "gtd.army.opinion.vote",
+              "gtd.para.backfill"
             ]
             |> Enum.map(fn subject ->
               case Gnat.sub(conn, self(), subject) do
@@ -585,6 +591,40 @@ defmodule BotArmyGtd.NATS.Consumer do
 
       reply_traced(state.conn, reply_to, response)
     end)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.para.backfill", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    BotArmyRuntime.Tracing.with_consumer_span(
+      "gtd.para.backfill",
+      Map.get(msg, :headers, []),
+      fn ->
+        params = decode_body(body)
+
+        tenant_id =
+          params["tenant_id"] || Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+        skip_slugs = params["skip_slugs"] || []
+        apply? = params["apply"] == true
+
+        response =
+          case BotArmyGtd.ParaExporter.backfill_projects(tenant_id,
+                 skip_slugs: skip_slugs,
+                 apply: apply?
+               ) do
+            {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
+            {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :backfill_failed)
+          end
+
+        reply_traced(state.conn, reply_to, response)
+      end
+    )
 
     {:noreply, state}
   end

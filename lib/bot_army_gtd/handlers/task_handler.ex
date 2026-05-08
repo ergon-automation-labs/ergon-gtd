@@ -73,6 +73,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
               )
 
               maybe_trigger_decomposition(task, stamped_payload, tenant_id, user_id)
+              maybe_notify_para(task, tenant_id)
 
               {:ok, task}
 
@@ -103,7 +104,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     case validate_update_payload(payload) do
       :ok ->
         task_id = payload["task_id"]
-        payload = maybe_apply_active_until_on_update(tenant_id, task_id, payload)
+        {old_status, payload} = apply_active_until_and_capture_status(tenant_id, task_id, payload)
 
         case scoped_update(tenant_id, task_id, payload) do
           {:ok, task} ->
@@ -118,6 +119,12 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
               tenant_id,
               user_id
             )
+
+            new_status = task["status"]
+
+            if old_status && new_status && old_status != new_status do
+              BotArmyGtd.ParaExporter.notify_status_change(task, old_status, new_status)
+            end
 
             :ok
 
@@ -161,6 +168,8 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
               tenant_id,
               user_id
             )
+
+            BotArmyGtd.ParaExporter.notify_completed(task)
 
             :ok
 
@@ -389,6 +398,27 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     end
   end
 
+  defp maybe_notify_para(task, tenant_id) do
+    project_id = task["project_id"]
+
+    if is_binary(project_id) and project_id != "" and project_id != "_inbox" do
+      try do
+        project_store =
+          Application.get_env(:bot_army_gtd, :project_store, BotArmyGtd.ProjectStore)
+
+        case project_store.get(tenant_id, project_id) do
+          {:ok, project} ->
+            BotArmyGtd.ParaExporter.notify_task_created(task, project["name"])
+
+          _ ->
+            :ok
+        end
+      rescue
+        _ -> :ok
+      end
+    end
+  end
+
   def expire_active_tasks(tenant_id, user_id \\ nil) do
     filters = %{"status" => ["active"]}
 
@@ -449,35 +479,38 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     end
   end
 
-  defp maybe_apply_active_until_on_update(tenant_id, task_id, payload) do
+  defp apply_active_until_and_capture_status(tenant_id, task_id, payload) do
     case task_store().get(tenant_id, task_id) do
       {:ok, task} ->
-        incoming_status = Map.get(payload, "status")
         current_status = Map.get(task, "status")
+        incoming_status = Map.get(payload, "status")
 
-        cond do
-          incoming_status == "active" ->
-            refresh_payload_active_until(payload, task)
+        updated_payload =
+          cond do
+            incoming_status == "active" ->
+              refresh_payload_active_until(payload, task)
 
-          current_status == "active" ->
-            case parse_active_until(task) do
-              {:ok, active_until} ->
-                if DateTime.compare(active_until, DateTime.utc_now()) == :lt do
-                  demote_payload_to_inbox(payload, task)
-                else
+            current_status == "active" ->
+              case parse_active_until(task) do
+                {:ok, active_until} ->
+                  if DateTime.compare(active_until, DateTime.utc_now()) == :lt do
+                    demote_payload_to_inbox(payload, task)
+                  else
+                    refresh_payload_active_until(payload, task)
+                  end
+
+                _ ->
                   refresh_payload_active_until(payload, task)
-                end
+              end
 
-              _ ->
-                refresh_payload_active_until(payload, task)
-            end
+            true ->
+              payload
+          end
 
-          true ->
-            payload
-        end
+        {current_status, updated_payload}
 
       {:error, _reason} ->
-        payload
+        {nil, payload}
     end
   end
 

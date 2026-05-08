@@ -55,6 +55,8 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
               user_id
             )
 
+            BotArmyGtd.ParaExporter.scaffold_project(project)
+
             {:ok, project}
 
           {:error, reason} ->
