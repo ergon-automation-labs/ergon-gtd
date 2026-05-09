@@ -332,12 +332,13 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         user_id: user_id
       )
 
-    # For task.completed, flatten priority to top level for cross-bot progression systems
+    # Flatten task metadata to top level for cross-bot consumers (RPG progression, quest auto-create)
     event_data =
-      if event_type == "gtd.task.completed" do
+      if event_type in ["gtd.task.completed", "gtd.task.created"] do
         event_data
         |> Map.put("priority", Map.get(task, "priority", "normal"))
         |> Map.put("task_id", Map.get(task, "id"))
+        |> Map.put("task_title", Map.get(task, "title", ""))
       else
         event_data
       end
