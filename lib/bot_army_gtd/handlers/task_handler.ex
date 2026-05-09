@@ -319,16 +319,28 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   end
 
   defp publish_event(event_type, _payload, task, event_id, _original_message, tenant_id, user_id) do
+    payload = %{
+      "task" => task,
+      "triggered_by_event_id" => event_id
+    }
+
     event_data =
       BotArmyGtd.EventBuilder.build_event(
         event_type,
-        %{
-          "task" => task,
-          "triggered_by_event_id" => event_id
-        },
+        payload,
         tenant_id: tenant_id,
         user_id: user_id
       )
+
+    # For task.completed, flatten priority to top level for cross-bot progression systems
+    event_data =
+      if event_type == "gtd.task.completed" do
+        event_data
+        |> Map.put("priority", Map.get(task, "priority", "normal"))
+        |> Map.put("task_id", Map.get(task, "id"))
+      else
+        event_data
+      end
 
     case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published event: #{event_type}")
