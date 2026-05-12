@@ -38,7 +38,9 @@ defmodule BotArmyGtd.IntentEvaluator do
   @default_thresholds %{
     stale_task_count: %{min: 3, weight: 0.6},
     idle_minutes: %{min: 30, weight: 0.3},
-    random_threshold: 0.5
+    random_threshold: 0.5,
+    overwhelmed_stale_count: %{min: 5, weight: 0.8},
+    random_social_threshold: 0.3
   }
 
   def start_link(opts) do
@@ -136,7 +138,8 @@ defmodule BotArmyGtd.IntentEvaluator do
     context = AccumulatedContext.snapshot(@bot_name)
 
     evaluate_intent("nudge", thresholds, context) ++
-      evaluate_intent("remind", thresholds, context)
+      evaluate_intent("remind", thresholds, context) ++
+      evaluate_intent("propose_social_check_in", thresholds, context)
   end
 
   defp evaluate_intent(action, thresholds, context) do
@@ -252,6 +255,12 @@ defmodule BotArmyGtd.IntentEvaluator do
     ]
   end
 
+  defp act_config("propose_social_check_in") do
+    [
+      handler_fn: &__MODULE__.handle_propose_social_check_in_action/5
+    ]
+  end
+
   defp act_config(_), do: nil
 
   @doc false
@@ -278,6 +287,35 @@ defmodule BotArmyGtd.IntentEvaluator do
       "title" => "#{String.capitalize(action)}: deadline approaching",
       "body" => remind_body(details)
     })
+  end
+
+  @doc false
+  def handle_propose_social_check_in_action(bot_name, _action, _intent_id, details, _endorsements) do
+    stale = Map.get(details, :stale_task_count, Map.get(details, :value, 0))
+    score = Map.get(details, :score, 0.5)
+
+    if stale >= 5 do
+      message = %{
+        "event_id" => UUID.uuid4(),
+        "event" => "gossip.social.invite",
+        "schema_version" => "1.0",
+        "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+        "source" => "bot_army_gtd",
+        "tenant_id" => BotArmyRuntime.Tenant.default_tenant_id(),
+        "conversation_id" => UUID.uuid4(),
+        "payload" => %{
+          "from_bot" => bot_name,
+          "to_bot" => "fitness_bot",
+          "topic" => "overwhelmed_check_in",
+          "adaptive_score" => score,
+          "cooldown_seconds" => 86_400,
+          "stale_task_count" => stale
+        }
+      }
+
+      BotArmyRuntime.NATS.Publisher.publish("gossip.social.invite", message)
+      Logger.info("[GTD.Intent] Proposed social check-in to fitness_bot (stale=#{stale})")
+    end
   end
 
   defp nudge_body(details) do
@@ -417,6 +455,23 @@ defmodule BotArmyGtd.IntentEvaluator do
           metadata: %{project_id: goal_id}
         }
       end) ++ observations
+
+    total_stale = Enum.sum(Enum.map(stale_per_project, fn {_id, c} -> c end)) + total_tasks
+
+    observations =
+      if total_stale >= 5 do
+        [
+          %{
+            type: :overwhelmed_stale_count,
+            value: total_stale,
+            observed_at: DateTime.utc_now(),
+            metadata: %{source: "pulse", total_stale: total_stale}
+          }
+          | observations
+        ]
+      else
+        observations
+      end
 
     observations
   end
