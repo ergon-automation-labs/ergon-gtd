@@ -30,7 +30,7 @@ defmodule BotArmyGtd.Handlers.SearchHandler do
         case task_store().search(tenant_id, query, filters, pagination) do
           {:ok, {tasks, total_count}} ->
             Logger.info(
-              "Searched tasks: query=#{query}, results=#{length(tasks)}, event_id=#{event_id}"
+              "Searched tasks: query=#{query}, results=#{length(tasks)}, user_id=#{user_id}, event_id=#{event_id}"
             )
 
             results = %{

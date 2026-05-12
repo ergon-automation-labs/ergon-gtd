@@ -176,7 +176,9 @@ defmodule BotArmyGtd.Gossip do
     # so NATS request/reply would deadlock (GenServer calling itself).
     case BotArmyGtd.Handlers.PollVoteHandler.handle_submit(payload) do
       {:ok, result} ->
-        Logger.info("[GTD Gossip] submitted GTD poll vote poll_id=#{poll_id}")
+        Logger.info(
+          "[GTD Gossip] submitted GTD poll vote poll_id=#{poll_id} vote_id=#{result["vote_id"] || "n/a"}"
+        )
 
       {:error, reason} ->
         Logger.warning(

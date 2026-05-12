@@ -104,6 +104,10 @@ defmodule BotArmyGtd.IntentEvaluator do
         {:noreply, state}
 
       {action, details, config} ->
+        Logger.debug(
+          "[IntentEvaluator] Processing #{action} defer reply for #{String.slice(conversation_id, 0..7)}"
+        )
+
         DeferHandler.process_reply(@bot_name, conversation_id, body, details, config)
 
         {:noreply, %{state | pending_defers: Map.delete(state.pending_defers, conversation_id)}}
@@ -258,7 +262,7 @@ defmodule BotArmyGtd.IntentEvaluator do
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "category" => "task",
       "urgency" => "normal",
-      "title" => "Task nudge",
+      "title" => "#{String.capitalize(action)} suggestion",
       "body" => nudge_body(details)
     })
   end
@@ -271,7 +275,7 @@ defmodule BotArmyGtd.IntentEvaluator do
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "category" => "task",
       "urgency" => "high",
-      "title" => "Deadline reminder",
+      "title" => "#{String.capitalize(action)}: deadline approaching",
       "body" => remind_body(details)
     })
   end
@@ -320,7 +324,7 @@ defmodule BotArmyGtd.IntentEvaluator do
     %{
       "intent" => "classify",
       "text" =>
-        "The user has #{stale_count} stale tasks but conditions don't warrant a full nudge " <>
+        "The user has #{stale_count} stale tasks but conditions don't warrant a full #{action} " <>
           "(score #{Float.round(details.score, 2)}, reason: #{details.reason}). " <>
           "Write a one-sentence gentle reminder about their stale tasks. " <>
           "If not useful, respond: skip"
@@ -335,7 +339,7 @@ defmodule BotArmyGtd.IntentEvaluator do
       "intent" => "classify",
       "text" =>
         "The user has been idle for #{div(trunc(idle_minutes), 60)} hours but " <>
-          "conditions don't warrant a full reminder (score #{Float.round(details.score, 2)}, " <>
+          "conditions don't warrant a full #{action} (score #{Float.round(details.score, 2)}, " <>
           "reason: #{details.reason}). " <>
           "Write a one-sentence soft prompt about their projects. " <>
           "If not useful, respond: skip"
@@ -359,7 +363,11 @@ defmodule BotArmyGtd.IntentEvaluator do
         "category" => "task",
         "urgency" => "ambient",
         "title" => "#{String.capitalize(action)} suggestion",
-        "body" => message
+        "body" => message,
+        "meta" => %{
+          "score" => details.score,
+          "reason" => details.reason
+        }
       })
 
       :ok

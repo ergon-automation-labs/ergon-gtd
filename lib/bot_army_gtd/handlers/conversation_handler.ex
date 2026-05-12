@@ -89,6 +89,7 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
           "gtd",
           data,
           message_type: "result",
+          from_bot: from_bot,
           conversation_complete: true
         )
 
@@ -98,6 +99,7 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
           "gtd",
           %{error: inspect(reason)},
           message_type: "error",
+          from_bot: from_bot,
           conversation_complete: true
         )
     end
@@ -105,6 +107,8 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
 
   defp handle_command(body, conversation_id, from_bot) do
     intent = body["intent"]
+
+    Logger.debug("[ConversationHandler] Command from #{from_bot}: #{intent}")
 
     result =
       case intent do
