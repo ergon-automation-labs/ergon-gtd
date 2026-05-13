@@ -499,6 +499,26 @@ defmodule BotArmyGtd.IntentEvaluator do
   end
 
   defp get_thresholds do
-    Application.get_env(:bot_army_gtd, :intent_thresholds, @default_thresholds)
+    base = Application.get_env(:bot_army_gtd, :intent_thresholds, @default_thresholds)
+
+    nudge_factor = BotArmyLearning.ThresholdAdapter.adjustment("gtd.nudge")
+    remind_factor = BotArmyLearning.ThresholdAdapter.adjustment("gtd.remind")
+
+    %{
+      base
+      | stale_task_count: %{
+          min: round(base.stale_task_count.min * nudge_factor),
+          weight: base.stale_task_count.weight
+        },
+        idle_minutes: %{
+          min: round(base.idle_minutes.min * remind_factor),
+          weight: base.idle_minutes.weight
+        },
+        random_threshold:
+          BotArmyLearning.ThresholdAdapter.apply_adjustment(
+            base.random_threshold,
+            nudge_factor
+          )
+    }
   end
 end

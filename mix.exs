@@ -4,7 +4,7 @@ defmodule BotArmyGtd.MixProject do
   def project do
     [
       app: :bot_army_gtd,
-      version: "0.7.81",
+      version: "0.7.82",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -28,6 +28,7 @@ defmodule BotArmyGtd.MixProject do
     [
       {:bot_army_core, path: "../bot_army_core"},
       {:bot_army_runtime, path: "../bot_army_runtime"},
+      {:bot_army_learning, path: "../bot_army_learning"},
       {:ecto_sql, "~> 3.10"},
       {:postgrex, "~> 0.17"},
       {:jason, "~> 1.4"},

@@ -32,7 +32,11 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_intent_evaluator()
       |> maybe_add_veto_listener()
 
-    children = base_children ++ maybe_add_consumer([]) ++ maybe_add_health_responder([])
+    children =
+      base_children ++
+        maybe_add_consumer([]) ++
+        maybe_add_health_responder([]) ++
+        maybe_add_outcome_tracker([])
 
     opts = [strategy: :one_for_one, name: BotArmyGtd.Supervisor]
     Supervisor.start_link(children, opts)
@@ -74,7 +78,8 @@ defmodule BotArmyGtd.Application do
     if @env == :test,
       do: children,
       else: [
-        {BotArmyGtd.HealthResponder, [bot_name: :gtd, repo: BotArmyGtd.Repo, version: @version]}
+        {BotArmyRuntime.Health.Responder,
+         [bot_name: :gtd, repo: BotArmyGtd.Repo, version: @version]}
       ]
   end
 
@@ -112,5 +117,9 @@ defmodule BotArmyGtd.Application do
       child = {BotArmyRuntime.Intent.VetoListener, rules: veto_rules, bot_name: "gtd"}
       [child | children]
     end
+  end
+
+  defp maybe_add_outcome_tracker(children) do
+    if @env == :test, do: children, else: [{BotArmyLearning.OutcomeTracker, []} | children]
   end
 end

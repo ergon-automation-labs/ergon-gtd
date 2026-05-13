@@ -558,6 +558,13 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
             publish_decomposition_reviewed(updated, event_id)
             publish_accuracy_metrics(updated, count_delta, effort_delta)
 
+            BotArmyLearning.OutcomeTracker.record(
+              decomposition_id,
+              "decomposition",
+              "approved",
+              if(fsrs_grade >= 2, do: "pass", else: "fail")
+            )
+
           {:error, reason} ->
             Logger.error("Failed to update decomposition on review: #{inspect(reason)}")
             publish_error(event_id, reason, "Failed to update decomposition on review")
