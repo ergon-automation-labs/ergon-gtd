@@ -385,11 +385,21 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
         successful_count = length(successful_tasks)
 
-        # Calculate actual total effort from successfully created subtasks
+        # Calculate actual total effort from successfully created subtasks.
+        # Use original subtask_list data since task store responses may not include estimated_hours.
         actual_total_effort_hours =
-          Enum.reduce(successful_tasks, 0.0, fn task, acc ->
-            hours = Map.get(task, "estimated_hours") || Map.get(task, :estimated_hours, 0)
-            acc + if(is_number(hours), do: hours, else: 0)
+          Enum.zip(subtask_list, created_subtasks)
+          |> Enum.reduce(0.0, fn {subtask, result}, acc ->
+            case result do
+              {:ok, _} ->
+                hours =
+                  Map.get(subtask, "estimated_hours") || Map.get(subtask, :estimated_hours, 0)
+
+                acc + if(is_number(hours), do: hours, else: 0)
+
+              _ ->
+                acc
+            end
           end)
 
         # Identify missing and extra subtasks by title comparison
@@ -926,7 +936,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     }
 
     case BotArmyCore.NATS.publish("bot_army.gtd.decomposition.accuracy", event) do
-      :ok ->
+      {:ok, _} ->
         Logger.info(
           "[DecompositionHandler] Published accuracy metrics for #{decomposition["id"]}"
         )
