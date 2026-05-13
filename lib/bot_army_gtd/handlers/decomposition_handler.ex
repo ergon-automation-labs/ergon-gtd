@@ -376,13 +376,43 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
             end
           end)
 
-        # Count successful creates
-        successful_count =
-          Enum.count(created_subtasks, fn result -> match?({:ok, _}, result) end)
+        # Partition successful vs failed subtask creates
+        successful_tasks =
+          Enum.flat_map(created_subtasks, fn
+            {:ok, task} -> [task]
+            _ -> []
+          end)
+
+        successful_count = length(successful_tasks)
+
+        # Calculate actual total effort from successfully created subtasks
+        actual_total_effort_hours =
+          Enum.reduce(successful_tasks, 0.0, fn task, acc ->
+            hours = Map.get(task, "estimated_hours") || Map.get(task, :estimated_hours, 0)
+            acc + if(is_number(hours), do: hours, else: 0)
+          end)
+
+        # Identify missing and extra subtasks by title comparison
+        predicted_titles =
+          Enum.map(subtask_list, &Map.get(&1, "title"))
+
+        actual_titles =
+          Enum.map(successful_tasks, fn task ->
+            Map.get(task, "title") || Map.get(task, :title, "")
+          end)
+
+        missing_subtasks = predicted_titles -- actual_titles
+        extra_subtasks = actual_titles -- predicted_titles
 
         # Determine FSRS grade based on accuracy of prediction vs actual
         predicted_count = decomposition["predicted_subtask_count"]
-        fsrs_grade = calculate_approval_grade(predicted_count, successful_count)
+        predicted_hours = decomposition["predicted_total_effort_hours"]
+
+        count_delta = calculate_accuracy_delta(predicted_count, successful_count)
+        effort_delta = calculate_accuracy_delta(predicted_hours, actual_total_effort_hours)
+        combined_delta = max(count_delta, effort_delta)
+
+        fsrs_grade = calculate_approval_grade(predicted_count, successful_count, combined_delta)
 
         # Schedule next review with FSRS algorithm
         {new_stability, new_difficulty, new_due_at} =
@@ -392,6 +422,9 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
         updated_decomposition =
           decomposition
           |> Map.put("actual_subtask_count", successful_count)
+          |> Map.put("actual_total_effort_hours", actual_total_effort_hours)
+          |> Map.put("missing_subtasks", missing_subtasks)
+          |> Map.put("extra_subtasks", extra_subtasks)
           |> Map.put("status", "reviewed")
           |> Map.put("last_grade", fsrs_grade)
           |> Map.put("stability", new_stability)
@@ -470,11 +503,17 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       {:ok, decomposition} ->
         predicted_count = decomposition["predicted_subtask_count"]
         actual_count = decomposition["actual_subtask_count"]
+        predicted_hours = decomposition["predicted_total_effort_hours"]
+        actual_hours = decomposition["actual_total_effort_hours"]
         review_count = Map.get(decomposition, "review_count", 0)
 
-        # Calculate accuracy delta and FSRS grade
-        delta = calculate_accuracy_delta(predicted_count, actual_count)
-        fsrs_grade = calculate_fsrs_grade(rating, delta)
+        # Calculate accuracy deltas for both count and effort
+        count_delta = calculate_accuracy_delta(predicted_count, actual_count)
+        effort_delta = calculate_accuracy_delta(predicted_hours, actual_hours)
+        combined_delta = max(count_delta, effort_delta)
+
+        # FSRS grade uses combined delta for more robust learning signal
+        fsrs_grade = calculate_fsrs_grade(rating, combined_delta)
 
         # Calculate FSRS next review timing (1-4 grade)
         {new_stability, new_difficulty, new_due_at} =
@@ -485,7 +524,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
           decomposition
           |> Map.put("user_rating", rating)
           |> Map.put("user_feedback", user_feedback)
-          |> Map.put("confidence_grade", delta)
+          |> Map.put("confidence_grade", combined_delta)
           |> Map.put("last_grade", fsrs_grade)
           |> Map.put("review_count", review_count + 1)
           |> Map.put("stability", new_stability)
@@ -500,12 +539,14 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
               parent_task_id: decomposition["parent_task_id"],
               user_rating: rating,
               fsrs_grade: fsrs_grade,
-              accuracy_delta: delta,
+              count_delta: count_delta,
+              effort_delta: effort_delta,
               review_count: review_count + 1,
               next_review_in: BotArmyGtd.FSRSScheduler.format_interval(new_due_at)
             })
 
             publish_decomposition_reviewed(updated, event_id)
+            publish_accuracy_metrics(updated, count_delta, effort_delta)
 
           {:error, reason} ->
             Logger.error("Failed to update decomposition on review: #{inspect(reason)}")
@@ -718,21 +759,25 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  # No prediction, assume "Good"
-  defp calculate_approval_grade(nil, _), do: 3
-  defp calculate_approval_grade(_, nil), do: 3
+  defp calculate_approval_grade(predicted, actual, combined_delta \\ 0.0)
+  defp calculate_approval_grade(nil, _, _), do: 3
+  defp calculate_approval_grade(_, nil, _), do: 3
 
-  defp calculate_approval_grade(predicted, actual) do
-    # Grade based on how well actual subtask count matches prediction
+  defp calculate_approval_grade(predicted, actual, combined_delta) do
+    # Grade based on how well actual subtask count and effort match prediction
     # FSRS grades: 1 (Again), 2 (Hard), 3 (Good), 4 (Easy)
     diff = abs(predicted - actual)
 
     cond do
+      # Large effort/count mismatch: "Again"
+      combined_delta > 0.5 or diff >= 4 -> 1
+      # Moderate mismatch: "Hard"
+      combined_delta > 0.2 or diff >= 2 -> 2
       # Perfect or near-perfect match: "Good"
       diff == 0 -> 3
       diff == 1 -> 3
-      # Off by 2+: "Hard" (prediction was off)
-      diff >= 2 -> 2
+      # Fallback
+      true -> 2
     end
   end
 
@@ -854,6 +899,48 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       {:error, reason} ->
         Logger.error("Failed to publish ready_for_review event: #{inspect(reason)}")
     end
+  end
+
+  defp publish_accuracy_metrics(decomposition, count_delta, effort_delta) do
+    event = %{
+      "event_id" => UUID.uuid4(),
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+      "source" => "bot_army_gtd",
+      "schema_version" => "1.0",
+      "event" => "gtd.decomposition.accuracy",
+      "tenant_id" => decomposition["tenant_id"] || BotArmyCore.Tenant.default_tenant_id(),
+      "payload" => %{
+        "decomposition_id" => decomposition["id"],
+        "parent_task_id" => decomposition["parent_task_id"],
+        "predicted_subtask_count" => decomposition["predicted_subtask_count"],
+        "actual_subtask_count" => decomposition["actual_subtask_count"],
+        "predicted_total_effort_hours" => decomposition["predicted_total_effort_hours"],
+        "actual_total_effort_hours" => decomposition["actual_total_effort_hours"],
+        "count_delta" => count_delta,
+        "effort_delta" => effort_delta,
+        "user_rating" => decomposition["user_rating"],
+        "review_count" => decomposition["review_count"],
+        "missing_subtasks" => length(decomposition["missing_subtasks"] || []),
+        "extra_subtasks" => length(decomposition["extra_subtasks"] || [])
+      }
+    }
+
+    case BotArmyCore.NATS.publish("bot_army.gtd.decomposition.accuracy", event) do
+      :ok ->
+        Logger.info(
+          "[DecompositionHandler] Published accuracy metrics for #{decomposition["id"]}"
+        )
+
+      {:error, reason} ->
+        Logger.warning(
+          "[DecompositionHandler] Failed to publish accuracy metrics: #{inspect(reason)}"
+        )
+    end
+  catch
+    _, reason ->
+      Logger.warning(
+        "[DecompositionHandler] Exception publishing accuracy metrics: #{inspect(reason)}"
+      )
   end
 
   defp publish_error(event_id, reason, message) do
