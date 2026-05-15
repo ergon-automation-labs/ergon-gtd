@@ -401,7 +401,7 @@ defmodule BotArmyGtd.DecomposerTest do
 
       assert template == :research
       assert is_list(subtasks)
-      assert length(subtasks) > 0
+      assert [_ | _] = subtasks
     end
 
     test "returns ok with template for summarize goal" do
@@ -410,7 +410,7 @@ defmodule BotArmyGtd.DecomposerTest do
 
       assert template == :summarize
       assert is_list(subtasks)
-      assert length(subtasks) > 0
+      assert [_ | _] = subtasks
     end
 
     test "returns ok with template for create_and_schedule goal" do
@@ -419,7 +419,7 @@ defmodule BotArmyGtd.DecomposerTest do
 
       assert template == :create_and_schedule
       assert is_list(subtasks)
-      assert length(subtasks) > 0
+      assert [_ | _] = subtasks
     end
 
     test "returns no_match for unrelated goal" do
@@ -527,7 +527,7 @@ defmodule BotArmyGtd.DecomposerTest do
       {:ok, subtasks} = Decomposer.decompose_goal("research target", %{})
 
       assert is_list(subtasks)
-      assert length(subtasks) > 0
+      assert [_ | _] = subtasks
     end
 
     test "decompose_goal with context" do
@@ -535,7 +535,7 @@ defmodule BotArmyGtd.DecomposerTest do
         Decomposer.decompose_goal("research company", %{company: "TechCorp"})
 
       assert is_list(subtasks)
-      assert length(subtasks) > 0
+      assert [_ | _] = subtasks
 
       # Verify context is used
       descriptions = Enum.map(subtasks, fn st -> st["description"] end)

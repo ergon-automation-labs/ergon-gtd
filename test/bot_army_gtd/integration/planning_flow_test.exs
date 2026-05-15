@@ -55,9 +55,9 @@ defmodule BotArmyGtd.Integration.PlanningFlowTest do
 
     # Step 4: Check plan would complete when all tasks complete
     incomplete_count =
-      completed_tasks
-      |> Enum.filter(fn t -> t["status"] not in ["completed", "deleted", "cancelled"] end)
-      |> Enum.count()
+      Enum.count(completed_tasks, fn t ->
+        t["status"] not in ["completed", "deleted", "cancelled"]
+      end)
 
     assert incomplete_count == 0
   end
@@ -119,9 +119,7 @@ defmodule BotArmyGtd.Integration.PlanningFlowTest do
     all_tasks = [task1_failed, task2_completed]
 
     incomplete_count =
-      all_tasks
-      |> Enum.filter(fn t -> t["status"] not in ["completed", "deleted", "cancelled"] end)
-      |> Enum.count()
+      Enum.count(all_tasks, fn t -> t["status"] not in ["completed", "deleted", "cancelled"] end)
 
     assert incomplete_count > 0
   end

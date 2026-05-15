@@ -101,7 +101,7 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposerTest do
       templates = DeterministicDecomposer.templates()
 
       assert is_list(templates)
-      assert length(templates) > 0
+      assert [_ | _] = templates
     end
 
     test "includes research template" do
@@ -639,7 +639,7 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposerTest do
           :research
         )
 
-      assert length(subtasks) > 0
+      assert [_ | _] = subtasks
     end
 
     test "succeeds with no context argument" do
@@ -649,7 +649,7 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposerTest do
           :research
         )
 
-      assert length(subtasks) > 0
+      assert [_ | _] = subtasks
     end
 
     test "handles string keys in context" do
@@ -681,7 +681,7 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposerTest do
       {:ok, subtasks} =
         DeterministicDecomposer.decompose_from_template(goal, %{}, template)
 
-      assert length(subtasks) > 0
+      assert [_ | _] = subtasks
 
       Enum.each(subtasks, fn st ->
         assert Map.has_key?(st, "order")

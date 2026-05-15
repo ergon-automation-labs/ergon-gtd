@@ -219,9 +219,7 @@ defmodule BotArmyGtd.Adapters.PlanAdapter do
       if Enum.empty?(remaining_tasks) do
         "No remaining tasks"
       else
-        remaining_tasks
-        |> Enum.map(fn t -> "- #{t["description"] || t["title"]}" end)
-        |> Enum.join("\n")
+        Enum.map_join(remaining_tasks, "\n", fn t -> "- #{t["description"] || t["title"]}" end)
       end
 
     context_json =
