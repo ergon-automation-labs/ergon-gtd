@@ -193,38 +193,38 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
 
   defp decompose_research(goal, context) do
     company = context[:company] || context["company"] || "target"
-    query = context[:query] || context["query"] || company
+    query = context[:query] || context["query"] || goal
 
     subtasks = [
       %{
         "order" => 1,
-        "description" => "Search for information about #{company}",
+        "description" => "Research: #{goal}",
         "target_bot" => "bot_army_llm",
         "target_subject" => "bot_army_llm.query",
-        "payload" => %{"query" => "Find information about #{query}"},
+        "payload" => %{"query" => query},
         "depends_on" => [],
         "needs_verification" => false
       },
       %{
         "order" => 2,
-        "description" => "Gather and organize findings",
+        "description" => "Gather and organize findings about #{goal}",
         "target_bot" => "bot_army_gtd",
         "target_subject" => "gtd.task.create",
         "payload" => %{
-          "title" => "Organize research findings for #{company}",
-          "description" => "Compile all findings into organized notes"
+          "title" => "Organize research findings",
+          "description" => "Compile all findings from: #{goal}"
         },
         "depends_on" => [1],
         "needs_verification" => false
       },
       %{
         "order" => 3,
-        "description" => "Analyze key findings and patterns",
+        "description" => "Analyze key findings from research",
         "target_bot" => "bot_army_gtd",
         "target_subject" => "gtd.task.create",
         "payload" => %{
-          "title" => "Analyze findings for #{company}",
-          "description" => "Identify key patterns and insights"
+          "title" => "Analyze findings",
+          "description" => "Identify key patterns and insights from: #{goal}"
         },
         "depends_on" => [2],
         "needs_verification" => false
@@ -235,8 +235,8 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
         "target_bot" => "bot_army_gtd",
         "target_subject" => "gtd.task.create",
         "payload" => %{
-          "title" => "Write summary for #{company}",
-          "description" => "Synthesize findings into concise summary"
+          "title" => "Write research summary",
+          "description" => "Synthesize findings into concise summary for: #{goal}"
         },
         "depends_on" => [3],
         "needs_verification" => true
@@ -253,36 +253,36 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
     subtasks = [
       %{
         "order" => 1,
-        "description" => "Fetch #{source}",
+        "description" => "Fetch #{source} for: #{goal}",
         "target_bot" => "bot_army_gtd",
         "target_subject" => "gtd.task.create",
         "payload" => %{
           "title" => "Retrieve #{source}",
-          "description" => "Get the original document/content"
+          "description" => "Get the original content to summarize: #{goal}"
         },
         "depends_on" => [],
         "needs_verification" => false
       },
       %{
         "order" => 2,
-        "description" => "Extract key points from #{source}",
+        "description" => "Extract key points about #{goal}",
         "target_bot" => "bot_army_gtd",
         "target_subject" => "gtd.task.create",
         "payload" => %{
           "title" => "Extract key points",
-          "description" => "Identify main ideas and important details"
+          "description" => "Identify main ideas and important details related to: #{goal}"
         },
         "depends_on" => [1],
         "needs_verification" => false
       },
       %{
         "order" => 3,
-        "description" => "Condense to #{format}",
+        "description" => "Condense to #{format} about #{goal}",
         "target_bot" => "bot_army_gtd",
         "target_subject" => "gtd.task.create",
         "payload" => %{
           "title" => "Condense to summary",
-          "description" => "Reduce key points to #{format}"
+          "description" => "Reduce key points to #{format} covering: #{goal}"
         },
         "depends_on" => [2],
         "needs_verification" => false
@@ -294,7 +294,7 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
         "target_subject" => "gtd.task.create",
         "payload" => %{
           "title" => "Polish summary",
-          "description" => "Review and refine for clarity"
+          "description" => "Review and refine for clarity: #{goal}"
         },
         "depends_on" => [3],
         "needs_verification" => true
@@ -412,36 +412,36 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
     subtasks = [
       %{
         "order" => 1,
-        "description" => "Gather data from #{data_source}",
+        "description" => "Gather data from #{data_source} for: #{goal}",
         "target_bot" => "bot_army_gtd",
         "target_subject" => "gtd.task.create",
         "payload" => %{
           "title" => "Gather #{data_source}",
-          "description" => "Collect necessary data for analysis"
+          "description" => "Collect necessary data for analyzing: #{goal}"
         },
         "depends_on" => [],
         "needs_verification" => false
       },
       %{
         "order" => 2,
-        "description" => "Compute #{metric}",
+        "description" => "Compute #{metric} for analysis",
         "target_bot" => "bot_army_gtd",
         "target_subject" => "gtd.task.create",
         "payload" => %{
           "title" => "Calculate #{metric}",
-          "description" => "Run calculations on gathered data"
+          "description" => "Run calculations on data for: #{goal}"
         },
         "depends_on" => [1],
         "needs_verification" => false
       },
       %{
         "order" => 3,
-        "description" => "Interpret results and findings",
+        "description" => "Interpret results related to #{goal}",
         "target_bot" => "bot_army_gtd",
         "target_subject" => "gtd.task.create",
         "payload" => %{
           "title" => "Interpret analysis results",
-          "description" => "Explain what the data means"
+          "description" => "Explain what the data means for: #{goal}"
         },
         "depends_on" => [2],
         "needs_verification" => false
@@ -453,7 +453,7 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
         "target_subject" => "gtd.task.create",
         "payload" => %{
           "title" => "Write analysis report",
-          "description" => "Document findings and recommendations"
+          "description" => "Document findings and recommendations for: #{goal}"
         },
         "depends_on" => [3],
         "needs_verification" => true
