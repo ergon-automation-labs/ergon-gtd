@@ -153,4 +153,47 @@ defmodule BotArmyGtd.TaskStoreSearchTest do
     assert length(filtered) == 1
     assert hd(filtered)["goal_id"] == "goal-xyz-1"
   end
+
+  test "no_project filter with wildcard query returns only tasks without project_id" do
+    tenant_id = "00000000-0000-0000-0000-000000000001"
+
+    :sys.replace_state(BotArmyGtd.TaskStore, fn _ ->
+      %{
+        "a" => %{
+          "id" => "a",
+          "tenant_id" => tenant_id,
+          "title" => "In project alpha",
+          "description" => nil,
+          "status" => "active",
+          "priority" => "normal",
+          "context" => "next",
+          "source" => "claude",
+          "source_metadata" => %{},
+          "project_id" => "proj-1",
+          "parent_task_id" => nil,
+          "labels" => []
+        },
+        "b" => %{
+          "id" => "b",
+          "tenant_id" => tenant_id,
+          "title" => "Floating errand",
+          "description" => nil,
+          "status" => "active",
+          "priority" => "normal",
+          "context" => "inbox",
+          "source" => "claude",
+          "source_metadata" => %{},
+          "project_id" => nil,
+          "parent_task_id" => nil,
+          "labels" => []
+        }
+      }
+    end)
+
+    {:ok, {tasks, total}} =
+      BotArmyGtd.TaskStore.search(tenant_id, "*", %{"no_project" => true}, %{})
+
+    assert total == 1
+    assert hd(tasks)["id"] == "b"
+  end
 end

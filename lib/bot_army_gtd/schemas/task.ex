@@ -26,6 +26,10 @@ defmodule BotArmyGtd.Schemas.Task do
     field(:tenant_id, Ecto.UUID)
     field(:user_id, Ecto.UUID)
     field(:result, :map)
+    field(:generated_by_ai, :boolean, default: false)
+    field(:plan_id, Ecto.UUID)
+    field(:plan_order, :integer)
+    field(:verified_by, :string)
 
     # Relationships - parent_task_id stored as string for simplicity
     belongs_to(:parent_task, __MODULE__,
@@ -35,6 +39,13 @@ defmodule BotArmyGtd.Schemas.Task do
     )
 
     has_many(:subtasks, __MODULE__, foreign_key: :parent_task_id)
+
+    # Plan relationship
+    belongs_to(:plan, BotArmyGtd.Schemas.Plan,
+      foreign_key: :plan_id,
+      type: Ecto.UUID,
+      define_field: false
+    )
 
     timestamps()
   end
@@ -58,7 +69,11 @@ defmodule BotArmyGtd.Schemas.Task do
       :labels,
       :tenant_id,
       :user_id,
-      :result
+      :result,
+      :generated_by_ai,
+      :plan_id,
+      :plan_order,
+      :verified_by
     ])
     |> validate_required([:title, :tenant_id])
     |> validate_inclusion(:status, [

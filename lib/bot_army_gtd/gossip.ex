@@ -330,36 +330,34 @@ defmodule BotArmyGtd.Gossip do
   end
 
   defp call_llm_fast(prompt, timeout_ms) do
-    try do
-      case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
-        {:ok, conn} ->
-          request_body =
-            Jason.encode!(%{
-              "prompt" => prompt,
-              "model" => "fast",
-              "max_tokens" => 200
-            })
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+      {:ok, conn} ->
+        request_body =
+          Jason.encode!(%{
+            "prompt" => prompt,
+            "model" => "fast",
+            "max_tokens" => 200
+          })
 
-          case Gnat.request(conn, "llm.prompt.submit", request_body, timeout_ms) do
-            {:ok, %{body: response_body}} ->
-              case Jason.decode(response_body) do
-                {:ok, %{"completion" => %{"text" => text}}} -> {:ok, text}
-                {:ok, %{"completion" => text}} when is_binary(text) -> {:ok, text}
-                _ -> :error
-              end
+        case Gnat.request(conn, "llm.prompt.submit", request_body, timeout_ms) do
+          {:ok, %{body: response_body}} ->
+            case Jason.decode(response_body) do
+              {:ok, %{"completion" => %{"text" => text}}} -> {:ok, text}
+              {:ok, %{"completion" => text}} when is_binary(text) -> {:ok, text}
+              _ -> :error
+            end
 
-            _ ->
-              :error
-          end
+          _ ->
+            :error
+        end
 
-        _ ->
-          :error
-      end
-    rescue
-      _ -> :error
-    catch
-      _ -> :error
+      _ ->
+        :error
     end
+  rescue
+    _ -> :error
+  catch
+    _ -> :error
   end
 
   defp ensure_table! do

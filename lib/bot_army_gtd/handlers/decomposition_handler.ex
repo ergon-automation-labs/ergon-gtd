@@ -678,7 +678,6 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
   defp parse_decomposition_steps(steps) when is_list(steps) do
     try do
-      # Steps should be in order: break_down, estimate_effort, identify_dependencies
       case steps do
         [step1, step2, step3] ->
           # Parse each step's output as JSON
@@ -706,34 +705,36 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp parse_json_field(step, field_name) do
-    case step do
-      %{"output" => output} when is_binary(output) ->
-        try do
+    try do
+      case step do
+        %{"output" => output} when is_binary(output) ->
           case Jason.decode(output) do
             {:ok, data} -> Map.get(data, field_name)
             _ -> nil
           end
-        rescue
-          _ -> nil
-        end
 
+        _ ->
+          nil
+      end
+    rescue
       _ ->
         nil
     end
   end
 
   defp parse_total_hours(step) do
-    case step do
-      %{"output" => output} when is_binary(output) ->
-        try do
+    try do
+      case step do
+        %{"output" => output} when is_binary(output) ->
           case Jason.decode(output) do
             {:ok, %{"total_hours" => hours}} when is_number(hours) -> hours
             _ -> nil
           end
-        rescue
-          _ -> nil
-        end
 
+        _ ->
+          nil
+      end
+    rescue
       _ ->
         nil
     end

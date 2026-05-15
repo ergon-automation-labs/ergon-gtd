@@ -292,6 +292,64 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     end
   end
 
+  @doc """
+  Handle task failure event.
+
+  Marks a task as failed and attempts to replan remaining steps in the plan
+  if the task is part of a plan. Falls back to user notification if replan fails.
+  """
+  def handle_fail(message) do
+    event_id = message["event_id"]
+    payload = message["payload"]
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+
+    case validate_fail_payload(payload) do
+      :ok ->
+        task_id = payload["task_id"]
+        failure_reason = payload["failure_reason"] || "Unknown error"
+
+        # Mark task as failed
+        case scoped_update(tenant_id, task_id, %{"status" => "failed"}) do
+          {:ok, task} ->
+            Logger.info(
+              "Task failed: task_id=#{task_id}, reason=#{failure_reason}, event_id=#{event_id}"
+            )
+
+            publish_event(
+              "gtd.task.failed",
+              %{"task_id" => task_id, "failure_reason" => failure_reason},
+              task,
+              event_id,
+              message,
+              tenant_id,
+              user_id
+            )
+
+            # Attempt replan if task is part of a plan
+            plan_id = task["plan_id"]
+
+            if is_binary(plan_id) and plan_id != "" do
+              handle_plan_task_failure(task, plan_id, failure_reason, tenant_id, user_id)
+            else
+              # No plan associated, just mark as handled
+              emit_failure_decision_event(:no_plan, 0, task_id, tenant_id, user_id)
+            end
+
+            :ok
+
+          {:error, reason} ->
+            Logger.error("Failed to mark task as failed #{task_id}: #{inspect(reason)}")
+            publish_error(event_id, reason, "Failed to mark task as failed", tenant_id, user_id)
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.warning("Invalid task fail payload: #{inspect(reason)}")
+        publish_error(event_id, reason, "Invalid failure data", tenant_id, user_id)
+        {:error, reason}
+    end
+  end
+
   # Private functions
 
   defp validate_create_payload(payload) when is_map(payload) do
@@ -326,6 +384,100 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   end
 
   defp validate_delete_payload(_), do: {:error, :invalid_payload}
+
+  defp validate_fail_payload(payload) when is_map(payload) do
+    require_field(payload, "task_id")
+  end
+
+  defp validate_fail_payload(_), do: {:error, :invalid_payload}
+
+  defp attempt_replan(plan_id, task_id, failure_reason, tenant_id, user_id) do
+    context = %{
+      tenant_id: tenant_id,
+      user_id: user_id
+    }
+
+    case BotArmyGtd.Adapters.PlanAdapter.replan_on_failure(
+           plan_id,
+           task_id,
+           failure_reason,
+           context
+         ) do
+      {:ok, new_tasks} ->
+        Logger.info(
+          "[TaskHandler] Successfully replanned after task failure: plan_id=#{plan_id}, new_task_count=#{length(new_tasks)}"
+        )
+
+        emit_adaptation_metric(true, :success)
+        :ok
+
+      {:error, :timeout} ->
+        Logger.warning(
+          "[TaskHandler] Replan timed out for plan_id=#{plan_id}, falling back to notification"
+        )
+
+        emit_adaptation_metric(false, :timeout)
+        notify_user_of_failure(plan_id, task_id, failure_reason, tenant_id, user_id)
+
+      {:error, reason} ->
+        Logger.warning(
+          "[TaskHandler] Replan failed for plan_id=#{plan_id}: #{inspect(reason)}, falling back to notification"
+        )
+
+        emit_adaptation_metric(false, reason)
+        notify_user_of_failure(plan_id, task_id, failure_reason, tenant_id, user_id)
+    end
+  end
+
+  defp emit_adaptation_metric(success, reason) do
+    try do
+      metric_name =
+        if success,
+          do: "gtd.plan_adaptation.success",
+          else: "gtd.plan_adaptation.failure"
+
+      # Emit to metrics/observability system
+      Logger.debug(
+        "[TaskHandler] Emitting adaptation metric: #{metric_name}, reason=#{inspect(reason)}"
+      )
+    rescue
+      _ -> :ok
+    end
+  end
+
+  defp notify_user_of_failure(plan_id, task_id, failure_reason, tenant_id, user_id) do
+    try do
+      event_data =
+        BotArmyGtd.EventBuilder.build_event(
+          "gtd.plan.needs_attention",
+          %{
+            "plan_id" => plan_id,
+            "failed_task_id" => task_id,
+            "failure_reason" => failure_reason,
+            "message" =>
+              "Plan step failed and could not be auto-recovered. Manual intervention needed."
+          },
+          tenant_id: tenant_id,
+          user_id: user_id
+        )
+
+      case BotArmyGtd.NATS.Publisher.publish(event_data) do
+        {:ok, _} ->
+          Logger.info("[TaskHandler] Published plan failure notification for plan_id=#{plan_id}")
+
+        :ok ->
+          Logger.info("[TaskHandler] Published plan failure notification for plan_id=#{plan_id}")
+
+        {:error, reason} ->
+          Logger.warning(
+            "[TaskHandler] Failed to publish failure notification: #{inspect(reason)}"
+          )
+      end
+    rescue
+      e ->
+        Logger.warning("[TaskHandler] Error notifying user of failure: #{inspect(e)}")
+    end
+  end
 
   defp require_field(payload, field) do
     case payload do
@@ -688,6 +840,121 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
       {:error, reason} ->
         Logger.warning("Failed to list tasks for plan #{plan_id}: #{inspect(reason)}")
+    end
+  end
+
+  defp validate_fail_payload(payload) when is_map(payload) do
+    require_field(payload, "task_id")
+  end
+
+  defp validate_fail_payload(_), do: {:error, :invalid_payload}
+
+  @doc false
+  defp handle_plan_task_failure(failed_task, plan_id, failure_reason, tenant_id, user_id) do
+    task_id = failed_task["id"]
+
+    # Get the target bot from the task if available
+    target_bot = Map.get(failed_task, "target_bot", "gtd")
+
+    # Query dispatcher for confidence on retrying this bot
+    confidence = BotArmyGtd.Adapters.ConfidenceAdapter.get_dispatcher_confidence(target_bot)
+    retry_count = Map.get(failed_task, "retry_count", 0)
+
+    Logger.info(
+      "[TaskHandler] Evaluating plan failure: task_id=#{task_id}, confidence=#{confidence}, retry_count=#{retry_count}"
+    )
+
+    # Decide whether to retry or replan
+    if BotArmyGtd.Adapters.ConfidenceAdapter.should_retry?(failed_task, confidence) do
+      # Retry: increment counter and reschedule
+      Logger.info("[TaskHandler] Retrying task: task_id=#{task_id}, confidence=#{confidence}")
+      updated_task = BotArmyGtd.Adapters.ConfidenceAdapter.increment_retry_count(failed_task)
+
+      # Reschedule task (delay for backoff)
+      reschedule_task_for_retry(updated_task, confidence, tenant_id, user_id)
+      emit_failure_decision_event(:retry, confidence, task_id, tenant_id, user_id)
+    else
+      # Replan: call plan adapter to regenerate remaining steps
+      Logger.info(
+        "[TaskHandler] Replanning after failure: task_id=#{task_id}, confidence=#{confidence}"
+      )
+
+      case BotArmyGtd.Adapters.PlanAdapter.replan_on_failure(
+             plan_id,
+             task_id,
+             failure_reason,
+             %{tenant_id: tenant_id, user_id: user_id}
+           ) do
+        {:ok, new_tasks} ->
+          Logger.info(
+            "[TaskHandler] Plan adapted: task_id=#{task_id}, new_task_count=#{length(new_tasks)}"
+          )
+
+          emit_failure_decision_event(:replan, confidence, task_id, tenant_id, user_id)
+
+        {:error, reason} ->
+          Logger.warning(
+            "[TaskHandler] Plan adaptation failed: task_id=#{task_id}, reason=#{inspect(reason)}"
+          )
+
+          emit_failure_decision_event(:abort, confidence, task_id, tenant_id, user_id)
+      end
+    end
+  end
+
+  defp reschedule_task_for_retry(task, confidence, tenant_id, user_id) do
+    task_id = task["id"]
+    retry_count = Map.get(task, "retry_count", 0)
+
+    # Exponential backoff: 5s, 25s, 125s, etc.
+    backoff_multiplier = Integer.pow(5, retry_count)
+    retry_delay_seconds = min(backoff_multiplier, 3600)
+
+    # Reschedule to active after delay
+    future_due_date =
+      DateTime.utc_now()
+      |> DateTime.add(retry_delay_seconds, :second)
+      |> DateTime.to_iso8601()
+
+    update_payload = %{
+      "status" => "active",
+      "due_date" => future_due_date,
+      "retry_count" => retry_count
+    }
+
+    case scoped_update(tenant_id, task_id, update_payload) do
+      {:ok, _updated_task} ->
+        Logger.info(
+          "[TaskHandler] Rescheduled task for retry: task_id=#{task_id}, retry_count=#{retry_count}, backoff_seconds=#{retry_delay_seconds}"
+        )
+
+      {:error, reason} ->
+        Logger.warning(
+          "[TaskHandler] Failed to reschedule task: task_id=#{task_id}, reason=#{inspect(reason)}"
+        )
+    end
+  end
+
+  defp emit_failure_decision_event(decision, confidence, task_id, tenant_id, user_id) do
+    event_data =
+      BotArmyGtd.EventBuilder.build_event(
+        "events.gtd.plan.failure_decision",
+        %{
+          "task_id" => task_id,
+          "decision" => decision,
+          "dispatcher_confidence" => confidence,
+          "decided_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+        },
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
+
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+      {:ok, _subject} ->
+        Logger.debug("[TaskHandler] Published failure decision event: decision=#{decision}")
+
+      {:error, reason} ->
+        Logger.warning("[TaskHandler] Failed to publish failure decision: #{inspect(reason)}")
     end
   end
 end

@@ -177,6 +177,26 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "gtd.review.coherence",
       type: :request_reply,
       description: "Check project-task coherence"
+    },
+    %{
+      subject: "gtd.goal.plan",
+      type: :request_reply,
+      description: "Decompose goal into tasks and create plan"
+    },
+    %{
+      subject: "gtd.goal.status",
+      type: :request_reply,
+      description: "Get plan status"
+    },
+    %{
+      subject: "gtd.goal.list",
+      type: :request_reply,
+      description: "List active plans"
+    },
+    %{
+      subject: "gtd.goal.cancel",
+      type: :request_reply,
+      description: "Cancel a plan"
     }
   ]
 
@@ -246,6 +266,18 @@ defmodule BotArmyGtd.NATS.Consumer do
 
           "gtd.project.update" ->
             BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
+
+          "gtd.goal.plan" ->
+            BotArmyGtd.Handlers.PlanHandler.handle_goal_plan(message)
+
+          "gtd.goal.status" ->
+            BotArmyGtd.Handlers.PlanHandler.handle_goal_status(message)
+
+          "gtd.goal.list" ->
+            BotArmyGtd.Handlers.PlanHandler.handle_goal_list(message)
+
+          "gtd.goal.cancel" ->
+            BotArmyGtd.Handlers.PlanHandler.handle_goal_cancel(message)
 
           "gtd.log.create" ->
             BotArmyGtd.Handlers.LogEntryHandler.handle_create(message)

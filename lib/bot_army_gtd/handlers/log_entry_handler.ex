@@ -79,7 +79,8 @@ defmodule BotArmyGtd.Handlers.LogEntryHandler do
 
   defp write_to_file(entry) do
     try do
-      dt = entry["occurred_at"]
+      dt =
+        entry["occurred_at"]
         |> NaiveDateTime.from_iso8601!()
 
       date = dt |> NaiveDateTime.to_date()

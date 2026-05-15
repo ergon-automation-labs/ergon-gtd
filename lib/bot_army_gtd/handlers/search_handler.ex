@@ -3,6 +3,11 @@ defmodule BotArmyGtd.Handlers.SearchHandler do
   Handles task search requests for the GTD bot.
 
   Searches tasks by query string with optional filters.
+
+  When `filters["no_project"]` is true, results are limited to tasks with no
+  `project_id` (empty desk hygiene for chronicle / daily brief). Omitted or blank
+  `query` is normalized to `"*"` (match all) for that case. A plain `"*"` query
+  without `no_project` still matches every task textually.
   """
 
   require Logger
@@ -23,8 +28,8 @@ defmodule BotArmyGtd.Handlers.SearchHandler do
 
     case validate_search_payload(payload) do
       :ok ->
-        query = payload["query"]
         filters = Map.get(payload, "filters", %{})
+        query = normalize_search_query(payload["query"], filters)
         pagination = Map.get(payload, "pagination", %{})
 
         case task_store().search(tenant_id, query, filters, pagination) do
@@ -57,15 +62,33 @@ defmodule BotArmyGtd.Handlers.SearchHandler do
   # Private functions
 
   defp validate_search_payload(payload) when is_map(payload) do
-    require_field(payload, "query")
+    filters = Map.get(payload, "filters", %{})
+    allow_blank_query? = Map.get(filters, "no_project") == true
+    query = Map.get(payload, "query")
+
+    cond do
+      allow_blank_query? and blank_query?(query) ->
+        :ok
+
+      is_binary(query) and String.trim(query) != "" ->
+        :ok
+
+      true ->
+        {:error, {:missing_field, "query"}}
+    end
   end
 
   defp validate_search_payload(_), do: {:error, :invalid_payload}
 
-  defp require_field(payload, field) do
-    case payload do
-      %{^field => value} when value not in [nil, ""] -> :ok
-      _ -> {:error, {:missing_field, field}}
+  defp blank_query?(q) when q in [nil, ""], do: true
+  defp blank_query?(q) when is_binary(q), do: String.trim(q) == ""
+  defp blank_query?(_), do: false
+
+  defp normalize_search_query(query, filters) do
+    if Map.get(filters, "no_project") == true and blank_query?(query) do
+      "*"
+    else
+      query
     end
   end
 end

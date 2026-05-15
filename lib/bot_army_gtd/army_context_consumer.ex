@@ -23,11 +23,9 @@ defmodule BotArmyGtd.ArmyContextConsumer do
 
   @doc "Get current at-risk goal IDs"
   def get_at_risk_goals do
-    try do
-      GenServer.call(__MODULE__, :get_at_risk_goals)
-    catch
-      :exit, _ -> []
-    end
+    GenServer.call(__MODULE__, :get_at_risk_goals)
+  catch
+    :exit, _ -> []
   end
 
   # Callbacks

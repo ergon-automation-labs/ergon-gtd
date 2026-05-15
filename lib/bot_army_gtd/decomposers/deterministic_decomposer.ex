@@ -67,15 +67,22 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
   def match_template(goal) when is_binary(goal) do
     goal_lower = String.downcase(goal)
 
-    [
-      match_research(goal_lower),
-      match_summarize(goal_lower),
-      match_create_and_schedule(goal_lower),
-      match_email_workflow(goal_lower),
-      match_analysis(goal_lower)
-    ]
-    |> Enum.sort_by(fn {_template, score} -> score end, :desc)
-    |> List.first() || {:no_match, 0.0}
+    result =
+      [
+        match_research(goal_lower),
+        match_summarize(goal_lower),
+        match_create_and_schedule(goal_lower),
+        match_email_workflow(goal_lower),
+        match_analysis(goal_lower)
+      ]
+      |> Enum.sort_by(fn {_template, score} -> score end, :desc)
+      |> List.first()
+
+    case result do
+      {_template, 0.0} -> {:no_match, 0.0}
+      {template, score} -> {template, score}
+      nil -> {:no_match, 0.0}
+    end
   end
 
   @doc """
@@ -174,9 +181,8 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
 
     case matches do
       0 -> 0.0
-      1 -> 0.6
-      2 -> 0.85
-      3 -> 0.95
+      1 -> 0.85
+      2 -> 0.95
       _ -> 1.0
     end
   end
@@ -301,7 +307,7 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
   defp decompose_create_and_schedule(goal, context) do
     task_title = context[:task_title] || context["task_title"] || "New task"
     deadline = context[:deadline] || context["deadline"] || "next week"
-    notify = context[:notify] || context["notify"] || true
+    notify = Map.get(context, :notify, Map.get(context, "notify", true))
 
     subtasks = [
       %{
@@ -360,7 +366,7 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
     subtasks = [
       %{
         "order" => 1,
-        "description" => "Draft email to #{recipient}",
+        "description" => "Draft email to #{recipient} about #{subject}",
         "target_bot" => "bot_army_gtd",
         "target_subject" => "gtd.task.create",
         "payload" => %{

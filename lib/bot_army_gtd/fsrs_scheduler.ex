@@ -20,8 +20,10 @@ defmodule BotArmyGtd.FSRSScheduler do
 
   require Logger
 
-  @initial_stability 1.0  # Start with 1 day interval
-  @initial_difficulty 5.0  # Medium difficulty (0-10 scale)
+  # Start with 1 day interval
+  @initial_stability 1.0
+  # Medium difficulty (0-10 scale)
+  @initial_difficulty 5.0
 
   @doc """
   Calculate next review interval in days for a decomposition.
@@ -53,11 +55,9 @@ defmodule BotArmyGtd.FSRSScheduler do
   end
 
   defp get_field(decomposition, field) do
-    try do
-      Map.fetch!(decomposition, field)
-    rescue
-      _ -> nil
-    end
+    Map.fetch!(decomposition, field)
+  rescue
+    _ -> nil
   end
 
   @doc """
@@ -114,7 +114,8 @@ defmodule BotArmyGtd.FSRSScheduler do
 
     case due_at do
       nil ->
-        1.0  # Not yet scheduled
+        # Not yet scheduled
+        1.0
 
       due_at ->
         now = DateTime.utc_now()
@@ -123,7 +124,7 @@ defmodule BotArmyGtd.FSRSScheduler do
 
         # Time since due_at in days
         seconds_elapsed = DateTime.diff(now, due_at)
-        days_elapsed = max(0, seconds_elapsed / 86400)
+        days_elapsed = max(0, seconds_elapsed / 86_400)
 
         # Exponential decay: R(t) = e^(-t/S)
         :math.exp(-days_elapsed / stability)
@@ -143,7 +144,7 @@ defmodule BotArmyGtd.FSRSScheduler do
     case DateTime.compare(now, due_at) do
       :lt ->
         seconds_until = DateTime.diff(due_at, now)
-        days_until = div(seconds_until, 86400)
+        days_until = div(seconds_until, 86_400)
         format_days(days_until)
 
       :eq ->
@@ -151,7 +152,7 @@ defmodule BotArmyGtd.FSRSScheduler do
 
       :gt ->
         seconds_since = DateTime.diff(now, due_at)
-        days_since = div(seconds_since, 86400)
+        days_since = div(seconds_since, 86_400)
         "Overdue by #{format_days(days_since)}"
     end
   end
@@ -165,27 +166,36 @@ defmodule BotArmyGtd.FSRSScheduler do
     # Base interval multiplier per grade
     multiplier =
       case grade do
-        1 -> 0.5    # Again: reduce by half
-        2 -> 0.7    # Hard: reduce to 70%
-        3 -> 1.0    # Good: maintain
-        4 -> 1.2    # Easy: increase by 20%
+        # Again: reduce by half
+        1 -> 0.5
+        # Hard: reduce to 70%
+        2 -> 0.7
+        # Good: maintain
+        3 -> 1.0
+        # Easy: increase by 20%
+        4 -> 1.2
       end
 
     # Difficulty factor (harder items have shorter stability growth)
     difficulty_factor = (5 - difficulty) / 5
 
     new_stability = stability * multiplier * (0.8 + difficulty_factor * 0.2)
-    max(new_stability, 0.1)  # Ensure minimum stability
+    # Ensure minimum stability
+    max(new_stability, 0.1)
   end
 
   defp calculate_new_difficulty(difficulty, grade) do
     # Adjust difficulty based on performance
     adjustment =
       case grade do
-        1 -> 1.0    # Again: increase difficulty
-        2 -> 0.3    # Hard: slight increase
-        3 -> 0.0    # Good: no change
-        4 -> -1.0   # Easy: decrease difficulty
+        # Again: increase difficulty
+        1 -> 1.0
+        # Hard: slight increase
+        2 -> 0.3
+        # Good: no change
+        3 -> 0.0
+        # Easy: decrease difficulty
+        4 -> -1.0
       end
 
     new_difficulty = difficulty + adjustment
