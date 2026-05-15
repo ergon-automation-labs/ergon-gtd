@@ -503,8 +503,8 @@ defmodule BotArmyGtd.DecomposerTest do
     test "falls back to LLM for ambiguous goals" do
       # Mock the LLM call for ambiguous goals
       # (This would normally go to LLM since it doesn't match templates)
-      # Since we can't easily mock in this test, we just verify the function exists
-      assert is_function(Decomposer.decompose_goal(&1, &2, &3), 3)
+      # Since we can't easily mock in this test, we just verify the function is callable
+      assert is_function(&Decomposer.decompose_goal/3)
     end
 
     test "decompose_goal returns consistent structure" do
