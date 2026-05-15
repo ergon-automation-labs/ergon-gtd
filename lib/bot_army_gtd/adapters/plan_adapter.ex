@@ -167,6 +167,7 @@ defmodule BotArmyGtd.Adapters.PlanAdapter do
   end
 
   defp call_llm_for_replan(plan, failed_task, remaining_tasks, failure_reason) do
+    goal = plan["goal"]
     context = plan["context"] || %{}
 
     # Build the replan prompt
