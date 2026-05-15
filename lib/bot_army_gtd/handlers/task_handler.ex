@@ -172,6 +172,19 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
             BotArmyGtd.ParaExporter.notify_completed(task)
             BotArmyGtd.ParaExporter.rotate_next_action(task, tenant_id)
 
+            # Record outcome: task was completed
+            try do
+              BotArmyLearning.OutcomeTracker.record(
+                task_id,
+                "gtd.task_completion",
+                "completed",
+                "completed",
+                true
+              )
+            rescue
+              _ -> :ok
+            end
+
             :ok
 
           {:error, reason} ->
