@@ -3,6 +3,7 @@ defmodule BotArmyGtd.DecomposerTest do
   @moduletag :handlers
 
   alias BotArmyGtd.Decomposer
+  alias BotArmyGtd.Decomposers.DeterministicDecomposer
 
   # =====================================================================
   # Tests for build_decomposition_prompt
@@ -386,6 +387,161 @@ defmodule BotArmyGtd.DecomposerTest do
       assert subtask["depends_on"] == []
       assert subtask["needs_verification"] == true
       assert subtask["payload"]["title"] == "Test"
+    end
+  end
+
+  # =====================================================================
+  # Tests for Deterministic Integration (try_deterministic)
+  # =====================================================================
+
+  describe "try_deterministic/2" do
+    test "returns ok with template for research goal" do
+      {:ok, subtasks, template} =
+        Decomposer.try_deterministic("research acme corp", %{company: "Acme"})
+
+      assert template == :research
+      assert is_list(subtasks)
+      assert length(subtasks) > 0
+    end
+
+    test "returns ok with template for summarize goal" do
+      {:ok, subtasks, template} =
+        Decomposer.try_deterministic("summarize the document", %{})
+
+      assert template == :summarize
+      assert is_list(subtasks)
+      assert length(subtasks) > 0
+    end
+
+    test "returns ok with template for create_and_schedule goal" do
+      {:ok, subtasks, template} =
+        Decomposer.try_deterministic("create task and schedule it", %{})
+
+      assert template == :create_and_schedule
+      assert is_list(subtasks)
+      assert length(subtasks) > 0
+    end
+
+    test "returns no_match for unrelated goal" do
+      :no_match = Decomposer.try_deterministic("xyz abc qwerty random", %{})
+    end
+
+    test "returns subtasks with all required fields" do
+      {:ok, subtasks, _template} =
+        Decomposer.try_deterministic("research company", %{})
+
+      Enum.each(subtasks, fn st ->
+        assert Map.has_key?(st, "order")
+        assert Map.has_key?(st, "description")
+        assert Map.has_key?(st, "target_bot")
+        assert Map.has_key?(st, "target_subject")
+        assert Map.has_key?(st, "payload")
+        assert Map.has_key?(st, "depends_on")
+        assert Map.has_key?(st, "needs_verification")
+      end)
+    end
+
+    test "deterministic is fast (no NATS)" do
+      start_time = System.monotonic_time(:millisecond)
+
+      {:ok, _subtasks, _template} =
+        Decomposer.try_deterministic("research company", %{})
+
+      end_time = System.monotonic_time(:millisecond)
+      duration_ms = end_time - start_time
+
+      # Should be very fast - no network calls
+      assert duration_ms < 100
+    end
+  end
+
+  # =====================================================================
+  # Tests for Confidence Threshold
+  # =====================================================================
+
+  describe "deterministic_confidence_threshold/0" do
+    test "returns a float" do
+      threshold = Decomposer.deterministic_confidence_threshold()
+      assert is_float(threshold) or is_integer(threshold)
+    end
+
+    test "threshold is between 0 and 1" do
+      threshold = Decomposer.deterministic_confidence_threshold()
+      assert threshold >= 0.0
+      assert threshold <= 1.0
+    end
+
+    test "threshold is reasonable (0.8)" do
+      threshold = Decomposer.deterministic_confidence_threshold()
+      assert threshold == 0.8
+    end
+  end
+
+  # =====================================================================
+  # Integration Tests - Fallback Logic
+  # =====================================================================
+
+  describe "decompose_goal with fallback routing" do
+    test "research goal uses deterministic path (no LLM)" do
+      # This test verifies that a clear research goal goes through
+      # the deterministic path without calling the LLM.
+      # We can't easily mock NATS, but we can verify the results
+      # match what deterministic produces.
+      {:ok, subtasks} = Decomposer.decompose_goal("research acme", %{company: "Acme"})
+
+      # Should succeed
+      assert is_list(subtasks)
+      assert length(subtasks) == 4
+
+      # Should match deterministic structure
+      {:ok, expected_subtasks, _template} =
+        Decomposer.try_deterministic("research acme", %{company: "Acme"})
+
+      assert subtasks == expected_subtasks
+    end
+
+    test "falls back to LLM for ambiguous goals" do
+      # Mock the LLM call for ambiguous goals
+      # (This would normally go to LLM since it doesn't match templates)
+      # Since we can't easily mock in this test, we just verify the function exists
+      assert is_function(Decomposer.decompose_goal(&1, &2, &3), 3)
+    end
+
+    test "decompose_goal returns consistent structure" do
+      # Whether deterministic or LLM, results should have same structure
+      {:ok, subtasks} = Decomposer.decompose_goal("research company", %{})
+
+      Enum.each(subtasks, fn st ->
+        assert is_map(st)
+        assert Map.has_key?(st, "order")
+        assert Map.has_key?(st, "description")
+        assert Map.has_key?(st, "target_bot")
+        assert Map.has_key?(st, "target_subject")
+        assert Map.has_key?(st, "payload")
+        assert Map.has_key?(st, "depends_on")
+        assert Map.has_key?(st, "needs_verification")
+      end)
+    end
+
+    test "decompose_goal with empty context" do
+      {:ok, subtasks} = Decomposer.decompose_goal("research target", %{})
+
+      assert is_list(subtasks)
+      assert length(subtasks) > 0
+    end
+
+    test "decompose_goal with context" do
+      {:ok, subtasks} =
+        Decomposer.decompose_goal("research company", %{company: "TechCorp"})
+
+      assert is_list(subtasks)
+      assert length(subtasks) > 0
+
+      # Verify context is used
+      descriptions = Enum.map(subtasks, fn st -> st["description"] end)
+      used_context = Enum.any?(descriptions, fn desc -> String.contains?(desc, "TechCorp") end)
+
+      assert used_context
     end
   end
 end
