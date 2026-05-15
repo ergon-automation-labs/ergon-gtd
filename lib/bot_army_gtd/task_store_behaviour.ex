@@ -19,5 +19,7 @@ defmodule BotArmyGtd.TaskStoreBehaviour do
               filters :: map(),
               pagination :: map()
             ) :: {:ok, {list(map()), integer()}} | {:error, atom()}
+  @callback list_by_plan(tenant_id :: String.t(), plan_id :: String.t()) ::
+              {:ok, list(map())} | {:error, atom()}
   @callback clear() :: :ok
 end

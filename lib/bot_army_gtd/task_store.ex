@@ -119,13 +119,25 @@ defmodule BotArmyGtd.TaskStore do
   Search tasks for a tenant by query string.
 
   Query matches against title and description (case-insensitive).
-  Supports optional filters: status, context, labels, project_id.
+  Supports optional filters: status, context, labels, project_id, no_project.
+  When `"no_project": true`, only tasks with no `project_id` are returned; `project_id`
+  in filters is ignored for that request. Use query `"*"` to match all titles (see `SearchHandler`).
   Supports pagination: limit (default 50), offset (default 0).
 
   Returns `{:ok, {tasks, total_count}}`.
   """
   def search(tenant_id, query, filters \\ %{}, pagination \\ %{}) do
     GenServer.call(@server, {:search, tenant_id, query, filters, pagination})
+  end
+
+  @doc """
+  List all tasks for a given plan.
+
+  Returns `{:ok, tasks}` with tasks linked to the plan_id, or `{:error, reason}`.
+  """
+  def list_by_plan(tenant_id, plan_id)
+      when is_binary(tenant_id) and is_binary(plan_id) do
+    GenServer.call(@server, {:list_by_plan, tenant_id, plan_id})
   end
 
   @doc """
@@ -484,6 +496,37 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   @impl true
+  def handle_call({:list_by_plan, tenant_id, plan_id}, _from, state) do
+    # Load from database if state is empty
+    state_to_use =
+      if map_size(state) == 0 do
+        try do
+          tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
+          Logger.info("TaskStore recovered #{length(tasks)} tasks from database")
+
+          Enum.reduce(tasks, %{}, fn task, acc ->
+            Map.put(acc, task.id |> to_string(), schema_to_map(task))
+          end)
+        rescue
+          _ ->
+            Logger.warning("TaskStore recovery from database failed, using empty state")
+            state
+        end
+      else
+        state
+      end
+
+    tasks =
+      state_to_use
+      |> Map.values()
+      |> Enum.filter(&(&1["tenant_id"] == tenant_id))
+      |> Enum.filter(&(Map.get(&1, "plan_id") == plan_id))
+      |> Enum.sort_by(&Map.get(&1, "plan_order", 999))
+
+    {:reply, {:ok, tasks}, state_to_use}
+  end
+
+  @impl true
   def handle_call(:clear, _from, _state) do
     Logger.debug("Clearing all tasks from database and state")
     # Clear database
@@ -528,9 +571,11 @@ defmodule BotArmyGtd.TaskStore do
       |> Enum.filter(&task_matches_query?(&1, query_lower))
 
     # Apply optional filters
+    no_project? = Map.get(filters, "no_project") == true
+
     filtered_tasks =
       filtered_tasks
-      |> apply_filter(filters)
+      |> apply_filter(filters, no_project?)
 
     # Apply pagination
     total_count = length(filtered_tasks)
@@ -543,14 +588,27 @@ defmodule BotArmyGtd.TaskStore do
     {:reply, {:ok, {paginated_tasks, total_count}}, state_to_use}
   end
 
-  defp apply_filter(tasks, filters) when is_map(filters) do
+  defp apply_filter(tasks, filters, no_project?) when is_map(filters) do
     tasks
     |> apply_status_filter(Map.get(filters, "status"))
     |> apply_context_filter(Map.get(filters, "context"))
     |> apply_labels_filter(Map.get(filters, "labels"))
-    |> apply_project_filter(Map.get(filters, "project_id"))
+    |> apply_unassigned_project_filter(Map.get(filters, "no_project"))
+    |> apply_project_filter(if(no_project?, do: nil, else: Map.get(filters, "project_id")))
     |> apply_goal_filter(Map.get(filters, "goal_id"))
   end
+
+  defp apply_unassigned_project_filter(tasks, true) do
+    Enum.filter(tasks, fn t ->
+      case t["project_id"] do
+        nil -> true
+        "" -> true
+        _ -> false
+      end
+    end)
+  end
+
+  defp apply_unassigned_project_filter(tasks, _), do: tasks
 
   defp apply_status_filter(tasks, nil), do: tasks
 
@@ -584,6 +642,8 @@ defmodule BotArmyGtd.TaskStore do
   defp apply_goal_filter(tasks, goal_id) when is_binary(goal_id) do
     Enum.filter(tasks, &(&1["goal_id"] == goal_id))
   end
+
+  defp task_matches_query?(_task, "*"), do: true
 
   defp task_matches_query?(task, query_lower) do
     metadata_text =

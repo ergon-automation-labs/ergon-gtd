@@ -172,6 +172,9 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
             BotArmyGtd.ParaExporter.notify_completed(task)
             BotArmyGtd.ParaExporter.rotate_next_action(task, tenant_id)
 
+            # Handle plan completion if this task is part of a plan
+            maybe_handle_plan_completion(task, tenant_id, user_id)
+
             # Record outcome: task was completed
             try do
               BotArmyLearning.OutcomeTracker.record(
@@ -615,6 +618,76 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
       description
     else
       (description <> "\n\n" <> note) |> String.trim()
+    end
+  end
+
+  defp maybe_handle_plan_completion(task, tenant_id, user_id) do
+    plan_id = task["plan_id"]
+
+    if is_binary(plan_id) and plan_id != "" do
+      try do
+        plan_store =
+          Application.get_env(:bot_army_gtd, :plan_store, BotArmyGtd.PlanStore)
+
+        case plan_store.get(tenant_id, plan_id) do
+          {:ok, plan} ->
+            # Check if all tasks in this plan are now complete
+            check_and_complete_plan_if_done(plan, tenant_id, user_id)
+
+          {:error, reason} ->
+            Logger.warning("Failed to fetch plan #{plan_id}: #{inspect(reason)}")
+        end
+      rescue
+        e ->
+          Logger.warning("Error handling plan completion: #{inspect(e)}")
+      end
+    end
+  end
+
+  defp check_and_complete_plan_if_done(plan, tenant_id, user_id) do
+    plan_id = plan["id"]
+    plan_store = Application.get_env(:bot_army_gtd, :plan_store, BotArmyGtd.PlanStore)
+    task_store = task_store()
+
+    case task_store.list_by_plan(tenant_id, plan_id) do
+      {:ok, tasks} ->
+        incomplete_tasks =
+          Enum.reject(tasks, fn t -> t["status"] in ["completed", "deleted", "cancelled"] end)
+
+        if Enum.empty?(incomplete_tasks) do
+          # All tasks complete, update plan status
+          case plan_store.update(tenant_id, plan_id, %{"status" => "completed"}) do
+            {:ok, updated_plan} ->
+              Logger.info("Plan completed: plan_id=#{plan_id}")
+
+              # Publish plan completion event
+              event_data =
+                BotArmyGtd.EventBuilder.build_event(
+                  "events.gtd.plan.completed",
+                  %{
+                    "plan_id" => plan_id,
+                    "plan" => updated_plan,
+                    "completed_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+                  },
+                  tenant_id: tenant_id,
+                  user_id: user_id
+                )
+
+              case BotArmyGtd.NATS.Publisher.publish(event_data) do
+                {:ok, _} ->
+                  Logger.debug("Published plan completion event")
+
+                {:error, reason} ->
+                  Logger.error("Failed to publish plan completion: #{inspect(reason)}")
+              end
+
+            {:error, reason} ->
+              Logger.error("Failed to update plan status: #{inspect(reason)}")
+          end
+        end
+
+      {:error, reason} ->
+        Logger.warning("Failed to list tasks for plan #{plan_id}: #{inspect(reason)}")
     end
   end
 end
