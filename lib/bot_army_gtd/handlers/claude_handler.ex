@@ -74,9 +74,7 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
   # Private validation
 
   defp validate_create_payload(payload) when is_map(payload) do
-    with :ok <- require_field(payload, "title") do
-      :ok
-    end
+    require_field(payload, "title")
   end
 
   defp validate_create_payload(_), do: {:error, :invalid_payload}
