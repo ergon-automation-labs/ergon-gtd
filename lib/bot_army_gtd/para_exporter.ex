@@ -312,54 +312,52 @@ defmodule BotArmyGtd.ParaExporter do
   Best-effort — won't crash the caller.
   """
   def rotate_next_action(task, tenant_id) when is_map(task) do
-    try do
-      project_id = task["project_id"]
+    project_id = task["project_id"]
 
-      if is_binary(project_id) and project_id != "" and project_id != "_inbox" do
-        project_store =
-          Application.get_env(:bot_army_gtd, :project_store, BotArmyGtd.ProjectStore)
+    if is_binary(project_id) and project_id != "" and project_id != "_inbox" do
+      project_store =
+        Application.get_env(:bot_army_gtd, :project_store, BotArmyGtd.ProjectStore)
 
-        task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
+      task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
-        with {:ok, project} <- project_store.get(tenant_id, project_id),
-             slug when slug != "" <- slugify(project["name"] || ""),
-             {:ok, tasks} <- task_store.list(tenant_id, %{"project_id" => project_id}) do
-          active_tasks =
-            tasks
-            |> Enum.filter(&(&1["status"] == "active" and &1["id"] != task["id"]))
-            |> Enum.sort_by(& &1["updated_at"], :desc)
+      with {:ok, project} <- project_store.get(tenant_id, project_id),
+           slug when slug != "" <- slugify(project["name"] || ""),
+           {:ok, tasks} <- task_store.list(tenant_id, %{"project_id" => project_id}) do
+        active_tasks =
+          tasks
+          |> Enum.filter(&(&1["status"] == "active" and &1["id"] != task["id"]))
+          |> Enum.sort_by(& &1["updated_at"], :desc)
 
-          today = Date.utc_today() |> Date.to_iso8601()
+        today = Date.utc_today() |> Date.to_iso8601()
 
-          content =
-            case active_tasks do
-              [next | _rest] ->
-                title = next["title"] || "Untitled"
-                "# Next action\n\n**#{title}**\n\n_Rotated automatically on #{today}_\n"
+        content =
+          case active_tasks do
+            [next | _rest] ->
+              title = next["title"] || "Untitled"
+              "# Next action\n\n**#{title}**\n\n_Rotated automatically on #{today}_\n"
 
-              [] ->
-                "# Next action\n\n_All tasks complete — no active next action._\n\n_Updated #{today}_\n"
-            end
+            [] ->
+              "# Next action\n\n_All tasks complete — no active next action._\n\n_Updated #{today}_\n"
+          end
 
-          do_publish("para.fs.write", %{
-            "schema_version" => "1.0",
-            "relative_path" => "projects/#{slug}/NEXT_ACTION.md",
-            "content" => content,
-            "mode" => "write"
-          })
+        do_publish("para.fs.write", %{
+          "schema_version" => "1.0",
+          "relative_path" => "projects/#{slug}/NEXT_ACTION.md",
+          "content" => content,
+          "mode" => "write"
+        })
 
-          Logger.info(
-            "[ParaExporter] Rotated NEXT_ACTION for #{slug}: #{length(active_tasks)} active tasks remaining"
-          )
-        end
+        Logger.info(
+          "[ParaExporter] Rotated NEXT_ACTION for #{slug}: #{length(active_tasks)} active tasks remaining"
+        )
       end
-
-      :ok
-    rescue
-      e ->
-        Logger.warning("[ParaExporter] rotate_next_action failed: #{inspect(e)}")
-        :ok
     end
+
+    :ok
+  rescue
+    e ->
+      Logger.warning("[ParaExporter] rotate_next_action failed: #{inspect(e)}")
+      :ok
   end
 
   @doc """
