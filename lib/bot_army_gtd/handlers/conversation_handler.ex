@@ -75,37 +75,35 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
   # ───────────────────────────────────────────────────────────────────────────
 
   defp handle_query(body, conversation_id, from_bot) do
-    intent = body["intent"]
+    result = process_query_intent(body["intent"], body["params"] || %{})
+    reply_to_query(result, conversation_id, from_bot)
+  end
 
-    result =
-      case intent do
-        "task.query" -> query_tasks(body["params"] || %{})
-        "task.count" -> count_tasks(body["params"] || %{})
-        "context.summary" -> build_context_summary(body["params"] || %{})
-        _ -> {:error, :unknown_intent}
-      end
+  defp process_query_intent("task.query", params), do: query_tasks(params)
+  defp process_query_intent("task.count", params), do: count_tasks(params)
+  defp process_query_intent("context.summary", params), do: build_context_summary(params)
+  defp process_query_intent(_, _), do: {:error, :unknown_intent}
 
-    case result do
-      {:ok, data} ->
-        Manager.reply(
-          conversation_id,
-          "gtd",
-          data,
-          message_type: "result",
-          from_bot: from_bot,
-          conversation_complete: true
-        )
+  defp reply_to_query({:ok, data}, conversation_id, from_bot) do
+    Manager.reply(
+      conversation_id,
+      "gtd",
+      data,
+      message_type: "result",
+      from_bot: from_bot,
+      conversation_complete: true
+    )
+  end
 
-      {:error, reason} ->
-        Manager.reply(
-          conversation_id,
-          "gtd",
-          %{error: inspect(reason)},
-          message_type: "error",
-          from_bot: from_bot,
-          conversation_complete: true
-        )
-    end
+  defp reply_to_query({:error, reason}, conversation_id, from_bot) do
+    Manager.reply(
+      conversation_id,
+      "gtd",
+      %{error: inspect(reason)},
+      message_type: "error",
+      from_bot: from_bot,
+      conversation_complete: true
+    )
   end
 
   defp handle_command(body, conversation_id, from_bot) do
