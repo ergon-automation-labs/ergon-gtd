@@ -53,7 +53,8 @@ config :logger, :default_formatter,
     :subject,
     :timeout_ms,
     :strategy,
-    :method
+    :method,
+    :subtask_count
   ]
 
 # Import environment-specific config
