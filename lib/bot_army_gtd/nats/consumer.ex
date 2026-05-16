@@ -387,6 +387,42 @@ defmodule BotArmyGtd.NATS.Consumer do
     end
   end
 
+  defp extract_decomposition_tenant_id(body) do
+    case Jason.decode(body) do
+      {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" ->
+        tid
+
+      _ ->
+        Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+    end
+  end
+
+  defp fetch_due_decompositions_response(store, tenant_id) do
+    now = DateTime.utc_now()
+
+    case store.list(tenant_id) do
+      {:ok, decompositions} ->
+        due =
+          decompositions
+          |> Enum.filter(&is_due_for_review?(&1, now))
+          |> Enum.sort_by(fn d -> d["due_at"] end)
+
+        Reply.ok(%{"decompositions" => due})
+
+      {:error, reason} ->
+        Reply.error(inspect(reason), :list_failed)
+    end
+  end
+
+  defp is_due_for_review?(decomposition, now) do
+    decomposition["status"] in ["completed", "reviewed"] and
+      decomposition["due_at"] != nil and
+      case DateTime.from_iso8601(decomposition["due_at"]) do
+        {:ok, due_at, _} -> DateTime.compare(due_at, now) in [:lt, :eq]
+        _ -> false
+      end
+  end
+
   # Callbacks
 
   @impl true
@@ -638,40 +674,10 @@ defmodule BotArmyGtd.NATS.Consumer do
       Map.get(msg, :headers, []),
       fn ->
         decomposition_store =
-          Application.get_env(
-            :bot_army_gtd,
-            :decomposition_store,
-            BotArmyGtd.DecompositionStore
-          )
+          Application.get_env(:bot_army_gtd, :decomposition_store, BotArmyGtd.DecompositionStore)
 
-        tenant_id =
-          case Jason.decode(body) do
-            {:ok, %{"tenant_id" => tid}} when is_binary(tid) and tid != "" -> tid
-            _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
-          end
-
-        now = DateTime.utc_now()
-
-        response =
-          case decomposition_store.list(tenant_id) do
-            {:ok, decompositions} ->
-              due =
-                decompositions
-                |> Enum.filter(fn d ->
-                  d["status"] in ["completed", "reviewed"] and d["due_at"] != nil and
-                    case DateTime.from_iso8601(d["due_at"]) do
-                      {:ok, due_at, _} -> DateTime.compare(due_at, now) in [:lt, :eq]
-                      _ -> false
-                    end
-                end)
-                |> Enum.sort_by(fn d -> d["due_at"] end)
-
-              Reply.ok(%{"decompositions" => due})
-
-            {:error, reason} ->
-              Reply.error(inspect(reason), :list_failed)
-          end
-
+        tenant_id = extract_decomposition_tenant_id(body)
+        response = fetch_due_decompositions_response(decomposition_store, tenant_id)
         reply_traced(state.conn, reply_to, response)
       end
     )
