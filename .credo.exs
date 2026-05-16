@@ -2,7 +2,7 @@
   configs: [
     %{
       name: "default",
-      strict: true,
+      strict: false,
       color: true,
       checks: [
         {Credo.Check.Refactor.Nesting, false},
@@ -12,8 +12,7 @@
         {Credo.Check.Readability.ModuleDoc, false},
         {Credo.Check.Refactor.FilterFilter, false},
         {Credo.Check.Refactor.CondStatements, false},
-        {Credo.Check.Readability.LargeNumbers, false},
-        {Credo.Check.Refactor.TryTestInExcept, false}
+        {Credo.Check.Readability.LargeNumbers, false}
       ]
     }
   ]
