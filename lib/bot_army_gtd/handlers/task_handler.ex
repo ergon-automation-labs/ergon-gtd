@@ -430,53 +430,47 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   end
 
   defp emit_adaptation_metric(success, reason) do
-    try do
-      metric_name =
-        if success,
-          do: "gtd.plan_adaptation.success",
-          else: "gtd.plan_adaptation.failure"
+    metric_name =
+      if success,
+        do: "gtd.plan_adaptation.success",
+        else: "gtd.plan_adaptation.failure"
 
-      # Emit to metrics/observability system
-      Logger.debug(
-        "[TaskHandler] Emitting adaptation metric: #{metric_name}, reason=#{inspect(reason)}"
-      )
-    rescue
-      _ -> :ok
-    end
+    # Emit to metrics/observability system
+    Logger.debug(
+      "[TaskHandler] Emitting adaptation metric: #{metric_name}, reason=#{inspect(reason)}"
+    )
+  rescue
+    _ -> :ok
   end
 
   defp notify_user_of_failure(plan_id, task_id, failure_reason, tenant_id, user_id) do
-    try do
-      event_data =
-        BotArmyGtd.EventBuilder.build_event(
-          "gtd.plan.needs_attention",
-          %{
-            "plan_id" => plan_id,
-            "failed_task_id" => task_id,
-            "failure_reason" => failure_reason,
-            "message" =>
-              "Plan step failed and could not be auto-recovered. Manual intervention needed."
-          },
-          tenant_id: tenant_id,
-          user_id: user_id
-        )
+    event_data =
+      BotArmyGtd.EventBuilder.build_event(
+        "gtd.plan.needs_attention",
+        %{
+          "plan_id" => plan_id,
+          "failed_task_id" => task_id,
+          "failure_reason" => failure_reason,
+          "message" =>
+            "Plan step failed and could not be auto-recovered. Manual intervention needed."
+        },
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
 
-      case BotArmyGtd.NATS.Publisher.publish(event_data) do
-        {:ok, _} ->
-          Logger.info("[TaskHandler] Published plan failure notification for plan_id=#{plan_id}")
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+      {:ok, _} ->
+        Logger.info("[TaskHandler] Published plan failure notification for plan_id=#{plan_id}")
 
-        :ok ->
-          Logger.info("[TaskHandler] Published plan failure notification for plan_id=#{plan_id}")
+      :ok ->
+        Logger.info("[TaskHandler] Published plan failure notification for plan_id=#{plan_id}")
 
-        {:error, reason} ->
-          Logger.warning(
-            "[TaskHandler] Failed to publish failure notification: #{inspect(reason)}"
-          )
-      end
-    rescue
-      e ->
-        Logger.warning("[TaskHandler] Error notifying user of failure: #{inspect(e)}")
+      {:error, reason} ->
+        Logger.warning("[TaskHandler] Failed to publish failure notification: #{inspect(reason)}")
     end
+  rescue
+    e ->
+      Logger.warning("[TaskHandler] Error notifying user of failure: #{inspect(e)}")
   end
 
   defp require_field(payload, field) do
