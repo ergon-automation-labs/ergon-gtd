@@ -348,11 +348,7 @@ defmodule BotArmyGtd.Gossip do
 
         case Gnat.request(conn, "llm.prompt.submit", request_body, timeout_ms) do
           {:ok, %{body: response_body}} ->
-            case Jason.decode(response_body) do
-              {:ok, %{"completion" => %{"text" => text}}} -> {:ok, text}
-              {:ok, %{"completion" => text}} when is_binary(text) -> {:ok, text}
-              _ -> :error
-            end
+            extract_llm_text(response_body)
 
           _ ->
             :error
@@ -365,6 +361,14 @@ defmodule BotArmyGtd.Gossip do
     _ -> :error
   catch
     _ -> :error
+  end
+
+  defp extract_llm_text(response_body) do
+    case Jason.decode(response_body) do
+      {:ok, %{"completion" => %{"text" => text}}} -> {:ok, text}
+      {:ok, %{"completion" => text}} when is_binary(text) -> {:ok, text}
+      _ -> :error
+    end
   end
 
   defp ensure_table! do
