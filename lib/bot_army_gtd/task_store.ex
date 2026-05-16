@@ -493,8 +493,7 @@ defmodule BotArmyGtd.TaskStore do
     tasks =
       state_to_use
       |> Map.values()
-      |> Enum.filter(&(&1["tenant_id"] == tenant_id))
-      |> Enum.filter(&(Map.get(&1, "plan_id") == plan_id))
+      |> Enum.filter(&(&1["tenant_id"] == tenant_id and Map.get(&1, "plan_id") == plan_id))
       |> Enum.sort_by(&Map.get(&1, "plan_order", 999))
 
     {:reply, {:ok, tasks}, state_to_use}
