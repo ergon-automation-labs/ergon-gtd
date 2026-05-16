@@ -21,29 +21,27 @@ defmodule BotArmyGtd.Handlers.LogEnrichmentHandler do
   The LLM response will be routed back via handle_enriched/1.
   """
   def request_enrichment(entry) when is_map(entry) do
-    try do
-      log_entry_id = entry["id"]
-      body = entry["body"]
+    log_entry_id = entry["id"]
+    body = entry["body"]
 
-      case {log_entry_id, body} do
-        {nil, _} ->
-          :ok
+    case {log_entry_id, body} do
+      {nil, _} ->
+        :ok
 
-        {_, nil} ->
-          :ok
+      {_, nil} ->
+        :ok
 
-        {entry_id, entry_body} when is_binary(entry_id) and is_binary(entry_body) ->
-          event_data = build_llm_request(entry_id, entry_body)
-          BotArmyRuntime.NATS.Publisher.publish("llm.response.parse", event_data)
-          :ok
+      {entry_id, entry_body} when is_binary(entry_id) and is_binary(entry_body) ->
+        event_data = build_llm_request(entry_id, entry_body)
+        BotArmyRuntime.NATS.Publisher.publish("llm.response.parse", event_data)
+        :ok
 
-        _ ->
-          :ok
-      end
-    rescue
-      _e ->
+      _ ->
         :ok
     end
+  rescue
+    _e ->
+      :ok
   end
 
   def request_enrichment(_), do: :ok
@@ -57,44 +55,42 @@ defmodule BotArmyGtd.Handlers.LogEnrichmentHandler do
   Always returns :ok (non-fatal).
   """
   def handle_enriched(message) when is_map(message) do
-    try do
-      payload = message["payload"]
+    payload = message["payload"]
 
-      case {
-        get_in(payload, ["log_entry_id"]),
-        get_in(payload, ["structured_data"])
-      } do
-        {nil, _} ->
-          Logger.warning("Missing log_entry_id in enrichment response")
-          :ok
+    case {
+      get_in(payload, ["log_entry_id"]),
+      get_in(payload, ["structured_data"])
+    } do
+      {nil, _} ->
+        Logger.warning("Missing log_entry_id in enrichment response")
+        :ok
 
-        {_id, nil} ->
-          Logger.warning("Missing structured_data in enrichment response")
-          :ok
+      {_id, nil} ->
+        Logger.warning("Missing structured_data in enrichment response")
+        :ok
 
-        {_id, data} when not is_map(data) ->
-          Logger.warning("structured_data is not a map in enrichment response")
-          :ok
+      {_id, data} when not is_map(data) ->
+        Logger.warning("structured_data is not a map in enrichment response")
+        :ok
 
-        {log_entry_id, structured_data}
-        when is_binary(log_entry_id) and is_map(structured_data) ->
-          case log_entry_store().mark_enriched(log_entry_id, structured_data) do
-            {:ok, updated_entry} ->
-              publish_enriched_event(updated_entry)
-              :ok
+      {log_entry_id, structured_data}
+      when is_binary(log_entry_id) and is_map(structured_data) ->
+        case log_entry_store().mark_enriched(log_entry_id, structured_data) do
+          {:ok, updated_entry} ->
+            publish_enriched_event(updated_entry)
+            :ok
 
-            {:error, reason} ->
-              Logger.warning("Failed to mark log entry as enriched: #{inspect(reason)}")
-              :ok
-          end
+          {:error, reason} ->
+            Logger.warning("Failed to mark log entry as enriched: #{inspect(reason)}")
+            :ok
+        end
 
-        _ ->
-          :ok
-      end
-    rescue
-      _e ->
+      _ ->
         :ok
     end
+  rescue
+    _e ->
+      :ok
   end
 
   def handle_enriched(_), do: :ok

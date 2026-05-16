@@ -78,34 +78,32 @@ defmodule BotArmyGtd.Handlers.LogEntryHandler do
   end
 
   defp write_to_file(entry) do
-    try do
-      dt =
-        entry["occurred_at"]
-        |> NaiveDateTime.from_iso8601!()
+    dt =
+      entry["occurred_at"]
+      |> NaiveDateTime.from_iso8601!()
 
-      date = dt |> NaiveDateTime.to_date()
-      time = dt |> NaiveDateTime.to_time()
+    date = dt |> NaiveDateTime.to_date()
+    time = dt |> NaiveDateTime.to_time()
 
-      # Format time as HH:MM
-      hour = String.pad_leading(to_string(time.hour), 2, "0")
-      minute = String.pad_leading(to_string(time.minute), 2, "0")
-      time_str = "#{hour}:#{minute}"
+    # Format time as HH:MM
+    hour = String.pad_leading(to_string(time.hour), 2, "0")
+    minute = String.pad_leading(to_string(time.minute), 2, "0")
+    time_str = "#{hour}:#{minute}"
 
-      dir = daily_log_dir()
-      File.mkdir_p!(dir)
+    dir = daily_log_dir()
+    File.mkdir_p!(dir)
 
-      filename = "#{dir}/#{date}.md"
-      line = "#{time_str} - #{entry["body"]}\n"
+    filename = "#{dir}/#{date}.md"
+    line = "#{time_str} - #{entry["body"]}\n"
 
-      File.write(filename, line, [:append])
+    File.write(filename, line, [:append])
 
-      # Mark as written in the store
-      log_entry_store().mark_file_written(entry["id"])
-    rescue
-      e ->
-        Logger.warning("Failed to write log entry to file: #{inspect(e)}")
-        # Continue anyway - Postgres is source of truth
-    end
+    # Mark as written in the store
+    log_entry_store().mark_file_written(entry["id"])
+  rescue
+    e ->
+      Logger.warning("Failed to write log entry to file: #{inspect(e)}")
+      # Continue anyway - Postgres is source of truth
   end
 
   defp publish_events(entry, event_id, original_message) do
