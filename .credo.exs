@@ -12,7 +12,8 @@
         {Credo.Check.Readability.ModuleDoc, false},
         {Credo.Check.Refactor.FilterFilter, false},
         {Credo.Check.Refactor.CondStatements, false},
-        {Credo.Check.Readability.LargeNumbers, false}
+        {Credo.Check.Readability.LargeNumbers, false},
+        {Credo.Check.Refactor.TryTestInExcept, false}
       ]
     }
   ]
