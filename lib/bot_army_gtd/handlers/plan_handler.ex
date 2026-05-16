@@ -169,29 +169,7 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
 
         case plan_store().get(tenant_id, plan_id) do
           {:ok, _plan} ->
-            case plan_store().update(tenant_id, plan_id, %{
-                   "status" => "cancelled",
-                   "metadata" => %{"cancellation_reason" => reason}
-                 }) do
-              {:ok, updated_plan} ->
-                Logger.info("Plan cancelled: plan_id=#{plan_id}, reason=#{reason}")
-
-                publish_event(
-                  "gtd.plan.cancelled",
-                  %{"plan_id" => plan_id, "reason" => reason},
-                  event_id,
-                  message,
-                  tenant_id,
-                  user_id
-                )
-
-                {:ok, %{"plan_id" => plan_id, "status" => updated_plan["status"]}}
-
-              {:error, reason} ->
-                Logger.error("Failed to cancel plan: #{inspect(reason)}")
-                publish_error(event_id, reason, "Failed to cancel plan", tenant_id, user_id)
-                {:error, reason}
-            end
+            cancel_plan(plan_id, reason, event_id, message, tenant_id, user_id)
 
           {:error, reason} ->
             Logger.error("Plan not found: #{plan_id}")
@@ -385,6 +363,32 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
       {:ok, _subject} -> Logger.debug("Published error event")
       :ok -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
+    end
+  end
+
+  defp cancel_plan(plan_id, reason, event_id, message, tenant_id, user_id) do
+    case plan_store().update(tenant_id, plan_id, %{
+           "status" => "cancelled",
+           "metadata" => %{"cancellation_reason" => reason}
+         }) do
+      {:ok, updated_plan} ->
+        Logger.info("Plan cancelled: plan_id=#{plan_id}, reason=#{reason}")
+
+        publish_event(
+          "gtd.plan.cancelled",
+          %{"plan_id" => plan_id, "reason" => reason},
+          event_id,
+          message,
+          tenant_id,
+          user_id
+        )
+
+        {:ok, %{"plan_id" => plan_id, "status" => updated_plan["status"]}}
+
+      {:error, reason} ->
+        Logger.error("Failed to cancel plan: #{inspect(reason)}")
+        publish_error(event_id, reason, "Failed to cancel plan", tenant_id, user_id)
+        {:error, reason}
     end
   end
 
