@@ -186,45 +186,17 @@ defmodule BotArmyGtd.ParaExporter do
         _ -> []
       end
 
-    # Deduplicate by slug, keeping the first occurrence
-    {unique, _seen} =
-      projects
-      |> Enum.filter(&real_project?/1)
-      |> Enum.reduce({[], MapSet.new()}, fn project, {acc, seen} ->
-        slug = slugify(project["name"] || "")
+    {unique, _seen} = deduplicate_projects(projects)
+    reversed_unique = Enum.reverse(unique)
 
-        if slug == "" or slug == "untitled" or MapSet.member?(seen, slug) do
-          {acc, seen}
-        else
-          {[{slug, project} | acc], MapSet.put(seen, slug)}
-        end
-      end)
-
-    planned =
-      unique
-      |> Enum.reverse()
-      |> Enum.reject(fn {slug, _} -> MapSet.member?(skip_slugs, slug) end)
+    planned = Enum.reject(reversed_unique, fn {slug, _} -> MapSet.member?(skip_slugs, slug) end)
 
     skipped =
-      unique
-      |> Enum.reverse()
-      |> Enum.filter(fn {slug, _} -> MapSet.member?(skip_slugs, slug) end)
+      Enum.filter(reversed_unique, fn {slug, _} -> MapSet.member?(skip_slugs, slug) end)
       |> Enum.map(fn {slug, _} -> slug end)
 
-    applied =
-      if apply? do
-        Enum.map(planned, fn {slug, project} ->
-          scaffold_project(project)
-          slug
-        end)
-      else
-        []
-      end
-
-    plan_slugs =
-      Enum.map(planned, fn {slug, project} ->
-        %{"slug" => slug, "name" => project["name"], "project_id" => project["id"]}
-      end)
+    applied = if apply?, do: apply_planned_projects(planned), else: []
+    plan_slugs = build_plan_slugs(planned)
 
     {:ok,
      %{
@@ -235,6 +207,33 @@ defmodule BotArmyGtd.ParaExporter do
        applied: applied,
        mode: if(apply?, do: "apply", else: "dry-run")
      }}
+  end
+
+  defp deduplicate_projects(projects) do
+    projects
+    |> Enum.filter(&real_project?/1)
+    |> Enum.reduce({[], MapSet.new()}, fn project, {acc, seen} ->
+      slug = slugify(project["name"] || "")
+
+      if slug == "" or slug == "untitled" or MapSet.member?(seen, slug) do
+        {acc, seen}
+      else
+        {[{slug, project} | acc], MapSet.put(seen, slug)}
+      end
+    end)
+  end
+
+  defp apply_planned_projects(planned) do
+    Enum.map(planned, fn {slug, project} ->
+      scaffold_project(project)
+      slug
+    end)
+  end
+
+  defp build_plan_slugs(planned) do
+    Enum.map(planned, fn {slug, project} ->
+      %{"slug" => slug, "name" => project["name"], "project_id" => project["id"]}
+    end)
   end
 
   # -------------------------------------------------------------------
