@@ -324,20 +324,7 @@ defmodule BotArmyGtd.TaskStore do
                  db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
 
                  if db_task && db_task.tenant_id |> to_string() == tenant_id do
-                   due_date =
-                     case Map.get(payload, "due_date") do
-                       nil ->
-                         nil
-
-                       date_str when is_binary(date_str) ->
-                         case Date.from_iso8601(date_str) do
-                           {:ok, date} -> date
-                           {:error, _} -> nil
-                         end
-
-                       _ ->
-                         nil
-                     end
+                   due_date = parse_due_date(Map.get(payload, "due_date"))
 
                    changeset =
                      BotArmyGtd.Schemas.Task.changeset(
@@ -764,4 +751,15 @@ defmodule BotArmyGtd.TaskStore do
       "updated_at" => task.updated_at |> NaiveDateTime.to_iso8601()
     }
   end
+
+  defp parse_due_date(nil), do: nil
+
+  defp parse_due_date(date_str) when is_binary(date_str) do
+    case Date.from_iso8601(date_str) do
+      {:ok, date} -> date
+      {:error, _} -> nil
+    end
+  end
+
+  defp parse_due_date(_), do: nil
 end
