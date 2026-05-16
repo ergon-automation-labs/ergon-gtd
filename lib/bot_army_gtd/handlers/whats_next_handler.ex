@@ -25,19 +25,17 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
   end
 
   defp query_scores(tenant_id) do
-    try do
-      import Ecto.Query
+    import Ecto.Query
 
-      BotArmyGtd.Schemas.ItemScore
-      |> where([s], s.tenant_id == ^tenant_id)
-      |> order_by([s], desc: s.why_next_score)
-      |> BotArmyGtd.Repo.all()
-      |> Enum.map(&score_to_map/1)
-    rescue
-      _ ->
-        Logger.warning("Could not query item scores for whats_next")
-        []
-    end
+    BotArmyGtd.Schemas.ItemScore
+    |> where([s], s.tenant_id == ^tenant_id)
+    |> order_by([s], desc: s.why_next_score)
+    |> BotArmyGtd.Repo.all()
+    |> Enum.map(&score_to_map/1)
+  rescue
+    _ ->
+      Logger.warning("Could not query item scores for whats_next")
+      []
   end
 
   defp build_ranked_snapshot(scores, _source, include, limit) do
