@@ -80,11 +80,10 @@ defmodule BotArmyGtd.ReviewScheduler do
         |> Enum.filter(fn d ->
           status = Map.get(d, "status")
           due_at_str = Map.get(d, "due_at")
-          status in ["completed", "reviewed"] and due_at_str != nil
-        end)
-        |> Enum.filter(fn d ->
-          due_at = parse_datetime(Map.get(d, "due_at"))
-          due_at && DateTime.compare(due_at, now) in [:lt, :eq]
+          due_at = parse_datetime(due_at_str)
+
+          status in ["completed", "reviewed"] and due_at_str != nil and due_at &&
+            DateTime.compare(due_at, now) in [:lt, :eq]
         end)
         |> Enum.sort(fn a, b ->
           due_a = parse_datetime(Map.get(a, "due_at"))
@@ -111,12 +110,10 @@ defmodule BotArmyGtd.ReviewScheduler do
         |> Enum.filter(fn d ->
           status = Map.get(d, "status")
           due_at_str = Map.get(d, "due_at")
-          status in ["completed", "reviewed"] and due_at_str != nil
-        end)
-        |> Enum.filter(fn d ->
-          due_at = parse_datetime(Map.get(d, "due_at"))
+          due_at = parse_datetime(due_at_str)
 
-          due_at && DateTime.compare(due_at, now) in [:gt, :eq] and
+          status in ["completed", "reviewed"] and due_at_str != nil and due_at &&
+            DateTime.compare(due_at, now) in [:gt, :eq] and
             DateTime.compare(due_at, future) in [:lt, :eq]
         end)
         |> Enum.sort(fn a, b ->

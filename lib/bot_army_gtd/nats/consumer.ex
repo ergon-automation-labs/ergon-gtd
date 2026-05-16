@@ -630,13 +630,11 @@ defmodule BotArmyGtd.NATS.Consumer do
               due =
                 decompositions
                 |> Enum.filter(fn d ->
-                  d["status"] in ["completed", "reviewed"] and d["due_at"] != nil
-                end)
-                |> Enum.filter(fn d ->
-                  case DateTime.from_iso8601(d["due_at"]) do
-                    {:ok, due_at, _} -> DateTime.compare(due_at, now) in [:lt, :eq]
-                    _ -> false
-                  end
+                  d["status"] in ["completed", "reviewed"] and d["due_at"] != nil and
+                    case DateTime.from_iso8601(d["due_at"]) do
+                      {:ok, due_at, _} -> DateTime.compare(due_at, now) in [:lt, :eq]
+                      _ -> false
+                    end
                 end)
                 |> Enum.sort_by(fn d -> d["due_at"] end)
 

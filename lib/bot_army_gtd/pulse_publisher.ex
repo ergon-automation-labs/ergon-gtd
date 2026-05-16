@@ -173,15 +173,17 @@ defmodule BotArmyGtd.PulsePublisher do
     tasks = pulse["tasks"] || []
 
     health_status =
-      cond do
-        total_active_tasks > 100 -> "degraded"
-        true -> "healthy"
+      if total_active_tasks > 100 do
+        "degraded"
+      else
+        "healthy"
       end
 
     risk_severity =
-      cond do
-        health_status == "degraded" -> "medium"
-        true -> "low"
+      if health_status == "degraded" do
+        "medium"
+      else
+        "low"
       end
 
     [
