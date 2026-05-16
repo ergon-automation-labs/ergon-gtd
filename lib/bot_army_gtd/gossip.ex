@@ -143,26 +143,30 @@ defmodule BotArmyGtd.Gossip do
         {:active_gtd_poll,
          %{poll_id: poll_id, choices: choices, budget: budget, tenant_id: tenant_id}}
       ] ->
-        voted_key = {:gtd_poll_voted, poll_id}
-
-        if :ets.lookup(@table, voted_key) == [] do
-          allocations = BotArmyRuntime.GtdPollAllocator.allocate(choices, :gtd, budget)
-
-          Logger.info(
-            "[GTD Gossip] voting on GTD poll poll_id=#{poll_id} allocations=#{inspect(allocations)}"
-          )
-
-          if allocations != [] do
-            submit_gtd_vote(poll_id, allocations, tenant_id)
-          end
-
-          :ets.insert(@table, {voted_key, true})
-        else
-          Logger.debug("[GTD Gossip] already voted on GTD poll poll_id=#{poll_id}")
-        end
+        cast_gtd_vote(poll_id, choices, budget, tenant_id)
 
       _ ->
         Logger.debug("[GTD Gossip] no active GTD poll found in ETS")
+    end
+  end
+
+  defp cast_gtd_vote(poll_id, choices, budget, tenant_id) do
+    voted_key = {:gtd_poll_voted, poll_id}
+
+    if :ets.lookup(@table, voted_key) == [] do
+      allocations = BotArmyRuntime.GtdPollAllocator.allocate(choices, :gtd, budget)
+
+      Logger.info(
+        "[GTD Gossip] voting on GTD poll poll_id=#{poll_id} allocations=#{inspect(allocations)}"
+      )
+
+      if allocations != [] do
+        submit_gtd_vote(poll_id, allocations, tenant_id)
+      end
+
+      :ets.insert(@table, {voted_key, true})
+    else
+      Logger.debug("[GTD Gossip] already voted on GTD poll poll_id=#{poll_id}")
     end
   end
 

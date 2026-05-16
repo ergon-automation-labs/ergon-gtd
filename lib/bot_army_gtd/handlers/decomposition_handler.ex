@@ -763,15 +763,11 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     abs(predicted - actual) / predicted
   end
 
-  defp calculate_fsrs_grade(rating, delta) do
-    cond do
-      rating < 3 or delta > 0.3 -> 0
-      rating == 3 and delta > 0.2 -> 1
-      rating == 4 and delta < 0.2 -> 2
-      rating == 5 and delta < 0.1 -> 3
-      true -> 2
-    end
-  end
+  defp calculate_fsrs_grade(rating, delta) when rating < 3 or delta > 0.3, do: 0
+  defp calculate_fsrs_grade(3, delta) when delta > 0.2, do: 1
+  defp calculate_fsrs_grade(4, delta) when delta < 0.2, do: 2
+  defp calculate_fsrs_grade(5, delta) when delta < 0.1, do: 3
+  defp calculate_fsrs_grade(_, _), do: 2
 
   defp calculate_approval_grade(predicted, actual, combined_delta \\ 0.0)
   defp calculate_approval_grade(nil, _, _), do: 3

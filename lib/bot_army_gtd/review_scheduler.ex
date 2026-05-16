@@ -135,27 +135,36 @@ defmodule BotArmyGtd.ReviewScheduler do
   defp discover_due_decompositions do
     case get_due() do
       {:ok, due_decompositions} ->
-        count = length(due_decompositions)
-
-        if count == 0 do
-          Logger.debug("ReviewScheduler: No decompositions due for review", %{count: 0})
-        else
-          Logger.info("ReviewScheduler: Discovered decompositions due for review", %{
-            count: count,
-            decomposition_ids: Enum.map(due_decompositions, &Map.get(&1, "id"))
-          })
-
-          Enum.each(due_decompositions, fn decomposition ->
-            log_due_decomposition(decomposition)
-            publish_due_event(decomposition)
-          end)
-        end
+        process_due_decompositions(due_decompositions)
 
       {:error, reason} ->
         Logger.error("ReviewScheduler: Failed to list decompositions", %{
           reason: inspect(reason)
         })
     end
+  end
+
+  defp process_due_decompositions(decompositions) do
+    count = length(decompositions)
+
+    if count == 0 do
+      Logger.debug("ReviewScheduler: No decompositions due for review", %{count: 0})
+    else
+      log_decomposition_batch(decompositions, count)
+      Enum.each(decompositions, &process_decomposition/1)
+    end
+  end
+
+  defp log_decomposition_batch(decompositions, count) do
+    Logger.info("ReviewScheduler: Discovered decompositions due for review", %{
+      count: count,
+      decomposition_ids: Enum.map(decompositions, &Map.get(&1, "id"))
+    })
+  end
+
+  defp process_decomposition(decomposition) do
+    log_due_decomposition(decomposition)
+    publish_due_event(decomposition)
   end
 
   defp log_due_decomposition(decomposition) do
