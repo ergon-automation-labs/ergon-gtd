@@ -67,31 +67,16 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
                       "Plan decomposed: plan_id=#{plan["id"]}, task_count=#{length(tasks)}"
                     )
 
-                    # Update plan to executing state
-                    {:ok, _updated_plan} =
-                      plan_store().update(tenant_id, plan["id"], %{"status" => "executing"})
-
-                    # Notify user if notify_via_subject provided
-                    if notify_via_subject do
-                      notify_user(plan["id"], notify_via_subject, length(tasks))
-                    end
-
-                    # Publish event
-                    publish_event(
-                      "gtd.plan.created",
-                      %{
-                        "plan_id" => plan["id"],
-                        "goal" => goal,
-                        "task_count" => length(tasks),
-                        "tasks" => tasks
-                      },
+                    finalize_plan_with_tasks(
+                      plan,
+                      tasks,
+                      goal,
+                      notify_via_subject,
                       event_id,
                       message,
                       tenant_id,
                       user_id
                     )
-
-                    {:ok, %{"plan_id" => plan["id"], "tasks" => tasks}}
 
                   {:error, reason} ->
                     Logger.error("Failed to create plan tasks: #{inspect(reason)}")
@@ -401,5 +386,38 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
       :ok -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
+  end
+
+  defp finalize_plan_with_tasks(
+         plan,
+         tasks,
+         goal,
+         notify_via_subject,
+         event_id,
+         message,
+         tenant_id,
+         user_id
+       ) do
+    plan_store().update(tenant_id, plan["id"], %{"status" => "executing"})
+
+    if notify_via_subject do
+      notify_user(plan["id"], notify_via_subject, length(tasks))
+    end
+
+    publish_event(
+      "gtd.plan.created",
+      %{
+        "plan_id" => plan["id"],
+        "goal" => goal,
+        "task_count" => length(tasks),
+        "tasks" => tasks
+      },
+      event_id,
+      message,
+      tenant_id,
+      user_id
+    )
+
+    {:ok, %{"plan_id" => plan["id"], "tasks" => tasks}}
   end
 end

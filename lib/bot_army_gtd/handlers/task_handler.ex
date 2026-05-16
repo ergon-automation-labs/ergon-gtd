@@ -73,35 +73,39 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
           publish_error(event_id, reason, "Rejected suspicious test data", tenant_id, user_id)
           {:error, reason}
         else
-          case task_store().create(stamped_payload) do
-            {:ok, task} ->
-              Logger.info("Task created: task_id=#{task["id"]}, event_id=#{event_id}")
-
-              publish_event(
-                "gtd.task.created",
-                stamped_payload,
-                task,
-                event_id,
-                message,
-                tenant_id,
-                user_id
-              )
-
-              maybe_trigger_decomposition(task, stamped_payload, tenant_id, user_id)
-              maybe_notify_para(task, tenant_id)
-
-              {:ok, task}
-
-            {:error, reason} ->
-              Logger.error("Failed to create task: #{inspect(reason)}")
-              publish_error(event_id, reason, "Failed to create task", tenant_id, user_id)
-              {:error, reason}
-          end
+          create_and_publish_task(stamped_payload, event_id, message, tenant_id, user_id)
         end
 
       {:error, reason} ->
         Logger.warning("Invalid task creation payload: #{inspect(reason)}")
         publish_error(event_id, reason, "Invalid task data", tenant_id, user_id)
+        {:error, reason}
+    end
+  end
+
+  defp create_and_publish_task(stamped_payload, event_id, message, tenant_id, user_id) do
+    case task_store().create(stamped_payload) do
+      {:ok, task} ->
+        Logger.info("Task created: task_id=#{task["id"]}, event_id=#{event_id}")
+
+        publish_event(
+          "gtd.task.created",
+          stamped_payload,
+          task,
+          event_id,
+          message,
+          tenant_id,
+          user_id
+        )
+
+        maybe_trigger_decomposition(task, stamped_payload, tenant_id, user_id)
+        maybe_notify_para(task, tenant_id)
+
+        {:ok, task}
+
+      {:error, reason} ->
+        Logger.error("Failed to create task: #{inspect(reason)}")
+        publish_error(event_id, reason, "Failed to create task", tenant_id, user_id)
         {:error, reason}
     end
   end
