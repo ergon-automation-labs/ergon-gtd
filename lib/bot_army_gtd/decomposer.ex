@@ -404,20 +404,22 @@ defmodule BotArmyGtd.Decomposer do
         sorted =
           valid_subtasks
           |> Enum.reverse()
-          |> Enum.sort_by(fn st ->
-            order_key = st[:order] || st["order"]
-
-            case order_key do
-              val when is_integer(val) -> val
-              _ -> 999
-            end
-          end)
+          |> Enum.sort_by(&get_subtask_order/1)
 
         {:ok, sorted}
     end
   end
 
   defp validate_subtasks(_), do: {:error, :invalid_subtasks_format}
+
+  defp get_subtask_order(subtask) do
+    order_key = subtask[:order] || subtask["order"]
+
+    case order_key do
+      val when is_integer(val) -> val
+      _ -> 999
+    end
+  end
 
   defp emit_decomposition_metric(method, template) do
     # Log which decomposition method was used (template name or "llm")
