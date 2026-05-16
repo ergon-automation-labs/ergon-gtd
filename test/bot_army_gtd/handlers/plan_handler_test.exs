@@ -2,6 +2,17 @@ defmodule BotArmyGtd.Handlers.PlanHandlerTest do
   use ExUnit.Case
   @moduletag :handlers
 
+  setup do
+    Mox.defmock(BotArmyGtd.PlanStoreMock, for: BotArmyGtd.PlanStoreBehaviour)
+    Application.put_env(:bot_army_gtd, :plan_store, BotArmyGtd.PlanStoreMock)
+
+    on_exit(fn ->
+      Application.delete_env(:bot_army_gtd, :plan_store)
+    end)
+
+    :ok
+  end
+
   describe "handle_goal_plan payload validation" do
     test "rejects goal without goal field" do
       message = %{
@@ -41,6 +52,10 @@ defmodule BotArmyGtd.Handlers.PlanHandlerTest do
         "user_id" => "00000000-0000-0000-0000-000000000002"
       }
 
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
+
       {:error, _reason} = BotArmyGtd.Handlers.PlanHandler.handle_goal_status(message)
     end
   end
@@ -67,6 +82,10 @@ defmodule BotArmyGtd.Handlers.PlanHandlerTest do
         "user_id" => "00000000-0000-0000-0000-000000000002"
       }
 
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
+
       {:error, _reason} = BotArmyGtd.Handlers.PlanHandler.handle_goal_cancel(message)
     end
   end
@@ -80,6 +99,10 @@ defmodule BotArmyGtd.Handlers.PlanHandlerTest do
         "tenant_id" => "00000000-0000-0000-0000-000000000001",
         "user_id" => "00000000-0000-0000-0000-000000000002"
       }
+
+      Mox.expect(BotArmyGtd.PlanStoreMock, :list, fn _, _ ->
+        {:ok, []}
+      end)
 
       {:ok, response} = BotArmyGtd.Handlers.PlanHandler.handle_goal_list(message)
 
@@ -96,6 +119,10 @@ defmodule BotArmyGtd.Handlers.PlanHandlerTest do
         "user_id" => "00000000-0000-0000-0000-000000000002"
       }
 
+      Mox.expect(BotArmyGtd.PlanStoreMock, :list, fn _, _ ->
+        {:ok, []}
+      end)
+
       {:ok, response} = BotArmyGtd.Handlers.PlanHandler.handle_goal_list(message)
 
       assert response["filter"] == "all"
@@ -110,6 +137,10 @@ defmodule BotArmyGtd.Handlers.PlanHandlerTest do
         "tenant_id" => "00000000-0000-0000-0000-000000000001",
         "user_id" => "00000000-0000-0000-0000-000000000002"
       }
+
+      Mox.expect(BotArmyGtd.PlanStoreMock, :list, fn _, _ ->
+        {:ok, []}
+      end)
 
       {:ok, response} = BotArmyGtd.Handlers.PlanHandler.handle_goal_list(message)
 

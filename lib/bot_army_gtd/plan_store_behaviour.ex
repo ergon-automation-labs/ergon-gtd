@@ -2,13 +2,13 @@ defmodule BotArmyGtd.PlanStoreBehaviour do
   @moduledoc """
   Behaviour for plan storage operations.
 
-  Defines the contract for storing and retrieving plans in the GTD system.
-  Plans represent high-level goals that have been decomposed into subtasks.
+  Allows mocking PlanStore in tests.
   """
 
-  @callback create(map()) :: {:ok, map()} | {:error, term()}
-  @callback get(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
-  @callback update(String.t(), String.t(), map()) :: {:ok, map()} | {:error, term()}
-  @callback list(String.t(), map()) :: {:ok, [map()]} | {:error, term()}
-  @callback delete(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  @callback create(map) :: {:ok, map} | {:error, term}
+  @callback get(binary, binary) :: {:ok, map} | {:error, term}
+  @callback update(binary, binary, map) :: {:ok, map} | {:error, term}
+  @callback list(binary, map) :: {:ok, list} | {:error, term}
+  @callback delete(binary, binary) :: {:ok, map} | {:error, term}
+  @callback clear() :: :ok
 end

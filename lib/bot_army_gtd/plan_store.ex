@@ -18,6 +18,8 @@ defmodule BotArmyGtd.PlanStore do
   require Logger
   import Ecto.Query
 
+  @behaviour BotArmyGtd.PlanStoreBehaviour
+
   alias BotArmyGtd.Repo
   alias BotArmyGtd.Schemas.Plan
 
