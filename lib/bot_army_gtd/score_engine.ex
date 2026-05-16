@@ -17,23 +17,21 @@ defmodule BotArmyGtd.ScoreEngine do
   end
 
   defp query_signals(tenant_id, item_type, item_id) do
-    try do
-      BotArmyGtd.Schemas.ItemSignal
-      |> where(
-        [s],
-        s.tenant_id == ^tenant_id and s.item_type == ^item_type and s.item_id == ^item_id
+    BotArmyGtd.Schemas.ItemSignal
+    |> where(
+      [s],
+      s.tenant_id == ^tenant_id and s.item_type == ^item_type and s.item_id == ^item_id
+    )
+    |> BotArmyGtd.Repo.all()
+  rescue
+    e ->
+      Logger.warning("[ScoreEngine] Failed to query signals",
+        item_type: item_type,
+        item_id: item_id,
+        error: inspect(e)
       )
-      |> BotArmyGtd.Repo.all()
-    rescue
-      e ->
-        Logger.warning("[ScoreEngine] Failed to query signals",
-          item_type: item_type,
-          item_id: item_id,
-          error: inspect(e)
-        )
 
-        []
-    end
+      []
   end
 
   defp aggregate_score(signals) do
@@ -50,46 +48,44 @@ defmodule BotArmyGtd.ScoreEngine do
   end
 
   defp upsert_score(tenant_id, item_type, item_id, score, evidence) do
-    try do
-      existing =
-        BotArmyGtd.Schemas.ItemScore
-        |> where(
-          [s],
-          s.tenant_id == ^tenant_id and s.item_type == ^item_type and s.item_id == ^item_id
-        )
-        |> BotArmyGtd.Repo.one()
+    existing =
+      BotArmyGtd.Schemas.ItemScore
+      |> where(
+        [s],
+        s.tenant_id == ^tenant_id and s.item_type == ^item_type and s.item_id == ^item_id
+      )
+      |> BotArmyGtd.Repo.one()
 
-      case existing do
-        nil ->
-          %BotArmyGtd.Schemas.ItemScore{id: Ecto.UUID.generate()}
-          |> BotArmyGtd.Schemas.ItemScore.changeset(%{
-            "tenant_id" => tenant_id,
-            "item_type" => item_type,
-            "item_id" => item_id,
-            "why_next_score" => score,
-            "why_next_reason" => "aggregated from #{length(evidence)} signals",
-            "top_evidence" => evidence,
-            "score_version" => "v1"
-          })
-          |> BotArmyGtd.Repo.insert()
+    case existing do
+      nil ->
+        %BotArmyGtd.Schemas.ItemScore{id: Ecto.UUID.generate()}
+        |> BotArmyGtd.Schemas.ItemScore.changeset(%{
+          "tenant_id" => tenant_id,
+          "item_type" => item_type,
+          "item_id" => item_id,
+          "why_next_score" => score,
+          "why_next_reason" => "aggregated from #{length(evidence)} signals",
+          "top_evidence" => evidence,
+          "score_version" => "v1"
+        })
+        |> BotArmyGtd.Repo.insert()
 
-        existing_score ->
-          existing_score
-          |> BotArmyGtd.Schemas.ItemScore.changeset(%{
-            "why_next_score" => score,
-            "why_next_reason" => "aggregated from #{length(evidence)} signals",
-            "top_evidence" => evidence
-          })
-          |> BotArmyGtd.Repo.update()
-      end
-    rescue
-      e ->
-        Logger.warning("[ScoreEngine] Failed to upsert score",
-          item_type: item_type,
-          item_id: item_id,
-          score: score,
-          error: inspect(e)
-        )
+      existing_score ->
+        existing_score
+        |> BotArmyGtd.Schemas.ItemScore.changeset(%{
+          "why_next_score" => score,
+          "why_next_reason" => "aggregated from #{length(evidence)} signals",
+          "top_evidence" => evidence
+        })
+        |> BotArmyGtd.Repo.update()
     end
+  rescue
+    e ->
+      Logger.warning("[ScoreEngine] Failed to upsert score",
+        item_type: item_type,
+        item_id: item_id,
+        score: score,
+        error: inspect(e)
+      )
   end
 end
