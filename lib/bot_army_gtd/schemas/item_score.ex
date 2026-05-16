@@ -1,4 +1,7 @@
 defmodule BotArmyGtd.Schemas.ItemScore do
+  @moduledoc """
+  Schema for storing calculated scores for GTD items (tasks, projects, decompositions).
+  """
   use Ecto.Schema
   import Ecto.Changeset
 

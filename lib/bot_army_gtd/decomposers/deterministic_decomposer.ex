@@ -79,7 +79,7 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
       |> List.first()
 
     case result do
-      {_template, 0.0} -> {:no_match, 0.0}
+      {_template, score} when score <= 0 -> {:no_match, 0.0}
       {template, score} -> {template, score}
       nil -> {:no_match, 0.0}
     end
@@ -192,7 +192,6 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
   # =====================================================================
 
   defp decompose_research(goal, context) do
-    company = context[:company] || context["company"] || "target"
     query = context[:query] || context["query"] || goal
 
     subtasks = [

@@ -1,4 +1,7 @@
 defmodule BotArmyGtd.Schemas.ItemSignal do
+  @moduledoc """
+  Schema for tracking signals on GTD items (tasks, projects, decompositions).
+  """
   use Ecto.Schema
   import Ecto.Changeset
 

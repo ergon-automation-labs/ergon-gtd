@@ -31,7 +31,7 @@ defmodule BotArmyGtd.ReviewEngine do
     inbox_store = Application.get_env(:bot_army_gtd, :inbox_item_store, BotArmyGtd.InboxItemStore)
 
     window_days = opts[:window_days] || @review_window_days
-    cutoff = DateTime.utc_now() |> DateTime.add(-window_days * 86400, :second)
+    cutoff = DateTime.utc_now() |> DateTime.add(-window_days * 86_400, :second)
     now = DateTime.utc_now()
 
     # Gather data
@@ -48,7 +48,7 @@ defmodule BotArmyGtd.ReviewEngine do
       end)
 
     # Active tasks that haven't been updated in > stale_days
-    stale_cutoff = DateTime.utc_now() |> DateTime.add(-@active_stale_days * 86400, :second)
+    stale_cutoff = DateTime.utc_now() |> DateTime.add(-@active_stale_days * 86_400, :second)
 
     stale_active =
       all_tasks

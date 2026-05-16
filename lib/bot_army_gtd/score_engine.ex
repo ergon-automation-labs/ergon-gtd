@@ -1,4 +1,7 @@
 defmodule BotArmyGtd.ScoreEngine do
+  @moduledoc """
+  Scoring engine for GTD items (tasks, projects) using item signals and historical scores.
+  """
   require Logger
   import Ecto.Query
 

@@ -303,8 +303,6 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
   In Phase 2, this will call the LLM bot to decompose dynamically.
   """
   defp decompose_goal(goal, _context, _constraints) do
-    # TODO: Phase 2 - Call LLM bot to decompose
-    # For now, return a mock decomposition
     subtasks = [
       %{
         "order" => 1,

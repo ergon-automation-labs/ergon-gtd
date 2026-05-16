@@ -88,7 +88,7 @@ defmodule BotArmyGtd.LogEntryStore do
     state =
       try do
         # Load last 7 days of log entries
-        cutoff_date = NaiveDateTime.utc_now() |> NaiveDateTime.add(-@days_to_load * 86400)
+        cutoff_date = NaiveDateTime.utc_now() |> NaiveDateTime.add(-@days_to_load * 86_400)
 
         entries =
           Repo.all(

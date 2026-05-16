@@ -189,7 +189,7 @@ defmodule BotArmyGtd.ParaExporter do
     # Deduplicate by slug, keeping the first occurrence
     {unique, _seen} =
       projects
-      |> Enum.filter(&is_real_project?/1)
+      |> Enum.filter(&real_project?/1)
       |> Enum.reduce({[], MapSet.new()}, fn project, {acc, seen} ->
         slug = slugify(project["name"] || "")
 
@@ -435,7 +435,7 @@ defmodule BotArmyGtd.ParaExporter do
      }}
   end
 
-  defp is_real_project?(project) do
+  defp real_project?(project) do
     name = project["name"] || ""
     status = project["status"]
 

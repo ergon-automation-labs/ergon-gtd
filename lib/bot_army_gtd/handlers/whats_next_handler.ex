@@ -1,4 +1,7 @@
 defmodule BotArmyGtd.Handlers.WhatsNextHandler do
+  @moduledoc """
+  Handler for the "what's next" query to suggest the next best action for users.
+  """
   require Logger
 
   def handle_request(message) do

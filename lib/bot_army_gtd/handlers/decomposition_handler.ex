@@ -796,10 +796,10 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp check_if_due(status, due_at_str) do
-    status in ["completed", "reviewed"] and due_at_str && is_due_now(due_at_str)
+    status in ["completed", "reviewed"] and due_at_str && due_now?(due_at_str)
   end
 
-  defp is_due_now(due_at_str) when is_binary(due_at_str) do
+  defp due_now?(due_at_str) when is_binary(due_at_str) do
     case DateTime.from_iso8601(due_at_str) do
       {:ok, due_at, _offset} ->
         now = DateTime.utc_now()
@@ -810,7 +810,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp is_due_now(_), do: false
+  defp due_now?(_), do: false
 
   defp publish_chain_request(
          chain_id,
