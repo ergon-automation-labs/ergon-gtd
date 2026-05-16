@@ -348,16 +348,17 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
     {:ok, tasks}
   end
 
-  defp notify_user(plan_id, notify_via_subject, task_count) do
+  defp notify_user(plan_id, notify_via_subject, task_count) when is_binary(notify_via_subject) do
     # Publish notification event to the provided subject
-    notification = %{
+    event_data = %{
+      "subject" => notify_via_subject,
       "type" => "plan_created",
       "plan_id" => plan_id,
       "task_count" => task_count,
       "message" => "Plan created with #{task_count} tasks"
     }
 
-    case BotArmyGtd.NATS.Publisher.publish_to_subject(notify_via_subject, notification) do
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} ->
         Logger.debug("Notification sent to #{notify_via_subject}")
 
@@ -368,6 +369,8 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
         Logger.error("Failed to send notification: #{inspect(reason)}")
     end
   end
+
+  defp notify_user(_plan_id, _notify_via_subject, _task_count), do: :ok
 
   defp publish_event(event_type, payload, event_id, _original_message, tenant_id, user_id) do
     event_data =
