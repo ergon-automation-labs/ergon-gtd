@@ -25,8 +25,8 @@ defmodule BotArmyGtd.PulsePublisher do
   use GenServer
   require Logger
 
-  alias BotArmyGtd.TaskStore
   alias BotArmyGtd.ProjectStore
+  alias BotArmyGtd.TaskStore
 
   # 5 minutes
   @publish_interval_ms 30 * 60 * 1000

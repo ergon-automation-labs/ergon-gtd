@@ -15,8 +15,8 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
   @moduletag :handlers
   import Mox
 
-  alias BotArmyGtd.ReviewScheduler
   alias BotArmyGtd.Handlers.DecompositionHandler
+  alias BotArmyGtd.ReviewScheduler
 
   setup :verify_on_exit!
 
