@@ -349,6 +349,44 @@ defmodule BotArmyGtd.NATS.Consumer do
     Logger.debug("Unknown event type: #{event}")
   end
 
+  defp parse_task_list_params(body) do
+    case Jason.decode(body) do
+      {:ok, params} ->
+        tid = extract_tenant_id(params)
+        lim = min(params["limit"] || 100, 500)
+        off = params["offset"] || 0
+        filters = %{"status" => params["status"], "labels" => params["labels"]}
+        {tid, lim, off, filters}
+
+      _ ->
+        {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), 100, 0, %{}}
+    end
+  end
+
+  defp extract_tenant_id(params) do
+    case params["tenant_id"] do
+      t when is_binary(t) and t != "" -> t
+      _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+    end
+  end
+
+  defp fetch_task_list_response(task_store, tenant_id, filters, limit, offset) do
+    case task_store.list_prioritized(tenant_id, filters) do
+      {:ok, all_tasks} ->
+        page = all_tasks |> Enum.drop(offset) |> Enum.take(limit)
+
+        Reply.ok(%{
+          "tasks" => page,
+          "total_count" => length(all_tasks),
+          "limit" => limit,
+          "offset" => offset
+        })
+
+      {:error, reason} ->
+        Reply.error(inspect(reason), :list_failed)
+    end
+  end
+
   # Callbacks
 
   @impl true
@@ -485,42 +523,10 @@ defmodule BotArmyGtd.NATS.Consumer do
     Tracing.with_consumer_span("gtd.task.list", Map.get(msg, :headers, []), fn ->
       task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
-      {tenant_id, limit, offset, filters} =
-        case Jason.decode(body) do
-          {:ok, params} ->
-            tid =
-              case params["tenant_id"] do
-                t when is_binary(t) and t != "" -> t
-                _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
-              end
-
-            lim = min(params["limit"] || 100, 500)
-            off = params["offset"] || 0
-            filters = %{"status" => params["status"], "labels" => params["labels"]}
-            {tid, lim, off, filters}
-
-          _ ->
-            {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), 100, 0, %{}}
-        end
-
+      {tenant_id, limit, offset, filters} = parse_task_list_params(body)
       TaskHandler.expire_active_tasks(tenant_id, nil)
 
-      response =
-        case task_store.list_prioritized(tenant_id, filters) do
-          {:ok, all_tasks} ->
-            page = all_tasks |> Enum.drop(offset) |> Enum.take(limit)
-
-            Reply.ok(%{
-              "tasks" => page,
-              "total_count" => length(all_tasks),
-              "limit" => limit,
-              "offset" => offset
-            })
-
-          {:error, reason} ->
-            Reply.error(inspect(reason), :list_failed)
-        end
-
+      response = fetch_task_list_response(task_store, tenant_id, filters, limit, offset)
       reply_traced(state.conn, reply_to, response)
     end)
 
