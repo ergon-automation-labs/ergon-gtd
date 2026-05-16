@@ -193,11 +193,12 @@ defmodule BotArmyGtd.Decomposers.DeterministicDecomposer do
 
   defp decompose_research(goal, context) do
     query = context[:query] || context["query"] || goal
+    company = context[:company] || context["company"] || "target"
 
     subtasks = [
       %{
         "order" => 1,
-        "description" => "Research: #{goal}",
+        "description" => "Research #{company}: #{goal}",
         "target_bot" => "bot_army_llm",
         "target_subject" => "bot_army_llm.query",
         "payload" => %{"query" => query},
