@@ -1,19 +1,15 @@
+# Credo configuration for bot_army_gtd
+
 %{
   configs: [
     %{
       name: "default",
-      strict: false,
-      color: true,
-      checks: [
-        {Credo.Check.Refactor.Nesting, false},
-        {Credo.Check.Refactor.CyclomaticComplexity, false},
-        {Credo.Check.Refactor.RedundantWithClauseResult, false},
-        {Credo.Check.Readability.PredicateFunctionNames, false},
-        {Credo.Check.Readability.ModuleDoc, false},
-        {Credo.Check.Refactor.FilterFilter, false},
-        {Credo.Check.Refactor.CondStatements, false},
-        {Credo.Check.Readability.LargeNumbers, false}
-      ]
+      strict: true,
+      files: %{
+        included: ["lib/"],
+        excluded: []
+      },
+      checks: []
     }
   ]
 }

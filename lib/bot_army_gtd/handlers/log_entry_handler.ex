@@ -10,6 +10,7 @@ defmodule BotArmyGtd.Handlers.LogEntryHandler do
   """
 
   require Logger
+  alias BotArmyGtd.{EventBuilder, Handlers.LogEnrichmentHandler, LogEntryStore, NATS.Publisher}
 
   defp log_entry_store do
     Application.get_env(:bot_army_gtd, :log_entry_store, BotArmyGtd.LogEntryStore)
@@ -42,7 +43,7 @@ defmodule BotArmyGtd.Handlers.LogEntryHandler do
             Logger.info("Log entry created: entry_id=#{entry["id"]}, event_id=#{event_id}")
             write_to_file(entry)
             publish_events(entry, event_id, message)
-            BotArmyGtd.Handlers.LogEnrichmentHandler.request_enrichment(entry)
+            LogEnrichmentHandler.request_enrichment(entry)
             :ok
 
           {:error, reason} ->
@@ -109,11 +110,11 @@ defmodule BotArmyGtd.Handlers.LogEntryHandler do
   defp publish_events(entry, event_id, original_message) do
     # Publish events.gtd.log.entry.created
     event_created = build_event("gtd.log.entry.created", entry, event_id, original_message)
-    BotArmyGtd.NATS.Publisher.publish(event_created)
+    Publisher.publish(event_created)
 
     # Publish gtd.log.daily.new (bare, for downstream consumers)
     daily_event = build_event("gtd.log.daily.new", entry, event_id, original_message)
-    BotArmyGtd.NATS.Publisher.publish(daily_event)
+    Publisher.publish(daily_event)
 
     :ok
   end
@@ -146,6 +147,6 @@ defmodule BotArmyGtd.Handlers.LogEntryHandler do
       }
     }
 
-    BotArmyGtd.NATS.Publisher.publish(error_event)
+    Publisher.publish(error_event)
   end
 end

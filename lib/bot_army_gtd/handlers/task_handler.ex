@@ -17,6 +17,21 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   """
 
   require Logger
+
+  alias BotArmyCore.Tenant
+
+  alias BotArmyGtd.{
+    Adapters.ConfidenceAdapter,
+    Adapters.PlanAdapter,
+    EventBuilder,
+    NATS.Publisher,
+    ParaExporter,
+    PlanStore,
+    ProjectStore,
+    TaskIntakeGuard,
+    TaskStore
+  }
+
   @active_until_key "active_until"
   @active_until_window_days 7
 
@@ -34,9 +49,9 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   def handle_create(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
-    BotArmyGtd.TaskIntakeGuard.log_caller_metadata("gtd.task.create", message)
+    TaskIntakeGuard.log_caller_metadata("gtd.task.create", message)
 
     payload = maybe_stamp_active_until_for_create(payload)
 
@@ -49,7 +64,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
     case validate_create_payload(stamped_payload) do
       :ok ->
-        if BotArmyGtd.TaskIntakeGuard.suspicious_test_data?(message, stamped_payload) do
+        if TaskIntakeGuard.suspicious_test_data?(message, stamped_payload) do
           Logger.warning(
             "Rejected suspicious test task create payload: event_id=#{event_id} payload=#{inspect(stamped_payload)}"
           )
@@ -99,7 +114,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   def handle_update(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_update_payload(payload) do
       :ok ->
@@ -123,7 +138,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
             new_status = task["status"]
 
             if old_status && new_status && old_status != new_status do
-              BotArmyGtd.ParaExporter.notify_status_change(task, old_status, new_status)
+              ParaExporter.notify_status_change(task, old_status, new_status)
             end
 
             :ok
@@ -149,7 +164,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   def handle_complete(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_complete_payload(payload) do
       :ok ->
@@ -169,8 +184,8 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
               user_id
             )
 
-            BotArmyGtd.ParaExporter.notify_completed(task)
-            BotArmyGtd.ParaExporter.rotate_next_action(task, tenant_id)
+            ParaExporter.notify_completed(task)
+            ParaExporter.rotate_next_action(task, tenant_id)
 
             # Handle plan completion if this task is part of a plan
             maybe_handle_plan_completion(task, tenant_id, user_id)
@@ -211,7 +226,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   def handle_defer(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_defer_payload(payload) do
       :ok ->
@@ -257,7 +272,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   def handle_delete(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_delete_payload(payload) do
       :ok ->
@@ -301,7 +316,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   def handle_fail(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_fail_payload(payload) do
       :ok ->
@@ -397,7 +412,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
       user_id: user_id
     }
 
-    case BotArmyGtd.Adapters.PlanAdapter.replan_on_failure(
+    case PlanAdapter.replan_on_failure(
            plan_id,
            task_id,
            failure_reason,
@@ -445,7 +460,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
   defp notify_user_of_failure(plan_id, task_id, failure_reason, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event(
+      EventBuilder.build_event(
         "gtd.plan.needs_attention",
         %{
           "plan_id" => plan_id,
@@ -458,7 +473,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         user_id: user_id
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _} ->
         Logger.info("[TaskHandler] Published plan failure notification for plan_id=#{plan_id}")
 
@@ -487,7 +502,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     }
 
     event_data =
-      BotArmyGtd.EventBuilder.build_event(
+      EventBuilder.build_event(
         event_type,
         payload,
         tenant_id: tenant_id,
@@ -505,7 +520,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         event_data
       end
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published event: #{event_type}")
       {:error, reason} -> Logger.error("Failed to publish event: #{inspect(reason)}")
     end
@@ -513,12 +528,12 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+      EventBuilder.build_error(event_id, reason, message,
         tenant_id: tenant_id,
         user_id: user_id
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end
@@ -557,7 +572,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         |> Map.new()
 
       decompose_event =
-        BotArmyGtd.EventBuilder.build_event("gtd.task.decompose", decom_payload,
+        EventBuilder.build_event("gtd.task.decompose", decom_payload,
           tenant_id: tenant_id,
           user_id: user_id
         )
@@ -584,7 +599,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
         case project_store.get(tenant_id, project_id) do
           {:ok, project} ->
-            BotArmyGtd.ParaExporter.notify_task_created(task, project["name"])
+            ParaExporter.notify_task_created(task, project["name"])
 
           _ ->
             :ok
@@ -808,7 +823,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
               # Publish plan completion event
               event_data =
-                BotArmyGtd.EventBuilder.build_event(
+                EventBuilder.build_event(
                   "events.gtd.plan.completed",
                   %{
                     "plan_id" => plan_id,
@@ -819,7 +834,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
                   user_id: user_id
                 )
 
-              case BotArmyGtd.NATS.Publisher.publish(event_data) do
+              case Publisher.publish(event_data) do
                 {:ok, _} ->
                   Logger.debug("Published plan completion event")
 
@@ -851,7 +866,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     target_bot = Map.get(failed_task, "target_bot", "gtd")
 
     # Query dispatcher for confidence on retrying this bot
-    confidence = BotArmyGtd.Adapters.ConfidenceAdapter.get_dispatcher_confidence(target_bot)
+    confidence = ConfidenceAdapter.get_dispatcher_confidence(target_bot)
     retry_count = Map.get(failed_task, "retry_count", 0)
 
     Logger.info(
@@ -859,10 +874,10 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
     )
 
     # Decide whether to retry or replan
-    if BotArmyGtd.Adapters.ConfidenceAdapter.should_retry?(failed_task, confidence) do
+    if ConfidenceAdapter.should_retry?(failed_task, confidence) do
       # Retry: increment counter and reschedule
       Logger.info("[TaskHandler] Retrying task: task_id=#{task_id}, confidence=#{confidence}")
-      updated_task = BotArmyGtd.Adapters.ConfidenceAdapter.increment_retry_count(failed_task)
+      updated_task = ConfidenceAdapter.increment_retry_count(failed_task)
 
       # Reschedule task (delay for backoff)
       reschedule_task_for_retry(updated_task, confidence, tenant_id, user_id)
@@ -873,7 +888,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         "[TaskHandler] Replanning after failure: task_id=#{task_id}, confidence=#{confidence}"
       )
 
-      case BotArmyGtd.Adapters.PlanAdapter.replan_on_failure(
+      case PlanAdapter.replan_on_failure(
              plan_id,
              task_id,
              failure_reason,
@@ -931,7 +946,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
   defp emit_failure_decision_event(decision, confidence, task_id, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event(
+      EventBuilder.build_event(
         "events.gtd.plan.failure_decision",
         %{
           "task_id" => task_id,
@@ -943,7 +958,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         user_id: user_id
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} ->
         Logger.debug("[TaskHandler] Published failure decision event: decision=#{decision}")
 

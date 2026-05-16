@@ -17,6 +17,9 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
 
   require Logger
 
+  alias BotArmyGtd.{ProjectStore, TaskStore}
+  alias BotArmyRuntime.NATS.Conversation.Manager
+
   @doc """
   Handle an incoming conversation request directed at the GTD bot.
   """
@@ -84,7 +87,7 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
 
     case result do
       {:ok, data} ->
-        BotArmyRuntime.NATS.Conversation.Manager.reply(
+        Manager.reply(
           conversation_id,
           "gtd",
           data,
@@ -94,7 +97,7 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
         )
 
       {:error, reason} ->
-        BotArmyRuntime.NATS.Conversation.Manager.reply(
+        Manager.reply(
           conversation_id,
           "gtd",
           %{error: inspect(reason)},
@@ -118,7 +121,7 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
 
     case result do
       {:ok, data} ->
-        BotArmyRuntime.NATS.Conversation.Manager.reply(
+        Manager.reply(
           conversation_id,
           "gtd",
           data,
@@ -127,7 +130,7 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
         )
 
       {:error, reason} ->
-        BotArmyRuntime.NATS.Conversation.Manager.reply(
+        Manager.reply(
           conversation_id,
           "gtd",
           %{error: inspect(reason)},
@@ -140,7 +143,7 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
   defp handle_gossip(body, conversation_id, from_bot) do
     Logger.info("[ConvHandler] Gossip from #{from_bot}: #{inspect(body["message"])}")
 
-    BotArmyRuntime.NATS.Conversation.Manager.reply(
+    Manager.reply(
       conversation_id,
       "gtd",
       %{response: "Thanks for checking in! All good here."},

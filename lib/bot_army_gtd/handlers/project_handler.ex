@@ -16,6 +16,8 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
   """
 
   require Logger
+  alias BotArmyCore.Tenant
+  alias BotArmyGtd.{EventBuilder, NATS.Publisher, ProjectStore}
 
   defp project_store do
     Application.get_env(:bot_army_gtd, :project_store, BotArmyGtd.ProjectStore)
@@ -31,7 +33,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
   def handle_create(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     stamped_payload =
       Map.merge(payload, %{
@@ -80,7 +82,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
   def handle_update(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_update_payload(payload) do
       :ok ->
@@ -171,7 +173,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
          user_id
        ) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event(
+      EventBuilder.build_event(
         event_type,
         %{
           "project" => project,
@@ -181,7 +183,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
         user_id: user_id
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published event: #{event_type}")
       :ok -> Logger.debug("Published event: #{event_type}")
       {:error, reason} -> Logger.error("Failed to publish event: #{inspect(reason)}")
@@ -190,12 +192,12 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+      EventBuilder.build_error(event_id, reason, message,
         tenant_id: tenant_id,
         user_id: user_id
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event")
       :ok -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")

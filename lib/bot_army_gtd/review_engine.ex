@@ -8,6 +8,8 @@ defmodule BotArmyGtd.ReviewEngine do
   """
 
   require Logger
+  alias BotArmyGtd.{InboxItemStore, ProjectStore, TaskStore}
+  alias BotArmyRuntime.NATS.Publisher
 
   @inbox_stale_hours 48
   @active_stale_days 7
@@ -250,7 +252,7 @@ defmodule BotArmyGtd.ReviewEngine do
     # Check registry for version match
     registry_check =
       try do
-        case BotArmyRuntime.NATS.Publisher.request(
+        case Publisher.request(
                "bot_army.registry.bot.get",
                %{"bot_name" => bot_name}
              ) do

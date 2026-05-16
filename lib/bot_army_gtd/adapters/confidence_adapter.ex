@@ -16,6 +16,7 @@ defmodule BotArmyGtd.Adapters.ConfidenceAdapter do
   """
 
   require Logger
+  alias BotArmyRuntime.NATS.Publisher
 
   @high_confidence 0.7
   @low_confidence 0.3
@@ -126,7 +127,7 @@ defmodule BotArmyGtd.Adapters.ConfidenceAdapter do
       "bot_name" => bot_name
     }
 
-    case BotArmyRuntime.NATS.Publisher.request(
+    case Publisher.request(
            "dispatcher.retry.confidence",
            payload,
            timeout_ms: @nats_timeout_ms

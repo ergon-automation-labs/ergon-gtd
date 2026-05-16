@@ -44,6 +44,8 @@ defmodule BotArmyGtd.Decomposer do
   """
 
   require Logger
+  alias BotArmyGtd.Decomposers.DeterministicDecomposer
+  alias BotArmyRuntime.NATS.Publisher
 
   alias BotArmyGtd.Decomposers.DeterministicDecomposer
 
@@ -338,7 +340,7 @@ defmodule BotArmyGtd.Decomposer do
       timeout_ms: timeout_ms
     )
 
-    case BotArmyRuntime.NATS.Publisher.request(
+    case Publisher.request(
            "bot_army_llm.converse",
            payload,
            timeout_ms: timeout_ms

@@ -15,6 +15,8 @@ defmodule BotArmyGtd.ProjectStore do
 
   use GenServer
   require Logger
+  alias BotArmyGtd.Repo
+  alias BotArmyGtd.Schemas.Project
 
   @server __MODULE__
 
@@ -69,7 +71,7 @@ defmodule BotArmyGtd.ProjectStore do
     # Gracefully handle database unavailability (e.g., in tests)
     state =
       try do
-        projects = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Project)
+        projects = Repo.all(Project)
 
         Enum.reduce(projects, %{}, fn project, acc ->
           Map.put(acc, project.id |> to_string(), schema_to_map(project))
@@ -94,8 +96,8 @@ defmodule BotArmyGtd.ProjectStore do
     user_id = Map.get(payload, "user_id")
 
     changeset =
-      BotArmyGtd.Schemas.Project.changeset(
-        %BotArmyGtd.Schemas.Project{id: project_id},
+      Project.changeset(
+        %Project{id: project_id},
         %{
           "tenant_id" => convert_to_uuid(tenant_id),
           "user_id" => if(user_id, do: convert_to_uuid(user_id), else: nil),
@@ -107,7 +109,7 @@ defmodule BotArmyGtd.ProjectStore do
         }
       )
 
-    case BotArmyGtd.Repo.insert(changeset) do
+    case Repo.insert(changeset) do
       {:ok, db_project} ->
         project = schema_to_map(db_project)
         new_state = Map.put(state, project_id, project)
@@ -130,11 +132,11 @@ defmodule BotArmyGtd.ProjectStore do
         project_uuid = Ecto.UUID.cast!(project_id)
 
         case BotArmyGtd.Repo.transaction(fn ->
-               db_project = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Project, project_uuid)
+               db_project = Repo.get(Project, project_uuid)
 
                if db_project do
                  changeset =
-                   BotArmyGtd.Schemas.Project.changeset(
+                   Project.changeset(
                      db_project,
                      %{
                        "name" => Map.get(payload, "name", db_project.name),
@@ -145,12 +147,12 @@ defmodule BotArmyGtd.ProjectStore do
                      }
                    )
 
-                 case BotArmyGtd.Repo.update(changeset) do
+                 case Repo.update(changeset) do
                    {:ok, updated} -> updated
-                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+                   {:error, changeset} -> Repo.rollback(changeset)
                  end
                else
-                 BotArmyGtd.Repo.rollback(:not_found)
+                 Repo.rollback(:not_found)
                end
              end) do
           {:ok, updated_db_project} ->
@@ -191,7 +193,7 @@ defmodule BotArmyGtd.ProjectStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          projects = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Project)
+          projects = Repo.all(Project)
           Logger.info("ProjectStore recovered #{length(projects)} projects from database")
 
           Enum.reduce(projects, %{}, fn project, acc ->
@@ -211,7 +213,7 @@ defmodule BotArmyGtd.ProjectStore do
   end
 
   # Helper function to convert Ecto schema to map for GenServer state
-  defp schema_to_map(%BotArmyGtd.Schemas.Project{} = project) do
+  defp schema_to_map(%Project{} = project) do
     %{
       "id" => project.id |> to_string(),
       "tenant_id" => project.tenant_id |> to_string(),

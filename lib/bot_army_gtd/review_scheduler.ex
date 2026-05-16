@@ -21,6 +21,8 @@ defmodule BotArmyGtd.ReviewScheduler do
 
   use GenServer
   require Logger
+  alias BotArmyCore.Tenant
+  alias BotArmyGtd.{DecompositionStore, NATS.Publisher}
 
   # 5 minutes
   @default_interval_seconds 300
@@ -68,7 +70,7 @@ defmodule BotArmyGtd.ReviewScheduler do
   Returns a list of maps with due decompositions, sorted by due_at.
   """
   def get_due do
-    default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+    default_tenant_id = Tenant.default_tenant_id()
 
     with {:ok, decompositions} <- get_store().list(default_tenant_id) do
       now = DateTime.utc_now()
@@ -98,7 +100,7 @@ defmodule BotArmyGtd.ReviewScheduler do
   Get decompositions due for review in the next N days.
   """
   def get_upcoming(days \\ 7) do
-    default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+    default_tenant_id = Tenant.default_tenant_id()
 
     with {:ok, decompositions} <- get_store().list(default_tenant_id) do
       now = DateTime.utc_now()
@@ -196,7 +198,7 @@ defmodule BotArmyGtd.ReviewScheduler do
       }
     }
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} ->
         Logger.debug(
           "ReviewScheduler: Published decomposition due for review event",

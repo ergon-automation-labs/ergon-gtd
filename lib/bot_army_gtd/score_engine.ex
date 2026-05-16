@@ -2,6 +2,9 @@ defmodule BotArmyGtd.ScoreEngine do
   require Logger
   import Ecto.Query
 
+  alias BotArmyGtd.Repo
+  alias BotArmyGtd.Schemas.{ItemScore, ItemSignal}
+
   def recompute_from_vote_totals(tenant_id, vote_totals) do
     Enum.each(vote_totals, fn total ->
       recompute_item(tenant_id, total["item_type"], total["item_id"])
@@ -17,12 +20,12 @@ defmodule BotArmyGtd.ScoreEngine do
   end
 
   defp query_signals(tenant_id, item_type, item_id) do
-    BotArmyGtd.Schemas.ItemSignal
+    ItemSignal
     |> where(
       [s],
       s.tenant_id == ^tenant_id and s.item_type == ^item_type and s.item_id == ^item_id
     )
-    |> BotArmyGtd.Repo.all()
+    |> Repo.all()
   rescue
     e ->
       Logger.warning("[ScoreEngine] Failed to query signals",
@@ -49,17 +52,17 @@ defmodule BotArmyGtd.ScoreEngine do
 
   defp upsert_score(tenant_id, item_type, item_id, score, evidence) do
     existing =
-      BotArmyGtd.Schemas.ItemScore
+      ItemScore
       |> where(
         [s],
         s.tenant_id == ^tenant_id and s.item_type == ^item_type and s.item_id == ^item_id
       )
-      |> BotArmyGtd.Repo.one()
+      |> Repo.one()
 
     case existing do
       nil ->
-        %BotArmyGtd.Schemas.ItemScore{id: Ecto.UUID.generate()}
-        |> BotArmyGtd.Schemas.ItemScore.changeset(%{
+        %ItemScore{id: Ecto.UUID.generate()}
+        |> ItemScore.changeset(%{
           "tenant_id" => tenant_id,
           "item_type" => item_type,
           "item_id" => item_id,
@@ -68,16 +71,16 @@ defmodule BotArmyGtd.ScoreEngine do
           "top_evidence" => evidence,
           "score_version" => "v1"
         })
-        |> BotArmyGtd.Repo.insert()
+        |> Repo.insert()
 
       existing_score ->
         existing_score
-        |> BotArmyGtd.Schemas.ItemScore.changeset(%{
+        |> ItemScore.changeset(%{
           "why_next_score" => score,
           "why_next_reason" => "aggregated from #{length(evidence)} signals",
           "top_evidence" => evidence
         })
-        |> BotArmyGtd.Repo.update()
+        |> Repo.update()
     end
   rescue
     e ->

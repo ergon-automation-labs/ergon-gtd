@@ -20,6 +20,8 @@ defmodule BotArmyGtd.DecompositionStore do
 
   use GenServer
   require Logger
+  alias BotArmyGtd.Repo
+  alias BotArmyGtd.Schemas.Decomposition
 
   @server __MODULE__
 
@@ -109,7 +111,7 @@ defmodule BotArmyGtd.DecompositionStore do
 
     state =
       try do
-        decompositions = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Decomposition)
+        decompositions = Repo.all(Decomposition)
 
         Enum.reduce(decompositions, %{}, fn decomposition, acc ->
           Map.put(acc, decomposition.id |> to_string(), schema_to_map(decomposition))
@@ -131,8 +133,8 @@ defmodule BotArmyGtd.DecompositionStore do
     decomposition_id = Ecto.UUID.generate()
 
     changeset =
-      BotArmyGtd.Schemas.Decomposition.changeset(
-        %BotArmyGtd.Schemas.Decomposition{id: decomposition_id},
+      Decomposition.changeset(
+        %Decomposition{id: decomposition_id},
         %{
           "tenant_id" => payload["tenant_id"],
           "user_id" => Map.get(payload, "user_id"),
@@ -149,7 +151,7 @@ defmodule BotArmyGtd.DecompositionStore do
         }
       )
 
-    case BotArmyGtd.Repo.insert(changeset) do
+    case Repo.insert(changeset) do
       {:ok, db_decomposition} ->
         decomposition = schema_to_map(db_decomposition)
         new_state = Map.put(state, decomposition_id, decomposition)
@@ -203,11 +205,11 @@ defmodule BotArmyGtd.DecompositionStore do
 
         case BotArmyGtd.Repo.transaction(fn ->
                db_decomposition =
-                 BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Decomposition, decomposition_uuid)
+                 Repo.get(Decomposition, decomposition_uuid)
 
                if db_decomposition do
                  changeset =
-                   BotArmyGtd.Schemas.Decomposition.changeset(
+                   Decomposition.changeset(
                      db_decomposition,
                      %{
                        "status" => Map.get(payload, "status", db_decomposition.status),
@@ -243,7 +245,7 @@ defmodule BotArmyGtd.DecompositionStore do
                      }
                    )
 
-                 case BotArmyGtd.Repo.update(changeset) do
+                 case Repo.update(changeset) do
                    {:ok, updated} -> updated
                    {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
                  end
@@ -273,7 +275,7 @@ defmodule BotArmyGtd.DecompositionStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          decompositions = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Decomposition)
+          decompositions = Repo.all(Decomposition)
           Logger.info("DecompositionStore recovered #{length(decompositions)} from database")
 
           Enum.reduce(decompositions, %{}, fn decomp, acc ->
@@ -306,7 +308,7 @@ defmodule BotArmyGtd.DecompositionStore do
   @impl true
   def handle_call(:clear, _from, _state) do
     Logger.debug("Clearing all decompositions from database and state")
-    BotArmyGtd.Repo.delete_all(BotArmyGtd.Schemas.Decomposition)
+    Repo.delete_all(Decomposition)
     {:reply, :ok, %{}}
   end
 
@@ -324,7 +326,7 @@ defmodule BotArmyGtd.DecompositionStore do
   defp parse_due_at(val), do: val
 
   # Helper function to convert Ecto schema to map for GenServer state
-  defp schema_to_map(%BotArmyGtd.Schemas.Decomposition{} = decomposition) do
+  defp schema_to_map(%Decomposition{} = decomposition) do
     %{
       "id" => Ecto.UUID.cast!(decomposition.id) |> to_string(),
       "tenant_id" => decomposition.tenant_id |> to_string(),

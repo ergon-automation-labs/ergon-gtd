@@ -17,6 +17,8 @@ defmodule BotArmyGtd.Handlers.NotificationHandler do
   """
 
   require Logger
+  alias BotArmyCore.Tenant
+  alias BotArmyGtd.{EventBuilder, NATS.Publisher}
 
   defp plan_store do
     Application.get_env(:bot_army_gtd, :plan_store, BotArmyGtd.PlanStore)
@@ -37,7 +39,7 @@ defmodule BotArmyGtd.Handlers.NotificationHandler do
   def handle_task_failed(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_task_failed_payload(payload) do
       :ok ->
@@ -58,7 +60,7 @@ defmodule BotArmyGtd.Handlers.NotificationHandler do
   def handle_plan_completed(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_plan_completed_payload(payload) do
       :ok ->
@@ -213,14 +215,14 @@ defmodule BotArmyGtd.Handlers.NotificationHandler do
 
   defp publish_notification(notification_payload, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event(
+      EventBuilder.build_event(
         "notifications.create",
         notification_payload,
         tenant_id: tenant_id,
         user_id: user_id
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} ->
         Logger.debug("Published notification: #{notification_payload["title"]}")
 

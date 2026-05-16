@@ -16,6 +16,8 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
   """
 
   require Logger
+  alias BotArmyCore.Tenant
+  alias BotArmyGtd.{EventBuilder, NATS.Publisher}
 
   defp task_store do
     Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
@@ -32,7 +34,7 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
   def handle_parse(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     BotArmyGtd.TaskIntakeGuard.log_caller_metadata("llm.response.parsed", message)
 
@@ -133,7 +135,7 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
 
   defp publish_task_created(task, event_id, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event(
+      EventBuilder.build_event(
         "gtd.task.created",
         %{
           "task" => task,
@@ -143,7 +145,7 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
         user_id: user_id
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published task.created event from parsed inbox")
       {:error, reason} -> Logger.error("Failed to publish task event: #{inspect(reason)}")
     end
@@ -151,12 +153,12 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+      EventBuilder.build_error(event_id, reason, message,
         tenant_id: tenant_id,
         user_id: user_id
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event from parsing handler")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end

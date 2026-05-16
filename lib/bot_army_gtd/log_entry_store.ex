@@ -15,6 +15,8 @@ defmodule BotArmyGtd.LogEntryStore do
 
   use GenServer
   require Logger
+  alias BotArmyGtd.Repo
+  alias BotArmyGtd.Schemas.LogEntry
   import Ecto.Query
 
   @server __MODULE__
@@ -89,8 +91,8 @@ defmodule BotArmyGtd.LogEntryStore do
         cutoff_date = NaiveDateTime.utc_now() |> NaiveDateTime.add(-@days_to_load * 86400)
 
         entries =
-          BotArmyGtd.Repo.all(
-            from(e in BotArmyGtd.Schemas.LogEntry,
+          Repo.all(
+            from(e in LogEntry,
               where: e.inserted_at >= ^cutoff_date,
               order_by: [desc: e.inserted_at]
             )
@@ -117,8 +119,8 @@ defmodule BotArmyGtd.LogEntryStore do
     occurred_at = parse_occurred_at(Map.get(payload, "occurred_at"))
 
     changeset =
-      BotArmyGtd.Schemas.LogEntry.changeset(
-        %BotArmyGtd.Schemas.LogEntry{id: entry_id},
+      LogEntry.changeset(
+        %LogEntry{id: entry_id},
         %{
           "tenant_id" => payload["tenant_id"],
           "user_id" => Map.get(payload, "user_id"),
@@ -133,7 +135,7 @@ defmodule BotArmyGtd.LogEntryStore do
         }
       )
 
-    case BotArmyGtd.Repo.insert(changeset) do
+    case Repo.insert(changeset) do
       {:ok, db_entry} ->
         entry = schema_to_map(db_entry)
         new_state = Map.put(state, entry_id, entry)
@@ -170,16 +172,16 @@ defmodule BotArmyGtd.LogEntryStore do
         entry_uuid = Ecto.UUID.cast!(entry_id)
 
         case BotArmyGtd.Repo.transaction(fn ->
-               db_entry = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.LogEntry, entry_uuid)
+               db_entry = Repo.get(LogEntry, entry_uuid)
 
                if db_entry do
                  changeset =
-                   BotArmyGtd.Schemas.LogEntry.changeset(
+                   LogEntry.changeset(
                      db_entry,
                      %{"file_written" => true}
                    )
 
-                 case BotArmyGtd.Repo.update(changeset) do
+                 case Repo.update(changeset) do
                    {:ok, updated} -> updated
                    {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
                  end
@@ -213,11 +215,11 @@ defmodule BotArmyGtd.LogEntryStore do
         entry_uuid = Ecto.UUID.cast!(entry_id)
 
         case BotArmyGtd.Repo.transaction(fn ->
-               db_entry = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.LogEntry, entry_uuid)
+               db_entry = Repo.get(LogEntry, entry_uuid)
 
                if db_entry do
                  changeset =
-                   BotArmyGtd.Schemas.LogEntry.changeset(
+                   LogEntry.changeset(
                      db_entry,
                      %{
                        "enriched" => true,
@@ -227,7 +229,7 @@ defmodule BotArmyGtd.LogEntryStore do
                      }
                    )
 
-                 case BotArmyGtd.Repo.update(changeset) do
+                 case Repo.update(changeset) do
                    {:ok, updated} -> updated
                    {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
                  end
@@ -254,13 +256,13 @@ defmodule BotArmyGtd.LogEntryStore do
   @impl true
   def handle_call(:clear, _from, _state) do
     Logger.debug("Clearing all log entries from database and state")
-    BotArmyGtd.Repo.delete_all(BotArmyGtd.Schemas.LogEntry)
+    Repo.delete_all(LogEntry)
     {:reply, :ok, %{}}
   end
 
   # Helper functions
 
-  defp schema_to_map(%BotArmyGtd.Schemas.LogEntry{} = entry) do
+  defp schema_to_map(%LogEntry{} = entry) do
     %{
       "id" => Ecto.UUID.cast!(entry.id) |> to_string(),
       "tenant_id" => entry.tenant_id |> to_string(),

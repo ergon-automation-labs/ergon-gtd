@@ -19,6 +19,8 @@ defmodule BotArmyGtd.NATS.Publisher do
   """
 
   require Logger
+  alias BotArmyGtd.TaskIntakeGuard
+  alias BotArmyRuntime.NATS.Publisher
 
   @doc """
   Publish an event to NATS.
@@ -36,7 +38,7 @@ defmodule BotArmyGtd.NATS.Publisher do
   Returns `:ok` if successful, or `{:error, reason}` on failure.
   """
   def publish(event) when is_map(event) do
-    if BotArmyGtd.TaskIntakeGuard.suspicious_outbound_created_event?(event) do
+    if TaskIntakeGuard.suspicious_outbound_created_event?(event) do
       Logger.warning(
         "Dropped suspicious outbound gtd.task.created event: event_id=#{event["event_id"]} source_node=#{event["source_node"]} payload=#{inspect(event["payload"])}"
       )
@@ -77,7 +79,7 @@ defmodule BotArmyGtd.NATS.Publisher do
   defp do_publish(subject, body) do
     case Jason.decode(body) do
       {:ok, payload} ->
-        BotArmyRuntime.NATS.Publisher.publish(subject, payload)
+        Publisher.publish(subject, payload)
 
       {:error, reason} ->
         Logger.error("Failed to decode body for #{subject}: #{inspect(reason)}")

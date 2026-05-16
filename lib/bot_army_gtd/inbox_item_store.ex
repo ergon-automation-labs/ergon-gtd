@@ -18,6 +18,8 @@ defmodule BotArmyGtd.InboxItemStore do
 
   use GenServer
   require Logger
+  alias BotArmyGtd.Repo
+  alias BotArmyGtd.Schemas.InboxItem
 
   @server __MODULE__
 
@@ -99,7 +101,7 @@ defmodule BotArmyGtd.InboxItemStore do
     # Gracefully handle database unavailability (e.g., in tests)
     state =
       try do
-        items = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.InboxItem)
+        items = Repo.all(InboxItem)
 
         Enum.reduce(items, %{}, fn item, acc ->
           Map.put(acc, item.id |> to_string(), schema_to_map(item))
@@ -122,8 +124,8 @@ defmodule BotArmyGtd.InboxItemStore do
     now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
 
     changeset =
-      BotArmyGtd.Schemas.InboxItem.changeset(
-        %BotArmyGtd.Schemas.InboxItem{id: item_id},
+      InboxItem.changeset(
+        %InboxItem{id: item_id},
         %{
           "tenant_id" => payload["tenant_id"],
           "user_id" => Map.get(payload, "user_id"),
@@ -135,7 +137,7 @@ defmodule BotArmyGtd.InboxItemStore do
         }
       )
 
-    case BotArmyGtd.Repo.insert(changeset) do
+    case Repo.insert(changeset) do
       {:ok, db_item} ->
         item = schema_to_map(db_item)
         new_state = Map.put(state, item_id, item)
@@ -158,18 +160,18 @@ defmodule BotArmyGtd.InboxItemStore do
         item_uuid = Ecto.UUID.cast!(item_id)
 
         case BotArmyGtd.Repo.transaction(fn ->
-               db_item = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.InboxItem, item_uuid)
+               db_item = Repo.get(InboxItem, item_uuid)
 
                if db_item do
                  now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
 
                  changeset =
-                   BotArmyGtd.Schemas.InboxItem.changeset(db_item, %{
+                   InboxItem.changeset(db_item, %{
                      "status" => "clarified",
                      "processed_at" => now
                    })
 
-                 case BotArmyGtd.Repo.update(changeset) do
+                 case Repo.update(changeset) do
                    {:ok, updated} -> updated
                    {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
                  end
@@ -203,15 +205,15 @@ defmodule BotArmyGtd.InboxItemStore do
         item_uuid = Ecto.UUID.cast!(item_id)
 
         case BotArmyGtd.Repo.transaction(fn ->
-               db_item = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.InboxItem, item_uuid)
+               db_item = Repo.get(InboxItem, item_uuid)
 
                if db_item do
                  changeset =
-                   BotArmyGtd.Schemas.InboxItem.changeset(db_item, %{
+                   InboxItem.changeset(db_item, %{
                      "status" => "discarded"
                    })
 
-                 case BotArmyGtd.Repo.update(changeset) do
+                 case Repo.update(changeset) do
                    {:ok, updated} -> updated
                    {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
                  end
@@ -257,7 +259,7 @@ defmodule BotArmyGtd.InboxItemStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          items = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.InboxItem)
+          items = Repo.all(InboxItem)
           Logger.info("InboxItemStore recovered #{length(items)} items from database")
 
           Enum.reduce(items, %{}, fn item, acc ->
@@ -286,7 +288,7 @@ defmodule BotArmyGtd.InboxItemStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          items = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.InboxItem)
+          items = Repo.all(InboxItem)
           Logger.info("InboxItemStore recovered #{length(items)} items from database")
 
           Enum.reduce(items, %{}, fn item, acc ->
@@ -308,12 +310,12 @@ defmodule BotArmyGtd.InboxItemStore do
   @impl true
   def handle_call(:clear, _from, _state) do
     Logger.debug("Clearing all inbox items")
-    BotArmyGtd.Repo.delete_all(BotArmyGtd.Schemas.InboxItem)
+    Repo.delete_all(InboxItem)
     {:reply, :ok, %{}}
   end
 
   # Helper function to convert Ecto schema to map for GenServer state
-  defp schema_to_map(%BotArmyGtd.Schemas.InboxItem{} = item) do
+  defp schema_to_map(%InboxItem{} = item) do
     %{
       "id" => Ecto.UUID.cast!(item.id) |> to_string(),
       "tenant_id" => item.tenant_id |> to_string(),

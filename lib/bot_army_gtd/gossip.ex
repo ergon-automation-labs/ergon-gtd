@@ -8,6 +8,9 @@ defmodule BotArmyGtd.Gossip do
 
   require Logger
 
+  alias BotArmyGtd.Handlers.PollVoteHandler
+  alias BotArmyRuntime.NATS.Publisher
+
   @table :gtd_gossip_poll_state
 
   def handle_intent_proposed(message) when is_map(message) do
@@ -37,7 +40,7 @@ defmodule BotArmyGtd.Gossip do
     }
 
     Logger.info("[GTD Gossip] intent answer stance=#{stance} intent_key=#{intent_key}")
-    BotArmyRuntime.NATS.Publisher.publish("gossip.intent.answer", answer)
+    Publisher.publish("gossip.intent.answer", answer)
   end
 
   def handle_social_invite(message) when is_map(message) do
@@ -63,7 +66,7 @@ defmodule BotArmyGtd.Gossip do
     }
 
     Logger.info("[GTD Gossip] social invite from=#{from_bot} accepted=#{accepted}")
-    BotArmyRuntime.NATS.Publisher.publish("gossip.social.reply", reply)
+    Publisher.publish("gossip.social.reply", reply)
   end
 
   def handle_poll_broadcast(message) when is_map(message) do
@@ -174,7 +177,7 @@ defmodule BotArmyGtd.Gossip do
 
     # Call handler directly — GTD bot serves gtd.poll.vote.submit,
     # so NATS request/reply would deadlock (GenServer calling itself).
-    case BotArmyGtd.Handlers.PollVoteHandler.handle_submit(payload) do
+    case PollVoteHandler.handle_submit(payload) do
       {:ok, result} ->
         Logger.info(
           "[GTD Gossip] submitted GTD poll vote poll_id=#{poll_id} vote_id=#{result["vote_id"] || "n/a"}"
@@ -267,7 +270,7 @@ defmodule BotArmyGtd.Gossip do
       }
     }
 
-    BotArmyRuntime.NATS.Publisher.publish("gossip.poll.vote", vote_message)
+    Publisher.publish("gossip.poll.vote", vote_message)
     Logger.info("[GTD Gossip] emitted poll vote poll_id=#{poll_id} vote=#{vote}")
   end
 

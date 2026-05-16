@@ -20,6 +20,9 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
 
   require Logger
 
+  alias BotArmyCore.Tenant
+  alias BotArmyGtd.{EventBuilder, NATS.Publisher, PlanStore, TaskStore}
+
   defp plan_store do
     Application.get_env(:bot_army_gtd, :plan_store, BotArmyGtd.PlanStore)
   end
@@ -35,7 +38,7 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
   def handle_goal_plan(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     stamped_payload =
       Map.merge(payload, %{
@@ -131,7 +134,7 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
   def handle_goal_status(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_goal_status_payload(payload) do
       :ok ->
@@ -172,7 +175,7 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
   def handle_goal_cancel(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_goal_cancel_payload(payload) do
       :ok ->
@@ -226,7 +229,7 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
   def handle_goal_list(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     filter = payload["filter"] || "active"
     filters = if filter == "active", do: %{"status" => "executing"}, else: %{}
@@ -358,7 +361,7 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
       "message" => "Plan created with #{task_count} tasks"
     }
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} ->
         Logger.debug("Notification sent to #{notify_via_subject}")
 
@@ -374,14 +377,14 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
 
   defp publish_event(event_type, payload, event_id, _original_message, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event(
+      EventBuilder.build_event(
         event_type,
         Map.merge(payload, %{"triggered_by_event_id" => event_id}),
         tenant_id: tenant_id,
         user_id: user_id
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published event: #{event_type}")
       :ok -> Logger.debug("Published event: #{event_type}")
       {:error, reason} -> Logger.error("Failed to publish event: #{inspect(reason)}")
@@ -390,12 +393,12 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+      EventBuilder.build_error(event_id, reason, message,
         tenant_id: tenant_id,
         user_id: user_id
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event")
       :ok -> Logger.debug("Published error event")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")

@@ -18,6 +18,9 @@ defmodule BotArmyGtd.PlanStore do
   require Logger
   import Ecto.Query
 
+  alias BotArmyGtd.Repo
+  alias BotArmyGtd.Schemas.Plan
+
   @server __MODULE__
 
   # API
@@ -92,7 +95,7 @@ defmodule BotArmyGtd.PlanStore do
 
     state =
       try do
-        plans = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Plan)
+        plans = Repo.all(Plan)
         Logger.info("PlanStore loaded #{length(plans)} plans from database")
 
         Enum.reduce(plans, %{}, fn plan, acc ->
@@ -112,8 +115,8 @@ defmodule BotArmyGtd.PlanStore do
     plan_id = Ecto.UUID.generate()
 
     changeset =
-      BotArmyGtd.Schemas.Plan.changeset(
-        %BotArmyGtd.Schemas.Plan{id: plan_id},
+      Plan.changeset(
+        %Plan{id: plan_id},
         %{
           "tenant_id" => convert_to_uuid(payload["tenant_id"]),
           "user_id" => convert_to_uuid(payload["user_id"]),
@@ -129,7 +132,7 @@ defmodule BotArmyGtd.PlanStore do
         }
       )
 
-    case BotArmyGtd.Repo.insert(changeset) do
+    case Repo.insert(changeset) do
       {:ok, db_plan} ->
         plan = schema_to_map(db_plan)
         new_state = Map.put(state, plan_id, plan)
@@ -175,10 +178,10 @@ defmodule BotArmyGtd.PlanStore do
           plan_uuid = Ecto.UUID.cast!(plan_id)
 
           changeset =
-            BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Plan, plan_uuid)
-            |> BotArmyGtd.Schemas.Plan.changeset(updates)
+            Repo.get(Plan, plan_uuid)
+            |> Plan.changeset(updates)
 
-          case BotArmyGtd.Repo.update(changeset) do
+          case Repo.update(changeset) do
             {:ok, db_plan} ->
               updated_plan = schema_to_map(db_plan)
               new_state = Map.put(state, plan_id, updated_plan)
@@ -203,7 +206,7 @@ defmodule BotArmyGtd.PlanStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          plans = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Plan)
+          plans = Repo.all(Plan)
           Logger.info("PlanStore recovered #{length(plans)} plans from database")
 
           Enum.reduce(plans, %{}, fn plan, acc ->
@@ -241,10 +244,10 @@ defmodule BotArmyGtd.PlanStore do
           plan_uuid = Ecto.UUID.cast!(plan_id)
 
           changeset =
-            BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Plan, plan_uuid)
-            |> BotArmyGtd.Schemas.Plan.changeset(%{"status" => "cancelled"})
+            Repo.get(Plan, plan_uuid)
+            |> Plan.changeset(%{"status" => "cancelled"})
 
-          case BotArmyGtd.Repo.update(changeset) do
+          case Repo.update(changeset) do
             {:ok, db_plan} ->
               deleted_plan = schema_to_map(db_plan)
               new_state = Map.put(state, plan_id, deleted_plan)
@@ -287,7 +290,8 @@ defmodule BotArmyGtd.PlanStore do
       "metadata" => schema.metadata || %{},
       "created_at" =>
         schema.inserted_at |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_iso8601(),
-      "started_at" => if(schema.started_at, do: schema.started_at |> DateTime.to_iso8601(), else: nil),
+      "started_at" =>
+        if(schema.started_at, do: schema.started_at |> DateTime.to_iso8601(), else: nil),
       "completed_at" =>
         if(schema.completed_at, do: schema.completed_at |> DateTime.to_iso8601(), else: nil)
     }

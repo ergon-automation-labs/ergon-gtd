@@ -18,6 +18,8 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
   """
 
   require Logger
+  alias BotArmyCore.Tenant
+  alias BotArmyGtd.{EventBuilder, NATS.Publisher, TaskStore}
 
   defp task_store do
     Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
@@ -34,7 +36,7 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
   def handle_task_create(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_create_payload(payload) do
       :ok ->
@@ -57,7 +59,7 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
   def handle_operation_success(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_operation_success_payload(payload) do
       :ok ->
@@ -206,7 +208,7 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
 
         # Publish completion event
         event_data =
-          BotArmyGtd.EventBuilder.build_event(
+          EventBuilder.build_event(
             "gtd.task.completed",
             %{
               "task" => task,
@@ -218,7 +220,7 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
             triggered_by: "claude"
           )
 
-        case BotArmyGtd.NATS.Publisher.publish(event_data) do
+        case Publisher.publish(event_data) do
           {:ok, _subject} ->
             Logger.debug("Published task.completed event for Claude auto-completion")
 
@@ -239,7 +241,7 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
 
   defp publish_event(event_type, task, event_id, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event(
+      EventBuilder.build_event(
         event_type,
         %{
           "task" => task,
@@ -251,7 +253,7 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
         triggered_by: "claude"
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published task event from Claude handler")
       {:error, reason} -> Logger.error("Failed to publish task event: #{inspect(reason)}")
     end
@@ -259,13 +261,13 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+      EventBuilder.build_error(event_id, reason, message,
         tenant_id: tenant_id,
         user_id: user_id,
         triggered_by: "claude"
       )
 
-    case BotArmyGtd.NATS.Publisher.publish(event_data) do
+    case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published error event from Claude handler")
       {:error, err} -> Logger.error("Failed to publish error: #{inspect(err)}")
     end

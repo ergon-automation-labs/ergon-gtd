@@ -18,6 +18,8 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   """
 
   require Logger
+  alias BotArmyCore.{NATS, Tenant}
+  alias BotArmyGtd.{DecompositionStore, EventBuilder, Handlers.TaskHandler}
 
   defp task_store do
     Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
@@ -38,7 +40,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_decompose(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_decompose_payload(payload) do
       :ok ->
@@ -61,7 +63,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_chain_completed(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_chain_completed_payload(payload) do
       :ok ->
@@ -84,7 +86,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_approve(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_approve_payload(payload) do
       :ok ->
@@ -107,7 +109,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_reject(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_reject_payload(payload) do
       :ok ->
@@ -130,7 +132,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_review(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_review_payload(payload) do
       :ok ->
@@ -155,7 +157,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   def handle_request_review(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = Tenant.extract_context(message)
 
     case validate_request_review_payload(payload) do
       :ok ->
@@ -361,12 +363,12 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
             }
 
             create_event =
-              BotArmyGtd.EventBuilder.build_event("gtd.task.create", subtask_payload,
+              EventBuilder.build_event("gtd.task.create", subtask_payload,
                 tenant_id: tenant_id,
                 user_id: user_id
               )
 
-            case BotArmyGtd.Handlers.TaskHandler.handle_create(create_event) do
+            case TaskHandler.handle_create(create_event) do
               {:ok, task} ->
                 {:ok, task}
 
@@ -820,7 +822,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
          registry_snapshot
        ) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event("llm.inference.chain", %{
+      EventBuilder.build_event("llm.inference.chain", %{
         "chain_id" => chain_id,
         "steps" => steps,
         "initial_input" => initial_input,
@@ -841,7 +843,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
   defp publish_decomposition_completed(decomposition, event_id, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event(
+      EventBuilder.build_event(
         "gtd.decomposition.completed",
         %{
           "decomposition" => decomposition,
@@ -862,7 +864,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
   defp publish_decomposition_approved(decomposition, event_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event("gtd.decomposition.approved", %{
+      EventBuilder.build_event("gtd.decomposition.approved", %{
         "decomposition" => decomposition,
         "triggered_by_event_id" => event_id
       })
@@ -878,7 +880,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
   defp publish_decomposition_reviewed(decomposition, event_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event("gtd.decomposition.reviewed", %{
+      EventBuilder.build_event("gtd.decomposition.reviewed", %{
         "decomposition" => decomposition,
         "triggered_by_event_id" => event_id
       })
@@ -894,7 +896,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
   defp publish_decomposition_ready_for_review(decomposition, event_id, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_event(
+      EventBuilder.build_event(
         "gtd.decomposition.ready_for_review",
         %{
           "decomposition" => decomposition,
@@ -920,7 +922,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       "source" => "bot_army_gtd",
       "schema_version" => "1.0",
       "event" => "gtd.decomposition.accuracy",
-      "tenant_id" => decomposition["tenant_id"] || BotArmyCore.Tenant.default_tenant_id(),
+      "tenant_id" => decomposition["tenant_id"] || Tenant.default_tenant_id(),
       "payload" => %{
         "decomposition_id" => decomposition["id"],
         "parent_task_id" => decomposition["parent_task_id"],
@@ -937,7 +939,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       }
     }
 
-    case BotArmyCore.NATS.publish("bot_army.gtd.decomposition.accuracy", event) do
+    case NATS.publish("bot_army.gtd.decomposition.accuracy", event) do
       {:ok, _} ->
         Logger.info(
           "[DecompositionHandler] Published accuracy metrics for #{decomposition["id"]}"
@@ -956,13 +958,13 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp publish_error(event_id, reason, message) do
-    default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+    default_tenant_id = Tenant.default_tenant_id()
     publish_error(event_id, reason, message, default_tenant_id, nil)
   end
 
   defp publish_error(event_id, reason, message, tenant_id, user_id) do
     event_data =
-      BotArmyGtd.EventBuilder.build_error(event_id, reason, message,
+      EventBuilder.build_error(event_id, reason, message,
         tenant_id: tenant_id,
         user_id: user_id
       )

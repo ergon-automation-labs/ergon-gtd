@@ -28,6 +28,8 @@ defmodule BotArmyGtd.ParaExporter do
   """
 
   require Logger
+  alias BotArmyGtd.{ProjectStore, TaskStore}
+  alias BotArmyRuntime.NATS.Publisher
 
   @para_refs_marker "## PARA refs"
   @project_path_regex ~r{docs/personal_os/projects/([^/]+)/}
@@ -540,7 +542,7 @@ defmodule BotArmyGtd.ParaExporter do
   end
 
   defp do_publish(subject, payload) do
-    case BotArmyRuntime.NATS.Publisher.publish(subject, payload) do
+    case Publisher.publish(subject, payload) do
       {:ok, _} ->
         Logger.info("[ParaExporter] Published to #{subject}: #{payload["summary"]}")
         :ok

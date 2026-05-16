@@ -32,6 +32,27 @@ defmodule BotArmyGtd.NATS.Consumer do
   use GenServer
   require Logger
 
+  alias BotArmyCore.NATS.Decoder
+
+  alias BotArmyGtd.Handlers.{
+    ClaudeHandler,
+    ConversationHandler,
+    DecompositionHandler,
+    InboxHandler,
+    InboxParsingHandler,
+    LogEnrichmentHandler,
+    LogEntryHandler,
+    PlanHandler,
+    ProjectHandler,
+    TaskHandler,
+    WhatsNextHandler
+  }
+
+  alias BotArmyRuntime.Intent.ArmyOpinionVote
+  alias BotArmyRuntime.NATS.{Connection, Reply}
+  alias BotArmyRuntime.Registry
+  alias BotArmyRuntime.Tracing
+
   @reconnect_delay_ms 5000
   @version Mix.Project.config()[:version]
   @registry_heartbeat_ms 20_000
@@ -218,87 +239,87 @@ defmodule BotArmyGtd.NATS.Consumer do
     # Conversation events use prefix matching (not case-exact event types)
     cond do
       is_binary(event) and String.starts_with?(event, "conv.request.gtd.") ->
-        BotArmyGtd.Handlers.ConversationHandler.handle_request(message)
+        ConversationHandler.handle_request(message)
 
       is_binary(event) and String.starts_with?(event, "conv.followup.") ->
-        BotArmyGtd.Handlers.ConversationHandler.handle_request(message)
+        ConversationHandler.handle_request(message)
 
       event == "conv.mailbox.gtd" ->
-        BotArmyGtd.Handlers.ConversationHandler.handle_mailbox(message)
+        ConversationHandler.handle_mailbox(message)
 
       true ->
         case event do
           "gtd.inbox.add" ->
-            BotArmyGtd.Handlers.InboxHandler.handle_add(message)
+            InboxHandler.handle_add(message)
 
           "gtd.task.create" ->
-            BotArmyGtd.Handlers.TaskHandler.handle_create(message)
+            TaskHandler.handle_create(message)
 
           "gtd.task.update" ->
-            BotArmyGtd.Handlers.TaskHandler.handle_update(message)
+            TaskHandler.handle_update(message)
 
           "gtd.task.complete" ->
-            BotArmyGtd.Handlers.TaskHandler.handle_complete(message)
+            TaskHandler.handle_complete(message)
 
           "gtd.task.command.defer" ->
-            BotArmyGtd.Handlers.TaskHandler.handle_defer(message)
+            TaskHandler.handle_defer(message)
 
           "gtd.task.command.delete" ->
-            BotArmyGtd.Handlers.TaskHandler.handle_delete(message)
+            TaskHandler.handle_delete(message)
 
           "gtd.task.decompose" ->
-            BotArmyGtd.Handlers.DecompositionHandler.handle_decompose(message)
+            DecompositionHandler.handle_decompose(message)
 
           "gtd.decomposition.approve" ->
-            BotArmyGtd.Handlers.DecompositionHandler.handle_approve(message)
+            DecompositionHandler.handle_approve(message)
 
           "gtd.decomposition.reject" ->
-            BotArmyGtd.Handlers.DecompositionHandler.handle_reject(message)
+            DecompositionHandler.handle_reject(message)
 
           "gtd.decomposition.review" ->
-            BotArmyGtd.Handlers.DecompositionHandler.handle_review(message)
+            DecompositionHandler.handle_review(message)
 
           "gtd.decomposition.request_review" ->
-            BotArmyGtd.Handlers.DecompositionHandler.handle_request_review(message)
+            DecompositionHandler.handle_request_review(message)
 
           "gtd.project.create" ->
-            BotArmyGtd.Handlers.ProjectHandler.handle_create(message)
+            ProjectHandler.handle_create(message)
 
           "gtd.project.update" ->
-            BotArmyGtd.Handlers.ProjectHandler.handle_update(message)
+            ProjectHandler.handle_update(message)
 
           "gtd.goal.plan" ->
-            BotArmyGtd.Handlers.PlanHandler.handle_goal_plan(message)
+            PlanHandler.handle_goal_plan(message)
 
           "gtd.goal.status" ->
-            BotArmyGtd.Handlers.PlanHandler.handle_goal_status(message)
+            PlanHandler.handle_goal_status(message)
 
           "gtd.goal.list" ->
-            BotArmyGtd.Handlers.PlanHandler.handle_goal_list(message)
+            PlanHandler.handle_goal_list(message)
 
           "gtd.goal.cancel" ->
-            BotArmyGtd.Handlers.PlanHandler.handle_goal_cancel(message)
+            PlanHandler.handle_goal_cancel(message)
 
           "gtd.log.create" ->
-            BotArmyGtd.Handlers.LogEntryHandler.handle_create(message)
+            LogEntryHandler.handle_create(message)
 
           "llm.response.parsed" ->
             case get_in(message, ["payload", "enrichment_source"]) do
               "log_enrichment" ->
-                BotArmyGtd.Handlers.LogEnrichmentHandler.handle_enriched(message)
+                LogEnrichmentHandler.handle_enriched(message)
 
               _ ->
-                BotArmyGtd.Handlers.InboxParsingHandler.handle_parse(message)
+                InboxParsingHandler.handle_parse(message)
             end
 
           "llm.chain.completed" ->
-            BotArmyGtd.Handlers.DecompositionHandler.handle_chain_completed(message)
+            DecompositionHandler.handle_chain_completed(message)
 
           "claude.task.create" ->
-            BotArmyGtd.Handlers.ClaudeHandler.handle_task_create(message)
+            ClaudeHandler.handle_task_create(message)
 
           "claude.operation.success" ->
-            BotArmyGtd.Handlers.ClaudeHandler.handle_operation_success(message)
+            ClaudeHandler.handle_operation_success(message)
 
           _ ->
             Logger.debug("Unknown event type: #{event}")
@@ -334,7 +355,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     try do
       case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
         {:ok, conn} ->
-          BotArmyRuntime.NATS.Connection.subscribe_to_status()
+          Connection.subscribe_to_status()
           Logger.info("Connected to NATS, subscribing to GTD topics")
 
           subscriptions =
@@ -391,7 +412,7 @@ defmodule BotArmyGtd.NATS.Consumer do
             end)
             |> Enum.filter(&(not is_nil(&1)))
 
-          BotArmyRuntime.Registry.register("gtd", @subjects, @version)
+          Registry.register("gtd", @subjects, @version)
           Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
           {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
@@ -424,11 +445,11 @@ defmodule BotArmyGtd.NATS.Consumer do
         state
       )
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span(
+    Tracing.with_consumer_span(
       "gtd.army.opinion.vote",
       Map.get(msg, :headers, []),
       fn ->
-        resp = BotArmyRuntime.Intent.ArmyOpinionVote.build_reply(:gtd, body)
+        resp = ArmyOpinionVote.build_reply(:gtd, body)
         reply_traced(state.conn, reply_to, Jason.encode!(resp))
       end
     )
@@ -439,7 +460,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   @impl true
   def handle_info({:msg, %{topic: "gtd.task.list", reply_to: reply_to, body: body} = msg}, state)
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span("gtd.task.list", Map.get(msg, :headers, []), fn ->
+    Tracing.with_consumer_span("gtd.task.list", Map.get(msg, :headers, []), fn ->
       task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
       {tenant_id, limit, offset, filters} =
@@ -460,14 +481,14 @@ defmodule BotArmyGtd.NATS.Consumer do
             {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), 100, 0, %{}}
         end
 
-      BotArmyGtd.Handlers.TaskHandler.expire_active_tasks(tenant_id, nil)
+      TaskHandler.expire_active_tasks(tenant_id, nil)
 
       response =
         case task_store.list_prioritized(tenant_id, filters) do
           {:ok, all_tasks} ->
             page = all_tasks |> Enum.drop(offset) |> Enum.take(limit)
 
-            BotArmyRuntime.NATS.Reply.ok(%{
+            Reply.ok(%{
               "tasks" => page,
               "total_count" => length(all_tasks),
               "limit" => limit,
@@ -475,7 +496,7 @@ defmodule BotArmyGtd.NATS.Consumer do
             })
 
           {:error, reason} ->
-            BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
+            Reply.error(inspect(reason), :list_failed)
         end
 
       reply_traced(state.conn, reply_to, response)
@@ -487,7 +508,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   @impl true
   def handle_info({:msg, %{topic: "gtd.task.get", reply_to: reply_to, body: body} = msg}, state)
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span("gtd.task.get", Map.get(msg, :headers, []), fn ->
+    Tracing.with_consumer_span("gtd.task.get", Map.get(msg, :headers, []), fn ->
       task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
       {tenant_id, task_id} =
@@ -509,13 +530,13 @@ defmodule BotArmyGtd.NATS.Consumer do
         if task_id do
           case task_store.get(tenant_id, task_id) do
             {:ok, task} ->
-              BotArmyRuntime.NATS.Reply.ok(%{"task" => task})
+              Reply.ok(%{"task" => task})
 
             {:error, reason} ->
-              BotArmyRuntime.NATS.Reply.error(inspect(reason), :not_found)
+              Reply.error(inspect(reason), :not_found)
           end
         else
-          BotArmyRuntime.NATS.Reply.error("task_id required", :missing_field)
+          Reply.error("task_id required", :missing_field)
         end
 
       reply_traced(state.conn, reply_to, response)
@@ -530,7 +551,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         state
       )
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span("gtd.task.search", Map.get(msg, :headers, []), fn ->
+    Tracing.with_consumer_span("gtd.task.search", Map.get(msg, :headers, []), fn ->
       task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
       {tenant_id, query, filters, pagination} =
@@ -560,7 +581,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       response =
         case task_store.search(tenant_id, query, filters, pagination) do
           {:ok, {tasks, total_count}} ->
-            BotArmyRuntime.NATS.Reply.ok(%{
+            Reply.ok(%{
               "tasks" => tasks,
               "total_count" => total_count,
               "limit" => Map.get(pagination, "limit"),
@@ -569,7 +590,7 @@ defmodule BotArmyGtd.NATS.Consumer do
             })
 
           {:error, reason} ->
-            BotArmyRuntime.NATS.Reply.error(inspect(reason), :search_failed)
+            Reply.error(inspect(reason), :search_failed)
         end
 
       reply_traced(state.conn, reply_to, response)
@@ -584,7 +605,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         state
       )
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span(
+    Tracing.with_consumer_span(
       "gtd.decomposition.list_due",
       Map.get(msg, :headers, []),
       fn ->
@@ -619,10 +640,10 @@ defmodule BotArmyGtd.NATS.Consumer do
                 end)
                 |> Enum.sort_by(fn d -> d["due_at"] end)
 
-              BotArmyRuntime.NATS.Reply.ok(%{"decompositions" => due})
+              Reply.ok(%{"decompositions" => due})
 
             {:error, reason} ->
-              BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
+              Reply.error(inspect(reason), :list_failed)
           end
 
         reply_traced(state.conn, reply_to, response)
@@ -637,13 +658,13 @@ defmodule BotArmyGtd.NATS.Consumer do
   @impl true
   def handle_info({:msg, %{topic: "gtd.whats_next", reply_to: reply_to, body: body} = msg}, state)
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span("gtd.whats_next", Map.get(msg, :headers, []), fn ->
+    Tracing.with_consumer_span("gtd.whats_next", Map.get(msg, :headers, []), fn ->
       params = decode_body(body)
 
       response =
-        case BotArmyGtd.Handlers.WhatsNextHandler.handle_request(params) do
-          {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
-          {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :whats_next_failed)
+        case WhatsNextHandler.handle_request(params) do
+          {:ok, result} -> Reply.ok(result)
+          {:error, reason} -> Reply.error(inspect(reason), :whats_next_failed)
         end
 
       reply_traced(state.conn, reply_to, response)
@@ -658,7 +679,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         state
       )
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span(
+    Tracing.with_consumer_span(
       "gtd.para.backfill",
       Map.get(msg, :headers, []),
       fn ->
@@ -675,8 +696,8 @@ defmodule BotArmyGtd.NATS.Consumer do
                  skip_slugs: skip_slugs,
                  apply: apply?
                ) do
-            {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
-            {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :backfill_failed)
+            {:ok, result} -> Reply.ok(result)
+            {:error, reason} -> Reply.error(inspect(reason), :backfill_failed)
           end
 
         reply_traced(state.conn, reply_to, response)
@@ -692,7 +713,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         state
       )
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span(
+    Tracing.with_consumer_span(
       "gtd.para.cleanup",
       Map.get(msg, :headers, []),
       fn ->
@@ -709,8 +730,8 @@ defmodule BotArmyGtd.NATS.Consumer do
                  existing_archive_slugs: existing_archive_slugs,
                  apply: apply?
                ) do
-            {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
-            {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :cleanup_failed)
+            {:ok, result} -> Reply.ok(result)
+            {:error, reason} -> Reply.error(inspect(reason), :cleanup_failed)
           end
 
         reply_traced(state.conn, reply_to, response)
@@ -726,7 +747,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         state
       )
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span(
+    Tracing.with_consumer_span(
       "gtd.review.weekly",
       Map.get(msg, :headers, []),
       fn ->
@@ -740,8 +761,8 @@ defmodule BotArmyGtd.NATS.Consumer do
 
         response =
           case BotArmyGtd.ReviewEngine.weekly_review(tenant_id, opts) do
-            {:ok, result} -> BotArmyRuntime.NATS.Reply.ok(result)
-            {:error, reason} -> BotArmyRuntime.NATS.Reply.error(inspect(reason), :review_failed)
+            {:ok, result} -> Reply.ok(result)
+            {:error, reason} -> Reply.error(inspect(reason), :review_failed)
           end
 
         reply_traced(state.conn, reply_to, response)
@@ -757,7 +778,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         state
       )
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span(
+    Tracing.with_consumer_span(
       "gtd.review.inbox_aging",
       Map.get(msg, :headers, []),
       fn ->
@@ -772,10 +793,10 @@ defmodule BotArmyGtd.NATS.Consumer do
         response =
           case BotArmyGtd.ReviewEngine.inbox_aging(tenant_id, opts) do
             {:ok, result} ->
-              BotArmyRuntime.NATS.Reply.ok(result)
+              Reply.ok(result)
 
             {:error, reason} ->
-              BotArmyRuntime.NATS.Reply.error(inspect(reason), :inbox_aging_failed)
+              Reply.error(inspect(reason), :inbox_aging_failed)
           end
 
         reply_traced(state.conn, reply_to, response)
@@ -791,7 +812,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         state
       )
       when is_binary(reply_to) and reply_to != "" do
-    BotArmyRuntime.Tracing.with_consumer_span(
+    Tracing.with_consumer_span(
       "gtd.review.coherence",
       Map.get(msg, :headers, []),
       fn ->
@@ -803,10 +824,10 @@ defmodule BotArmyGtd.NATS.Consumer do
         response =
           case BotArmyGtd.ReviewEngine.project_coherence(tenant_id) do
             {:ok, result} ->
-              BotArmyRuntime.NATS.Reply.ok(result)
+              Reply.ok(result)
 
             {:error, reason} ->
-              BotArmyRuntime.NATS.Reply.error(inspect(reason), :coherence_failed)
+              Reply.error(inspect(reason), :coherence_failed)
           end
 
         reply_traced(state.conn, reply_to, response)
@@ -818,11 +839,11 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @impl true
   def handle_info({:msg, %{topic: "ops.deploy.complete", body: body} = msg}, state) do
-    BotArmyRuntime.Tracing.with_consumer_span(
+    Tracing.with_consumer_span(
       "ops.deploy.complete",
       Map.get(msg, :headers, []),
       fn ->
-        case BotArmyCore.NATS.Decoder.decode(body) do
+        case Decoder.decode(body) do
           {:ok, decoded} ->
             handle_deploy_complete(decoded)
 
@@ -840,7 +861,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     topic = msg.topic
     reply_to = Map.get(msg, :reply_to)
 
-    BotArmyRuntime.Tracing.with_consumer_span(topic, Map.get(msg, :headers, []), fn ->
+    Tracing.with_consumer_span(topic, Map.get(msg, :headers, []), fn ->
       case topic do
         "gtd.task.create" when is_binary(reply_to) and reply_to != "" ->
           handle_task_create_request(msg, reply_to, state)
@@ -875,7 +896,7 @@ defmodule BotArmyGtd.NATS.Consumer do
         _ ->
           Logger.debug("Received NATS message on subject: #{topic}")
 
-          case BotArmyCore.NATS.Decoder.decode(msg.body) do
+          case Decoder.decode(msg.body) do
             {:ok, decoded_message} ->
               route_message(decoded_message)
 
@@ -913,84 +934,84 @@ defmodule BotArmyGtd.NATS.Consumer do
   end
 
   defp handle_task_create_request(msg, reply_to, state) do
-    case BotArmyCore.NATS.Decoder.decode(msg.body) do
+    case Decoder.decode(msg.body) do
       {:ok, decoded_message} ->
-        case BotArmyGtd.Handlers.TaskHandler.handle_create(decoded_message) do
+        case TaskHandler.handle_create(decoded_message) do
           {:ok, task} ->
-            response = BotArmyRuntime.NATS.Reply.ok(%{"task_id" => task["id"], "task" => task})
+            response = Reply.ok(%{"task_id" => task["id"], "task" => task})
             reply_traced(state.conn, reply_to, response)
 
           {:error, reason} ->
-            error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :create_failed)
+            error_response = Reply.error(inspect(reason), :create_failed)
             reply_traced(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode task create message: #{inspect(reason)}")
-        error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
+        error_response = Reply.error("Invalid message format", :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
 
   defp handle_task_update_request(msg, reply_to, state) do
-    case BotArmyCore.NATS.Decoder.decode(msg.body) do
+    case Decoder.decode(msg.body) do
       {:ok, decoded_message} ->
-        case BotArmyGtd.Handlers.TaskHandler.handle_update(decoded_message) do
+        case TaskHandler.handle_update(decoded_message) do
           :ok ->
-            response = BotArmyRuntime.NATS.Reply.ok(%{})
+            response = Reply.ok(%{})
             reply_traced(state.conn, reply_to, response)
 
           {:error, reason} ->
-            error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :update_failed)
+            error_response = Reply.error(inspect(reason), :update_failed)
             reply_traced(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode task update message: #{inspect(reason)}")
-        error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
+        error_response = Reply.error("Invalid message format", :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
 
   defp handle_task_complete_request(msg, reply_to, state) do
-    case BotArmyCore.NATS.Decoder.decode(msg.body) do
+    case Decoder.decode(msg.body) do
       {:ok, decoded_message} ->
-        case BotArmyGtd.Handlers.TaskHandler.handle_complete(decoded_message) do
+        case TaskHandler.handle_complete(decoded_message) do
           :ok ->
-            response = BotArmyRuntime.NATS.Reply.ok(%{})
+            response = Reply.ok(%{})
             reply_traced(state.conn, reply_to, response)
 
           {:error, reason} ->
-            error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :complete_failed)
+            error_response = Reply.error(inspect(reason), :complete_failed)
             reply_traced(state.conn, reply_to, error_response)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to decode task complete message: #{inspect(reason)}")
-        error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
+        error_response = Reply.error("Invalid message format", :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
 
   defp handle_project_create_request(msg, reply_to, state) do
-    case BotArmyCore.NATS.Decoder.decode(msg.body) do
+    case Decoder.decode(msg.body) do
       {:ok, decoded_message} ->
-        case BotArmyGtd.Handlers.ProjectHandler.handle_create(decoded_message) do
+        case ProjectHandler.handle_create(decoded_message) do
           {:ok, project} ->
             response =
-              BotArmyRuntime.NATS.Reply.ok(%{"project_id" => project["id"], "project" => project})
+              Reply.ok(%{"project_id" => project["id"], "project" => project})
 
             reply_traced(state.conn, reply_to, response)
 
           {:error, reason} ->
-            error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :create_failed)
+            error_response = Reply.error(inspect(reason), :create_failed)
             reply_traced(state.conn, reply_to, error_response)
 
           other ->
             Logger.warning("Unexpected return value from handle_create: #{inspect(other)}")
 
             error_response =
-              BotArmyRuntime.NATS.Reply.error(
+              Reply.error(
                 "Internal error: unexpected handler response",
                 :internal_error
               )
@@ -1000,30 +1021,30 @@ defmodule BotArmyGtd.NATS.Consumer do
 
       {:error, reason} ->
         Logger.warning("Failed to decode project create message: #{inspect(reason)}")
-        error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
+        error_response = Reply.error("Invalid message format", :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
 
   defp handle_project_update_request(msg, reply_to, state) do
-    case BotArmyCore.NATS.Decoder.decode(msg.body) do
+    case Decoder.decode(msg.body) do
       {:ok, decoded_message} ->
-        case BotArmyGtd.Handlers.ProjectHandler.handle_update(decoded_message) do
+        case ProjectHandler.handle_update(decoded_message) do
           {:ok, project} ->
             response =
-              BotArmyRuntime.NATS.Reply.ok(%{"project_id" => project["id"], "project" => project})
+              Reply.ok(%{"project_id" => project["id"], "project" => project})
 
             reply_traced(state.conn, reply_to, response)
 
           {:error, reason} ->
-            error_response = BotArmyRuntime.NATS.Reply.error(inspect(reason), :update_failed)
+            error_response = Reply.error(inspect(reason), :update_failed)
             reply_traced(state.conn, reply_to, error_response)
 
           other ->
             Logger.warning("Unexpected return value from handle_update: #{inspect(other)}")
 
             error_response =
-              BotArmyRuntime.NATS.Reply.error(
+              Reply.error(
                 "Internal error: unexpected handler response",
                 :internal_error
               )
@@ -1033,14 +1054,14 @@ defmodule BotArmyGtd.NATS.Consumer do
 
       {:error, reason} ->
         Logger.warning("Failed to decode project update message: #{inspect(reason)}")
-        error_response = BotArmyRuntime.NATS.Reply.error("Invalid message format", :decode_error)
+        error_response = Reply.error("Invalid message format", :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
 
   defp handle_project_list_request(msg, reply_to, state) do
     tenant_id =
-      case BotArmyCore.NATS.Decoder.decode(msg.body) do
+      case Decoder.decode(msg.body) do
         {:ok, decoded} ->
           case Map.get(decoded, "payload") do
             %{"tenant_id" => tid} when is_binary(tid) and tid != "" ->
@@ -1063,10 +1084,10 @@ defmodule BotArmyGtd.NATS.Consumer do
     response =
       case project_store.list(tenant_id) do
         {:ok, projects} ->
-          BotArmyRuntime.NATS.Reply.ok(%{"projects" => projects})
+          Reply.ok(%{"projects" => projects})
 
         {:error, reason} ->
-          BotArmyRuntime.NATS.Reply.error(inspect(reason), :list_failed)
+          Reply.error(inspect(reason), :list_failed)
       end
 
     reply_traced(state.conn, reply_to, response)
@@ -1171,7 +1192,7 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   defp reply_traced(conn, reply_to, body) do
     if conn do
-      headers = BotArmyRuntime.Tracing.inject_trace_context([])
+      headers = Tracing.inject_trace_context([])
       Gnat.pub(conn, reply_to, body, headers: headers)
     end
   end
@@ -1228,7 +1249,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   @impl true
   def handle_info(:registry_heartbeat, state) do
     if state.subscriptions != [] do
-      BotArmyRuntime.Registry.register("gtd", @subjects, @version)
+      Registry.register("gtd", @subjects, @version)
       BotArmyGtd.Gossip.maybe_vote_on_heartbeat()
       Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
     end
