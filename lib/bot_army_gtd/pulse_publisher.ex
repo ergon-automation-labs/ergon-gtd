@@ -273,42 +273,40 @@ defmodule BotArmyGtd.PulsePublisher do
   defp publish_to_nats(pulse, base_sequence) do
     Logger.debug("[PulsePublisher] publish_to_nats() called")
 
-    try do
-      Logger.debug("[PulsePublisher] Getting NATS connection...")
+    Logger.debug("[PulsePublisher] Getting NATS connection...")
 
-      case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
-        {:ok, conn} ->
-          Logger.debug("[PulsePublisher] Got NATS connection, encoding pulse...")
-          json = Jason.encode!(pulse)
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+      {:ok, conn} ->
+        Logger.debug("[PulsePublisher] Got NATS connection, encoding pulse...")
+        json = Jason.encode!(pulse)
 
-          case Gnat.pub(conn, "bot.gtd.pulse", json) do
+        case Gnat.pub(conn, "bot.gtd.pulse", json) do
+          :ok ->
+            Logger.debug("[PulsePublisher] Published GTD pulse")
+
+          {:error, reason} ->
+            Logger.warning("[PulsePublisher] Failed to publish pulse: #{inspect(reason)}")
+        end
+
+        build_hydration_events(pulse, base_sequence)
+        |> Enum.each(fn event ->
+          case Gnat.pub(conn, event["event"], Jason.encode!(event)) do
             :ok ->
-              Logger.debug("[PulsePublisher] Published GTD pulse")
+              :ok
 
             {:error, reason} ->
-              Logger.warning("[PulsePublisher] Failed to publish pulse: #{inspect(reason)}")
+              Logger.warning(
+                "[PulsePublisher] Failed to publish hydration event #{event["event"]}: #{inspect(reason)}"
+              )
           end
+        end)
 
-          build_hydration_events(pulse, base_sequence)
-          |> Enum.each(fn event ->
-            case Gnat.pub(conn, event["event"], Jason.encode!(event)) do
-              :ok ->
-                :ok
-
-              {:error, reason} ->
-                Logger.warning(
-                  "[PulsePublisher] Failed to publish hydration event #{event["event"]}: #{inspect(reason)}"
-                )
-            end
-          end)
-
-        {:error, reason} ->
-          Logger.warning("[PulsePublisher] NATS unavailable, skipping pulse: #{inspect(reason)}")
-      end
-    rescue
-      e ->
-        Logger.warning("[PulsePublisher] Error publishing pulse: #{inspect(e)}")
+      {:error, reason} ->
+        Logger.warning("[PulsePublisher] NATS unavailable, skipping pulse: #{inspect(reason)}")
     end
+  rescue
+    e ->
+      Logger.warning("[PulsePublisher] Error publishing pulse: #{inspect(e)}")
   end
 
   defp uptime_seconds do
