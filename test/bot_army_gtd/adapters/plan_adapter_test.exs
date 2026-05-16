@@ -5,7 +5,13 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
   alias BotArmyGtd.Adapters.PlanAdapter
 
   setup do
-    # Setup mocks for stores
+    Mox.defmock(BotArmyGtd.PlanStoreMock, for: BotArmyGtd.PlanStoreBehaviour)
+    Application.put_env(:bot_army_gtd, :plan_store, BotArmyGtd.PlanStoreMock)
+
+    on_exit(fn ->
+      Application.delete_env(:bot_army_gtd, :plan_store)
+    end)
+
     :ok
   end
 
@@ -31,6 +37,10 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
       failure_reason = "test failure"
       context = %{tenant_id: "tenant-1", user_id: "user-1"}
 
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
+
       result = PlanAdapter.replan_on_failure(plan_id, failed_task_id, failure_reason, context)
 
       assert {:error, :plan_not_found} = result
@@ -43,6 +53,10 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
       failure_reason = "test failure"
       context = %{tenant_id: "tenant-1", user_id: "user-1"}
 
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
+
       result = PlanAdapter.replan_on_failure(plan_id, failed_task_id, failure_reason, context)
 
       # Will fail at fetch_plan or fetch_task step
@@ -54,6 +68,10 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
       # Empty strings should be rejected by guards
       # The function uses guards to ensure binary arguments
       # So we verify error handling for valid but not-found scenarios
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
+
       result = PlanAdapter.replan_on_failure("plan-1", "task-1", "reason", %{})
       assert is_tuple(result)
       assert {:error, _} = result
@@ -63,6 +81,10 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
       plan_id = "plan-1"
       failed_task_id = "task-1"
       failure_reason = "test"
+
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
 
       # Should work without context
       result = PlanAdapter.replan_on_failure(plan_id, failed_task_id, failure_reason)
@@ -80,6 +102,10 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
       failure_reason = "test timeout"
       context = %{tenant_id: "tenant-1", user_id: "user-1"}
 
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
+
       # The actual timeout would be at the LLM call level
       result = PlanAdapter.replan_on_failure(plan_id, failed_task_id, failure_reason, context)
 
@@ -95,6 +121,10 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
       failure_reason = "test parse"
       context = %{tenant_id: "tenant-1", user_id: "user-1"}
 
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
+
       result = PlanAdapter.replan_on_failure(plan_id, failed_task_id, failure_reason, context)
 
       assert is_tuple(result)
@@ -107,6 +137,10 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
       failed_task_id = "task-1"
       failure_reason = "test invalid status"
       context = %{tenant_id: "tenant-1", user_id: "user-1"}
+
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
 
       result = PlanAdapter.replan_on_failure(plan_id, failed_task_id, failure_reason, context)
 
@@ -124,6 +158,10 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
       failure_reason = "test context preservation"
       context = %{tenant_id: "tenant-1", user_id: "user-1"}
 
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
+
       # Would need to verify that created tasks have plan_id and metadata
       result = PlanAdapter.replan_on_failure(plan_id, failed_task_id, failure_reason, context)
 
@@ -140,6 +178,10 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
       failure_reason = "test event"
       context = %{tenant_id: "tenant-1", user_id: "user-1"}
 
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
+
       # Would need to verify event was published
       result = PlanAdapter.replan_on_failure(plan_id, failed_task_id, failure_reason, context)
 
@@ -153,6 +195,10 @@ defmodule BotArmyGtd.Adapters.PlanAdapterTest do
       failed_task_id = "task-1"
       failure_reason = "test"
       context = %{tenant_id: "tenant-1", user_id: "user-1"}
+
+      Mox.expect(BotArmyGtd.PlanStoreMock, :get, fn _, _ ->
+        {:error, :not_found}
+      end)
 
       result = PlanAdapter.replan_on_failure(plan_id, failed_task_id, failure_reason, context)
 
