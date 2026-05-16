@@ -247,20 +247,7 @@ defmodule BotArmyGtd.TaskStore do
 
                if db_task do
                  # Parse due_date if present
-                 due_date =
-                   case Map.get(payload, "due_date") do
-                     nil ->
-                       nil
-
-                     date_str when is_binary(date_str) ->
-                       case Date.from_iso8601(date_str) do
-                         {:ok, date} -> date
-                         {:error, _} -> nil
-                       end
-
-                     _ ->
-                       nil
-                   end
+                 due_date = parse_due_date(Map.get(payload, "due_date"))
 
                  changeset =
                    BotArmyGtd.Schemas.Task.changeset(
