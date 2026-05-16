@@ -173,19 +173,21 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
 
     case task_store().list(tenant_id, filters) do
       {:ok, tasks} ->
-        match =
-          Enum.find(tasks, fn task ->
-            task["source"] == "claude" and
-              task["title"] == title and
-              (task["description"] || "") == (description || "") and
-              (task["source_metadata"] || %{})["auto_generated"] == true
-          end)
-
-        if match, do: {:ok, match}, else: :not_found
+        case Enum.find(tasks, &matches_claude_task?(&1, title, description)) do
+          nil -> :not_found
+          match -> {:ok, match}
+        end
 
       {:error, _reason} ->
         :not_found
     end
+  end
+
+  defp matches_claude_task?(task, title, description) do
+    task["source"] == "claude" and
+      task["title"] == title and
+      (task["description"] || "") == (description || "") and
+      (task["source_metadata"] || %{})["auto_generated"] == true
   end
 
   defp process_operation_success(payload, event_id, tenant_id, user_id) do
