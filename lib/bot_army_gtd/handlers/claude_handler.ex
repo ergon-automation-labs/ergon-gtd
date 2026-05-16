@@ -82,10 +82,11 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
   defp validate_create_payload(_), do: {:error, :invalid_payload}
 
   defp validate_operation_success_payload(payload) when is_map(payload) do
-    with :ok <- require_field(payload, "task_id"),
-         :ok <- require_field(payload, "operation") do
-      :ok
-    end
+    require_field(payload, "task_id")
+    |> then(fn
+      :ok -> require_field(payload, "operation")
+      err -> err
+    end)
   end
 
   defp validate_operation_success_payload(_), do: {:error, :invalid_payload}

@@ -48,65 +48,111 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
 
     case validate_goal_plan_payload(stamped_payload) do
       :ok ->
-        goal = payload["goal"]
-        context = payload["context"] || %{}
-        constraints = payload["constraints"] || %{}
-        notify_via_subject = payload["notify_via_subject"]
-
-        case create_plan_record(goal, context, constraints, tenant_id, user_id) do
-          {:ok, plan} ->
-            Logger.info("Plan created: plan_id=#{plan["id"]}, goal=#{goal}, event_id=#{event_id}")
-
-            # Decompose goal into subtasks (for now, mock implementation)
-            case decompose_goal(goal, context, constraints) do
-              {:ok, subtasks} ->
-                # Create Task records linked to plan
-                case create_tasks_from_decomposition(plan["id"], subtasks, tenant_id, user_id) do
-                  {:ok, tasks} ->
-                    Logger.info(
-                      "Plan decomposed: plan_id=#{plan["id"]}, task_count=#{length(tasks)}"
-                    )
-
-                    finalize_plan_with_tasks(
-                      plan,
-                      tasks,
-                      goal,
-                      notify_via_subject,
-                      event_id,
-                      message,
-                      tenant_id,
-                      user_id
-                    )
-
-                  {:error, reason} ->
-                    Logger.error("Failed to create plan tasks: #{inspect(reason)}")
-
-                    publish_error(
-                      event_id,
-                      reason,
-                      "Failed to create plan tasks",
-                      tenant_id,
-                      user_id
-                    )
-
-                    {:error, reason}
-                end
-
-              {:error, reason} ->
-                Logger.error("Failed to decompose goal: #{inspect(reason)}")
-                publish_error(event_id, reason, "Failed to decompose goal", tenant_id, user_id)
-                {:error, reason}
-            end
-
-          {:error, reason} ->
-            Logger.error("Failed to create plan: #{inspect(reason)}")
-            publish_error(event_id, reason, "Failed to create plan", tenant_id, user_id)
-            {:error, reason}
-        end
+        process_goal_plan(payload, event_id, message, tenant_id, user_id)
 
       {:error, reason} ->
         Logger.warning("Invalid goal plan payload: #{inspect(reason)}")
         publish_error(event_id, reason, "Invalid plan data", tenant_id, user_id)
+        {:error, reason}
+    end
+  end
+
+  defp process_goal_plan(payload, event_id, message, tenant_id, user_id) do
+    goal = payload["goal"]
+    context = payload["context"] || %{}
+    constraints = payload["constraints"] || %{}
+    notify_via_subject = payload["notify_via_subject"]
+
+    case create_plan_record(goal, context, constraints, tenant_id, user_id) do
+      {:ok, plan} ->
+        Logger.info("Plan created: plan_id=#{plan["id"]}, goal=#{goal}, event_id=#{event_id}")
+
+        process_plan_decomposition(
+          plan,
+          goal,
+          context,
+          constraints,
+          notify_via_subject,
+          event_id,
+          message,
+          tenant_id,
+          user_id
+        )
+
+      {:error, reason} ->
+        Logger.error("Failed to create plan: #{inspect(reason)}")
+        publish_error(event_id, reason, "Failed to create plan", tenant_id, user_id)
+        {:error, reason}
+    end
+  end
+
+  defp process_plan_decomposition(
+         plan,
+         goal,
+         context,
+         constraints,
+         notify_via_subject,
+         event_id,
+         message,
+         tenant_id,
+         user_id
+       ) do
+    case decompose_goal(goal, context, constraints) do
+      {:ok, subtasks} ->
+        process_plan_tasks(
+          plan,
+          subtasks,
+          goal,
+          notify_via_subject,
+          event_id,
+          message,
+          tenant_id,
+          user_id
+        )
+
+      {:error, reason} ->
+        Logger.error("Failed to decompose goal: #{inspect(reason)}")
+        publish_error(event_id, reason, "Failed to decompose goal", tenant_id, user_id)
+        {:error, reason}
+    end
+  end
+
+  defp process_plan_tasks(
+         plan,
+         subtasks,
+         goal,
+         notify_via_subject,
+         event_id,
+         message,
+         tenant_id,
+         user_id
+       ) do
+    case create_tasks_from_decomposition(plan["id"], subtasks, tenant_id, user_id) do
+      {:ok, tasks} ->
+        Logger.info("Plan decomposed: plan_id=#{plan["id"]}, task_count=#{length(tasks)}")
+
+        finalize_plan_with_tasks(
+          plan,
+          tasks,
+          goal,
+          notify_via_subject,
+          event_id,
+          message,
+          tenant_id,
+          user_id
+        )
+
+      {:error, reason} ->
+        Logger.error("Failed to create plan tasks: #{inspect(reason)}")
+
+        publish_error(
+          event_id,
+          reason,
+          "Failed to create plan tasks",
+          tenant_id,
+          user_id
+        )
+
         {:error, reason}
     end
   end
@@ -220,9 +266,7 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
   # Private helpers
 
   defp validate_goal_plan_payload(payload) when is_map(payload) do
-    with :ok <- require_field(payload, "goal") do
-      :ok
-    end
+    require_field(payload, "goal")
   end
 
   defp validate_goal_plan_payload(_), do: {:error, :invalid_payload}

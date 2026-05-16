@@ -179,9 +179,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   # Private validation
 
   defp validate_decompose_payload(payload) when is_map(payload) do
-    with :ok <- require_field(payload, "task_id") do
-      :ok
-    end
+    require_field(payload, "task_id")
   end
 
   defp validate_decompose_payload(_), do: {:error, :invalid_payload}
@@ -189,27 +187,20 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   defp validate_chain_completed_payload(payload) when is_map(payload) do
     with :ok <- require_field(payload, "chain_id"),
          :ok <- require_field(payload, "steps") do
-      case payload do
-        %{"steps" => steps} when is_list(steps) and steps != [] -> :ok
-        _ -> {:error, :steps_invalid}
-      end
+      validate_steps_list(payload)
     end
   end
 
   defp validate_chain_completed_payload(_), do: {:error, :invalid_payload}
 
   defp validate_approve_payload(payload) when is_map(payload) do
-    with :ok <- require_field(payload, "decomposition_id") do
-      :ok
-    end
+    require_field(payload, "decomposition_id")
   end
 
   defp validate_approve_payload(_), do: {:error, :invalid_payload}
 
   defp validate_reject_payload(payload) when is_map(payload) do
-    with :ok <- require_field(payload, "decomposition_id") do
-      :ok
-    end
+    require_field(payload, "decomposition_id")
   end
 
   defp validate_reject_payload(_), do: {:error, :invalid_payload}
@@ -217,23 +208,31 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   defp validate_review_payload(payload) when is_map(payload) do
     with :ok <- require_field(payload, "decomposition_id"),
          :ok <- require_field(payload, "rating") do
-      # Validate rating is integer 1-5
-      case payload do
-        %{"rating" => rating} when is_integer(rating) and rating >= 1 and rating <= 5 -> :ok
-        _ -> {:error, :invalid_rating}
-      end
+      validate_rating(payload)
     end
   end
 
   defp validate_review_payload(_), do: {:error, :invalid_payload}
 
   defp validate_request_review_payload(payload) when is_map(payload) do
-    with :ok <- require_field(payload, "decomposition_id") do
-      :ok
-    end
+    require_field(payload, "decomposition_id")
   end
 
   defp validate_request_review_payload(_), do: {:error, :invalid_payload}
+
+  defp validate_steps_list(payload) do
+    case payload do
+      %{"steps" => steps} when is_list(steps) and steps != [] -> :ok
+      _ -> {:error, :steps_invalid}
+    end
+  end
+
+  defp validate_rating(payload) do
+    case payload do
+      %{"rating" => rating} when is_integer(rating) and rating >= 1 and rating <= 5 -> :ok
+      _ -> {:error, :invalid_rating}
+    end
+  end
 
   defp require_field(payload, field) do
     case payload do
@@ -347,124 +346,163 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
     case decomposition_store().get(tenant_id, decomposition_id) do
       {:ok, decomposition} ->
+        parent_task_id = decomposition["parent_task_id"]
         subtask_list = get_subtask_list(decomposition)
 
-        # Create subtasks through the standard gtd.task.create flow.
-        parent_task_id = decomposition["parent_task_id"]
-
         created_subtasks =
-          Enum.map(subtask_list, fn subtask ->
-            subtask_payload = %{
-              "title" => subtask["title"],
-              "description" => subtask["description"],
-              "parent_task_id" => parent_task_id,
-              "status" => "inbox",
-              "estimated_hours" => subtask["estimated_hours"]
-            }
+          create_decomposition_subtasks(subtask_list, parent_task_id, tenant_id, user_id)
 
-            create_event =
-              EventBuilder.build_event("gtd.task.create", subtask_payload,
-                tenant_id: tenant_id,
-                user_id: user_id
-              )
-
-            case TaskHandler.handle_create(create_event) do
-              {:ok, task} ->
-                {:ok, task}
-
-              {:error, reason} ->
-                Logger.warning("Failed to create subtask: #{inspect(reason)}")
-                {:error, reason}
-            end
-          end)
-
-        # Partition successful vs failed subtask creates
-        successful_tasks =
-          Enum.flat_map(created_subtasks, fn
-            {:ok, task} -> [task]
-            _ -> []
-          end)
-
+        successful_tasks = extract_successful_tasks(created_subtasks)
         successful_count = length(successful_tasks)
 
-        # Calculate actual total effort from successfully created subtasks.
-        # Use original subtask_list data since task store responses may not include estimated_hours.
-        actual_total_effort_hours =
-          Enum.zip(subtask_list, created_subtasks)
-          |> Enum.reduce(0.0, fn {subtask, result}, acc ->
-            case result do
-              {:ok, _} ->
-                hours =
-                  Map.get(subtask, "estimated_hours") || Map.get(subtask, :estimated_hours, 0)
+        actual_total_effort_hours = calculate_actual_effort(subtask_list, created_subtasks)
 
-                acc + if(is_number(hours), do: hours, else: 0)
+        {missing_subtasks, extra_subtasks} =
+          identify_subtask_differences(subtask_list, successful_tasks)
 
-              _ ->
-                acc
-            end
-          end)
+        fsrs_grade =
+          grade_decomposition_accuracy(decomposition, successful_count, actual_total_effort_hours)
 
-        # Identify missing and extra subtasks by title comparison
-        predicted_titles =
-          Enum.map(subtask_list, &Map.get(&1, "title"))
-
-        actual_titles =
-          Enum.map(successful_tasks, fn task ->
-            Map.get(task, "title") || Map.get(task, :title, "")
-          end)
-
-        missing_subtasks = predicted_titles -- actual_titles
-        extra_subtasks = actual_titles -- predicted_titles
-
-        # Determine FSRS grade based on accuracy of prediction vs actual
-        predicted_count = decomposition["predicted_subtask_count"]
-        predicted_hours = decomposition["predicted_total_effort_hours"]
-
-        count_delta = calculate_accuracy_delta(predicted_count, successful_count)
-        effort_delta = calculate_accuracy_delta(predicted_hours, actual_total_effort_hours)
-        combined_delta = max(count_delta, effort_delta)
-
-        fsrs_grade = calculate_approval_grade(predicted_count, successful_count, combined_delta)
-
-        # Schedule next review with FSRS algorithm
         {new_stability, new_difficulty, new_due_at} =
           BotArmyGtd.FSRSScheduler.schedule_next_review(decomposition, fsrs_grade)
 
-        # Update decomposition with actual count and FSRS parameters
-        updated_decomposition =
-          decomposition
-          |> Map.put("actual_subtask_count", successful_count)
-          |> Map.put("actual_total_effort_hours", actual_total_effort_hours)
-          |> Map.put("missing_subtasks", missing_subtasks)
-          |> Map.put("extra_subtasks", extra_subtasks)
-          |> Map.put("status", "reviewed")
-          |> Map.put("last_grade", fsrs_grade)
-          |> Map.put("stability", new_stability)
-          |> Map.put("difficulty", new_difficulty)
-          |> Map.put("due_at", new_due_at)
-          |> Map.put("review_count", (decomposition["review_count"] || 0) + 1)
-
-        case decomposition_store().update(decomposition_id, updated_decomposition) do
-          {:ok, updated} ->
-            Logger.info("Decomposition approved", %{
-              decomposition_id: decomposition_id,
-              parent_task_id: decomposition["parent_task_id"],
-              subtasks_created: successful_count,
-              fsrs_grade: fsrs_grade,
-              next_review_in: BotArmyGtd.FSRSScheduler.format_interval(new_due_at),
-              review_count: (decomposition["review_count"] || 0) + 1
-            })
-
-            publish_decomposition_approved(updated, event_id)
-
-          {:error, reason} ->
-            Logger.error("Failed to update decomposition: #{inspect(reason)}")
-            publish_error(event_id, reason, "Failed to update decomposition after approval")
-        end
+        finalize_approved_decomposition(
+          decomposition_id,
+          decomposition,
+          successful_count,
+          actual_total_effort_hours,
+          missing_subtasks,
+          extra_subtasks,
+          fsrs_grade,
+          new_stability,
+          new_difficulty,
+          new_due_at,
+          event_id
+        )
 
       {:error, :not_found} ->
         Logger.warning("Decomposition not found for approval: #{decomposition_id}")
         publish_error(event_id, :not_found, "Decomposition not found")
+    end
+  end
+
+  defp create_decomposition_subtasks(subtask_list, parent_task_id, tenant_id, user_id) do
+    Enum.map(subtask_list, fn subtask ->
+      subtask_payload = %{
+        "title" => subtask["title"],
+        "description" => subtask["description"],
+        "parent_task_id" => parent_task_id,
+        "status" => "inbox",
+        "estimated_hours" => subtask["estimated_hours"]
+      }
+
+      create_event =
+        EventBuilder.build_event("gtd.task.create", subtask_payload,
+          tenant_id: tenant_id,
+          user_id: user_id
+        )
+
+      case TaskHandler.handle_create(create_event) do
+        {:ok, task} ->
+          {:ok, task}
+
+        {:error, reason} ->
+          Logger.warning("Failed to create subtask: #{inspect(reason)}")
+          {:error, reason}
+      end
+    end)
+  end
+
+  defp extract_successful_tasks(created_subtasks) do
+    Enum.flat_map(created_subtasks, fn
+      {:ok, task} -> [task]
+      _ -> []
+    end)
+  end
+
+  defp calculate_actual_effort(subtask_list, created_subtasks) do
+    Enum.zip(subtask_list, created_subtasks)
+    |> Enum.reduce(0.0, fn {subtask, result}, acc ->
+      case result do
+        {:ok, _} ->
+          hours =
+            Map.get(subtask, "estimated_hours") || Map.get(subtask, :estimated_hours, 0)
+
+          acc + if(is_number(hours), do: hours, else: 0)
+
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  defp identify_subtask_differences(subtask_list, successful_tasks) do
+    predicted_titles = Enum.map(subtask_list, &Map.get(&1, "title"))
+
+    actual_titles =
+      Enum.map(successful_tasks, fn task ->
+        Map.get(task, "title") || Map.get(task, :title, "")
+      end)
+
+    missing_subtasks = predicted_titles -- actual_titles
+    extra_subtasks = actual_titles -- predicted_titles
+
+    {missing_subtasks, extra_subtasks}
+  end
+
+  defp grade_decomposition_accuracy(decomposition, successful_count, actual_total_effort_hours) do
+    predicted_count = decomposition["predicted_subtask_count"]
+    predicted_hours = decomposition["predicted_total_effort_hours"]
+
+    count_delta = calculate_accuracy_delta(predicted_count, successful_count)
+    effort_delta = calculate_accuracy_delta(predicted_hours, actual_total_effort_hours)
+    combined_delta = max(count_delta, effort_delta)
+
+    calculate_approval_grade(predicted_count, successful_count, combined_delta)
+  end
+
+  defp finalize_approved_decomposition(
+         decomposition_id,
+         decomposition,
+         successful_count,
+         actual_total_effort_hours,
+         missing_subtasks,
+         extra_subtasks,
+         fsrs_grade,
+         new_stability,
+         new_difficulty,
+         new_due_at,
+         event_id
+       ) do
+    updated_decomposition =
+      decomposition
+      |> Map.put("actual_subtask_count", successful_count)
+      |> Map.put("actual_total_effort_hours", actual_total_effort_hours)
+      |> Map.put("missing_subtasks", missing_subtasks)
+      |> Map.put("extra_subtasks", extra_subtasks)
+      |> Map.put("status", "reviewed")
+      |> Map.put("last_grade", fsrs_grade)
+      |> Map.put("stability", new_stability)
+      |> Map.put("difficulty", new_difficulty)
+      |> Map.put("due_at", new_due_at)
+      |> Map.put("review_count", (decomposition["review_count"] || 0) + 1)
+
+    case decomposition_store().update(decomposition_id, updated_decomposition) do
+      {:ok, updated} ->
+        Logger.info("Decomposition approved", %{
+          decomposition_id: decomposition_id,
+          parent_task_id: decomposition["parent_task_id"],
+          subtasks_created: successful_count,
+          fsrs_grade: fsrs_grade,
+          next_review_in: BotArmyGtd.FSRSScheduler.format_interval(new_due_at),
+          review_count: (decomposition["review_count"] || 0) + 1
+        })
+
+        publish_decomposition_approved(updated, event_id)
+
+      {:error, reason} ->
+        Logger.error("Failed to update decomposition: #{inspect(reason)}")
+        publish_error(event_id, reason, "Failed to update decomposition after approval")
     end
   end
 

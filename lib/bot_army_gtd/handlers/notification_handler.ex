@@ -74,10 +74,11 @@ defmodule BotArmyGtd.Handlers.NotificationHandler do
   # Private functions
 
   defp validate_task_failed_payload(payload) when is_map(payload) do
-    with :ok <- require_field(payload, "plan_id"),
-         :ok <- require_field(payload, "task_id") do
-      :ok
-    end
+    require_field(payload, "plan_id")
+    |> then(fn
+      :ok -> require_field(payload, "task_id")
+      err -> err
+    end)
   end
 
   defp validate_task_failed_payload(_), do: {:error, :invalid_payload}

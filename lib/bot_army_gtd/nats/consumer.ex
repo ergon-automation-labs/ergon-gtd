@@ -236,95 +236,117 @@ defmodule BotArmyGtd.NATS.Consumer do
   def route_message(message) do
     event = message["event"]
 
-    # Conversation events use prefix matching (not case-exact event types)
-    cond do
-      is_binary(event) and String.starts_with?(event, "conv.request.gtd.") ->
+    if is_binary(event) and String.starts_with?(event, "conv.request.gtd.") do
+      ConversationHandler.handle_request(message)
+    else
+      if is_binary(event) and String.starts_with?(event, "conv.followup.") do
         ConversationHandler.handle_request(message)
-
-      is_binary(event) and String.starts_with?(event, "conv.followup.") ->
-        ConversationHandler.handle_request(message)
-
-      event == "conv.mailbox.gtd" ->
-        ConversationHandler.handle_mailbox(message)
-
-      true ->
-        case event do
-          "gtd.inbox.add" ->
-            InboxHandler.handle_add(message)
-
-          "gtd.task.create" ->
-            TaskHandler.handle_create(message)
-
-          "gtd.task.update" ->
-            TaskHandler.handle_update(message)
-
-          "gtd.task.complete" ->
-            TaskHandler.handle_complete(message)
-
-          "gtd.task.command.defer" ->
-            TaskHandler.handle_defer(message)
-
-          "gtd.task.command.delete" ->
-            TaskHandler.handle_delete(message)
-
-          "gtd.task.decompose" ->
-            DecompositionHandler.handle_decompose(message)
-
-          "gtd.decomposition.approve" ->
-            DecompositionHandler.handle_approve(message)
-
-          "gtd.decomposition.reject" ->
-            DecompositionHandler.handle_reject(message)
-
-          "gtd.decomposition.review" ->
-            DecompositionHandler.handle_review(message)
-
-          "gtd.decomposition.request_review" ->
-            DecompositionHandler.handle_request_review(message)
-
-          "gtd.project.create" ->
-            ProjectHandler.handle_create(message)
-
-          "gtd.project.update" ->
-            ProjectHandler.handle_update(message)
-
-          "gtd.goal.plan" ->
-            PlanHandler.handle_goal_plan(message)
-
-          "gtd.goal.status" ->
-            PlanHandler.handle_goal_status(message)
-
-          "gtd.goal.list" ->
-            PlanHandler.handle_goal_list(message)
-
-          "gtd.goal.cancel" ->
-            PlanHandler.handle_goal_cancel(message)
-
-          "gtd.log.create" ->
-            LogEntryHandler.handle_create(message)
-
-          "llm.response.parsed" ->
-            case get_in(message, ["payload", "enrichment_source"]) do
-              "log_enrichment" ->
-                LogEnrichmentHandler.handle_enriched(message)
-
-              _ ->
-                InboxParsingHandler.handle_parse(message)
-            end
-
-          "llm.chain.completed" ->
-            DecompositionHandler.handle_chain_completed(message)
-
-          "claude.task.create" ->
-            ClaudeHandler.handle_task_create(message)
-
-          "claude.operation.success" ->
-            ClaudeHandler.handle_operation_success(message)
-
-          _ ->
-            Logger.debug("Unknown event type: #{event}")
+      else
+        if event == "conv.mailbox.gtd" do
+          ConversationHandler.handle_mailbox(message)
+        else
+          route_event(event, message)
         end
+      end
     end
+  end
+
+  defp route_event("gtd.inbox.add", message) do
+    InboxHandler.handle_add(message)
+  end
+
+  defp route_event("gtd.task.create", message) do
+    TaskHandler.handle_create(message)
+  end
+
+  defp route_event("gtd.task.update", message) do
+    TaskHandler.handle_update(message)
+  end
+
+  defp route_event("gtd.task.complete", message) do
+    TaskHandler.handle_complete(message)
+  end
+
+  defp route_event("gtd.task.command.defer", message) do
+    TaskHandler.handle_defer(message)
+  end
+
+  defp route_event("gtd.task.command.delete", message) do
+    TaskHandler.handle_delete(message)
+  end
+
+  defp route_event("gtd.task.decompose", message) do
+    DecompositionHandler.handle_decompose(message)
+  end
+
+  defp route_event("gtd.decomposition.approve", message) do
+    DecompositionHandler.handle_approve(message)
+  end
+
+  defp route_event("gtd.decomposition.reject", message) do
+    DecompositionHandler.handle_reject(message)
+  end
+
+  defp route_event("gtd.decomposition.review", message) do
+    DecompositionHandler.handle_review(message)
+  end
+
+  defp route_event("gtd.decomposition.request_review", message) do
+    DecompositionHandler.handle_request_review(message)
+  end
+
+  defp route_event("gtd.project.create", message) do
+    ProjectHandler.handle_create(message)
+  end
+
+  defp route_event("gtd.project.update", message) do
+    ProjectHandler.handle_update(message)
+  end
+
+  defp route_event("gtd.goal.plan", message) do
+    PlanHandler.handle_goal_plan(message)
+  end
+
+  defp route_event("gtd.goal.status", message) do
+    PlanHandler.handle_goal_status(message)
+  end
+
+  defp route_event("gtd.goal.list", message) do
+    PlanHandler.handle_goal_list(message)
+  end
+
+  defp route_event("gtd.goal.cancel", message) do
+    PlanHandler.handle_goal_cancel(message)
+  end
+
+  defp route_event("gtd.log.create", message) do
+    LogEntryHandler.handle_create(message)
+  end
+
+  defp route_event("llm.response.parsed", message) do
+    case get_in(message, ["payload", "enrichment_source"]) do
+      "log_enrichment" ->
+        LogEnrichmentHandler.handle_enriched(message)
+
+      _ ->
+        InboxParsingHandler.handle_parse(message)
+    end
+  end
+
+  defp route_event("llm.chain.completed", message) do
+    DecompositionHandler.handle_chain_completed(message)
+  end
+
+  defp route_event("claude.task.create", message) do
+    ClaudeHandler.handle_task_create(message)
+  end
+
+  defp route_event("claude.operation.success", message) do
+    ClaudeHandler.handle_operation_success(message)
+  end
+
+  defp route_event(event, _message) do
+    Logger.debug("Unknown event type: #{event}")
   end
 
   # Callbacks

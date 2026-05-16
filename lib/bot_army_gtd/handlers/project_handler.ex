@@ -143,9 +143,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
   end
 
   defp validate_create_payload(payload) when is_map(payload) do
-    with :ok <- require_field(payload, "name") do
-      :ok
-    end
+    require_field(payload, "name")
   end
 
   defp validate_create_payload(_), do: {:error, :invalid_payload}

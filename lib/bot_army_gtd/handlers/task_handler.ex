@@ -390,10 +390,11 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   defp validate_complete_payload(_), do: {:error, :invalid_payload}
 
   defp validate_defer_payload(payload) when is_map(payload) do
-    with :ok <- require_field(payload, "task_id"),
-         :ok <- require_field(payload, "defer_until") do
-      :ok
-    end
+    require_field(payload, "task_id")
+    |> then(fn
+      :ok -> require_field(payload, "defer_until")
+      err -> err
+    end)
   end
 
   defp validate_defer_payload(_), do: {:error, :invalid_payload}
@@ -619,47 +620,53 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
     case task_store().list(tenant_id, filters) do
       {:ok, tasks} ->
-        Enum.each(tasks, fn task ->
-          case parse_active_until(task) do
-            {:ok, active_until} ->
-              if DateTime.compare(active_until, DateTime.utc_now()) == :lt do
-                task_id = task["id"]
-                description = append_backlog_note(task["description"] || "")
-                source_metadata = clear_active_until(task["source_metadata"])
-
-                update_payload = %{
-                  "status" => "inbox",
-                  "description" => description,
-                  "source_metadata" => source_metadata
-                }
-
-                case scoped_update(tenant_id, task_id, update_payload) do
-                  {:ok, updated_task} ->
-                    publish_event(
-                      "gtd.task.updated",
-                      update_payload,
-                      updated_task,
-                      UUID.uuid4(),
-                      %{},
-                      tenant_id,
-                      user_id
-                    )
-
-                  {:error, reason} ->
-                    Logger.warning("Failed to auto-expire task #{task_id}: #{inspect(reason)}")
-                end
-              end
-
-            :none ->
-              :ok
-
-            {:error, _reason} ->
-              :ok
-          end
-        end)
+        Enum.each(tasks, &process_expiry_for_task(&1, tenant_id, user_id))
 
       {:error, reason} ->
         Logger.warning("Failed to list active tasks for expiry: #{inspect(reason)}")
+    end
+  end
+
+  defp process_expiry_for_task(task, tenant_id, user_id) do
+    case parse_active_until(task) do
+      {:ok, active_until} ->
+        if DateTime.compare(active_until, DateTime.utc_now()) == :lt do
+          expire_task(task, tenant_id, user_id)
+        end
+
+      :none ->
+        :ok
+
+      {:error, _reason} ->
+        :ok
+    end
+  end
+
+  defp expire_task(task, tenant_id, user_id) do
+    task_id = task["id"]
+    description = append_backlog_note(task["description"] || "")
+    source_metadata = clear_active_until(task["source_metadata"])
+
+    update_payload = %{
+      "status" => "inbox",
+      "description" => description,
+      "source_metadata" => source_metadata
+    }
+
+    case scoped_update(tenant_id, task_id, update_payload) do
+      {:ok, updated_task} ->
+        publish_event(
+          "gtd.task.updated",
+          update_payload,
+          updated_task,
+          UUID.uuid4(),
+          %{},
+          tenant_id,
+          user_id
+        )
+
+      {:error, reason} ->
+        Logger.warning("Failed to auto-expire task #{task_id}: #{inspect(reason)}")
     end
   end
 
