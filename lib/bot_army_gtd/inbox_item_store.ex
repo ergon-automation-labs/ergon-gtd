@@ -159,26 +159,7 @@ defmodule BotArmyGtd.InboxItemStore do
       _item ->
         item_uuid = Ecto.UUID.cast!(item_id)
 
-        case BotArmyGtd.Repo.transaction(fn ->
-               db_item = Repo.get(InboxItem, item_uuid)
-
-               if db_item do
-                 now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
-
-                 changeset =
-                   InboxItem.changeset(db_item, %{
-                     "status" => "clarified",
-                     "processed_at" => now
-                   })
-
-                 case Repo.update(changeset) do
-                   {:ok, updated} -> updated
-                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-                 end
-               else
-                 BotArmyGtd.Repo.rollback(:not_found)
-               end
-             end) do
+        case execute_mark_processed_transaction(item_uuid) do
           {:ok, updated_db_item} ->
             updated_item = schema_to_map(updated_db_item)
             new_state = Map.put(state, item_id, updated_item)
@@ -204,23 +185,7 @@ defmodule BotArmyGtd.InboxItemStore do
       _item ->
         item_uuid = Ecto.UUID.cast!(item_id)
 
-        case BotArmyGtd.Repo.transaction(fn ->
-               db_item = Repo.get(InboxItem, item_uuid)
-
-               if db_item do
-                 changeset =
-                   InboxItem.changeset(db_item, %{
-                     "status" => "discarded"
-                   })
-
-                 case Repo.update(changeset) do
-                   {:ok, updated} -> updated
-                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-                 end
-               else
-                 BotArmyGtd.Repo.rollback(:not_found)
-               end
-             end) do
+        case execute_mark_discarded_transaction(item_uuid) do
           {:ok, updated_db_item} ->
             updated_item = schema_to_map(updated_db_item)
             new_state = Map.put(state, item_id, updated_item)
@@ -330,5 +295,48 @@ defmodule BotArmyGtd.InboxItemStore do
       "created_at" => item.inserted_at |> NaiveDateTime.to_iso8601(),
       "updated_at" => item.updated_at |> NaiveDateTime.to_iso8601()
     }
+  end
+
+  defp execute_mark_processed_transaction(item_uuid) do
+    BotArmyGtd.Repo.transaction(fn ->
+      db_item = Repo.get(InboxItem, item_uuid)
+
+      if db_item do
+        now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+        changeset =
+          InboxItem.changeset(db_item, %{
+            "status" => "clarified",
+            "processed_at" => now
+          })
+
+        case Repo.update(changeset) do
+          {:ok, updated} -> updated
+          {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+        end
+      else
+        BotArmyGtd.Repo.rollback(:not_found)
+      end
+    end)
+  end
+
+  defp execute_mark_discarded_transaction(item_uuid) do
+    BotArmyGtd.Repo.transaction(fn ->
+      db_item = Repo.get(InboxItem, item_uuid)
+
+      if db_item do
+        changeset =
+          InboxItem.changeset(db_item, %{
+            "status" => "discarded"
+          })
+
+        case Repo.update(changeset) do
+          {:ok, updated} -> updated
+          {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+        end
+      else
+        BotArmyGtd.Repo.rollback(:not_found)
+      end
+    end)
   end
 end

@@ -171,24 +171,7 @@ defmodule BotArmyGtd.LogEntryStore do
       _entry ->
         entry_uuid = Ecto.UUID.cast!(entry_id)
 
-        case BotArmyGtd.Repo.transaction(fn ->
-               db_entry = Repo.get(LogEntry, entry_uuid)
-
-               if db_entry do
-                 changeset =
-                   LogEntry.changeset(
-                     db_entry,
-                     %{"file_written" => true}
-                   )
-
-                 case Repo.update(changeset) do
-                   {:ok, updated} -> updated
-                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-                 end
-               else
-                 BotArmyGtd.Repo.rollback(:not_found)
-               end
-             end) do
+        case execute_mark_file_written_transaction(entry_uuid) do
           {:ok, updated_db_entry} ->
             updated_entry = schema_to_map(updated_db_entry)
             new_state = Map.put(state, entry_id, updated_entry)
@@ -214,29 +197,7 @@ defmodule BotArmyGtd.LogEntryStore do
       _entry ->
         entry_uuid = Ecto.UUID.cast!(entry_id)
 
-        case BotArmyGtd.Repo.transaction(fn ->
-               db_entry = Repo.get(LogEntry, entry_uuid)
-
-               if db_entry do
-                 changeset =
-                   LogEntry.changeset(
-                     db_entry,
-                     %{
-                       "enriched" => true,
-                       "enriched_at" =>
-                         NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second),
-                       "structured_data" => enrichment_data
-                     }
-                   )
-
-                 case Repo.update(changeset) do
-                   {:ok, updated} -> updated
-                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-                 end
-               else
-                 BotArmyGtd.Repo.rollback(:not_found)
-               end
-             end) do
+        case execute_mark_enriched_transaction(entry_uuid, enrichment_data) do
           {:ok, updated_db_entry} ->
             updated_entry = schema_to_map(updated_db_entry)
             new_state = Map.put(state, entry_id, updated_entry)
@@ -312,5 +273,51 @@ defmodule BotArmyGtd.LogEntryStore do
 
   defp filter_by_category(entries, category) when is_binary(category) do
     Enum.filter(entries, &(&1["category"] == category))
+  end
+
+  defp execute_mark_file_written_transaction(entry_uuid) do
+    BotArmyGtd.Repo.transaction(fn ->
+      db_entry = Repo.get(LogEntry, entry_uuid)
+
+      if db_entry do
+        changeset =
+          LogEntry.changeset(
+            db_entry,
+            %{"file_written" => true}
+          )
+
+        case Repo.update(changeset) do
+          {:ok, updated} -> updated
+          {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+        end
+      else
+        BotArmyGtd.Repo.rollback(:not_found)
+      end
+    end)
+  end
+
+  defp execute_mark_enriched_transaction(entry_uuid, enrichment_data) do
+    BotArmyGtd.Repo.transaction(fn ->
+      db_entry = Repo.get(LogEntry, entry_uuid)
+
+      if db_entry do
+        changeset =
+          LogEntry.changeset(
+            db_entry,
+            %{
+              "enriched" => true,
+              "enriched_at" => NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second),
+              "structured_data" => enrichment_data
+            }
+          )
+
+        case Repo.update(changeset) do
+          {:ok, updated} -> updated
+          {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+        end
+      else
+        BotArmyGtd.Repo.rollback(:not_found)
+      end
+    end)
   end
 end

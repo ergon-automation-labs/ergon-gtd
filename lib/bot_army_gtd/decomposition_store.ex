@@ -203,56 +203,7 @@ defmodule BotArmyGtd.DecompositionStore do
       _decomposition ->
         decomposition_uuid = Ecto.UUID.cast!(decomposition_id)
 
-        case BotArmyGtd.Repo.transaction(fn ->
-               db_decomposition =
-                 Repo.get(Decomposition, decomposition_uuid)
-
-               if db_decomposition do
-                 changeset =
-                   Decomposition.changeset(
-                     db_decomposition,
-                     %{
-                       "status" => Map.get(payload, "status", db_decomposition.status),
-                       "step_outputs" =>
-                         Map.get(payload, "step_outputs", db_decomposition.step_outputs),
-                       "subtask_list" =>
-                         Map.get(payload, "subtask_list", db_decomposition.subtask_list),
-                       "effort_estimates" =>
-                         Map.get(payload, "effort_estimates", db_decomposition.effort_estimates),
-                       "dependencies" =>
-                         Map.get(payload, "dependencies", db_decomposition.dependencies),
-                       "stability" => Map.get(payload, "stability", db_decomposition.stability),
-                       "difficulty" =>
-                         Map.get(payload, "difficulty", db_decomposition.difficulty),
-                       "due_at" =>
-                         parse_due_at(Map.get(payload, "due_at", db_decomposition.due_at)),
-                       "review_count" =>
-                         Map.get(payload, "review_count", db_decomposition.review_count),
-                       "last_grade" =>
-                         Map.get(payload, "last_grade", db_decomposition.last_grade),
-                       "actual_subtask_count" =>
-                         Map.get(
-                           payload,
-                           "actual_subtask_count",
-                           db_decomposition.actual_subtask_count
-                         ),
-                       "user_rating" =>
-                         Map.get(payload, "user_rating", db_decomposition.user_rating),
-                       "user_feedback" =>
-                         Map.get(payload, "user_feedback", db_decomposition.user_feedback),
-                       "confidence_grade" =>
-                         Map.get(payload, "confidence_grade", db_decomposition.confidence_grade)
-                     }
-                   )
-
-                 case Repo.update(changeset) do
-                   {:ok, updated} -> updated
-                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-                 end
-               else
-                 BotArmyGtd.Repo.rollback(:not_found)
-               end
-             end) do
+        case execute_update_transaction(decomposition_uuid, payload) do
           {:ok, updated_db_decomposition} ->
             updated_decomposition = schema_to_map(updated_db_decomposition)
             new_state = Map.put(state, decomposition_id, updated_decomposition)
@@ -355,5 +306,49 @@ defmodule BotArmyGtd.DecompositionStore do
       "created_at" => decomposition.inserted_at |> NaiveDateTime.to_iso8601(),
       "updated_at" => decomposition.updated_at |> NaiveDateTime.to_iso8601()
     }
+  end
+
+  defp execute_update_transaction(decomposition_uuid, payload) do
+    BotArmyGtd.Repo.transaction(fn ->
+      db_decomposition = Repo.get(Decomposition, decomposition_uuid)
+
+      if db_decomposition do
+        changeset =
+          Decomposition.changeset(
+            db_decomposition,
+            %{
+              "status" => Map.get(payload, "status", db_decomposition.status),
+              "step_outputs" => Map.get(payload, "step_outputs", db_decomposition.step_outputs),
+              "subtask_list" => Map.get(payload, "subtask_list", db_decomposition.subtask_list),
+              "effort_estimates" =>
+                Map.get(payload, "effort_estimates", db_decomposition.effort_estimates),
+              "dependencies" => Map.get(payload, "dependencies", db_decomposition.dependencies),
+              "stability" => Map.get(payload, "stability", db_decomposition.stability),
+              "difficulty" => Map.get(payload, "difficulty", db_decomposition.difficulty),
+              "due_at" => parse_due_at(Map.get(payload, "due_at", db_decomposition.due_at)),
+              "review_count" => Map.get(payload, "review_count", db_decomposition.review_count),
+              "last_grade" => Map.get(payload, "last_grade", db_decomposition.last_grade),
+              "actual_subtask_count" =>
+                Map.get(
+                  payload,
+                  "actual_subtask_count",
+                  db_decomposition.actual_subtask_count
+                ),
+              "user_rating" => Map.get(payload, "user_rating", db_decomposition.user_rating),
+              "user_feedback" =>
+                Map.get(payload, "user_feedback", db_decomposition.user_feedback),
+              "confidence_grade" =>
+                Map.get(payload, "confidence_grade", db_decomposition.confidence_grade)
+            }
+          )
+
+        case Repo.update(changeset) do
+          {:ok, updated} -> updated
+          {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+        end
+      else
+        BotArmyGtd.Repo.rollback(:not_found)
+      end
+    end)
   end
 end
