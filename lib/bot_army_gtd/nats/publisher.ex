@@ -87,26 +87,26 @@ defmodule BotArmyGtd.NATS.Publisher do
     end
   end
 
+  @event_subject_map %{
+    "gtd.inbox.item.added" => "events.gtd.inbox.item.added",
+    "gtd.task.created" => "events.gtd.task.created",
+    "gtd.task.updated" => "events.gtd.task.updated",
+    "gtd.task.completed" => "events.gtd.task.completed",
+    "gtd.task.state.updated" => "events.gtd.task.state.updated",
+    "gtd.decomposition.completed" => "events.gtd.decomposition.completed",
+    "gtd.decomposition.due_for_review" => "events.gtd.decomposition.due_for_review",
+    "gtd.decomposition.reviewed" => "events.gtd.decomposition.reviewed",
+    "gtd.decomposition.approved" => "events.gtd.decomposition.approved",
+    "gtd.project.created" => "events.gtd.project.created",
+    "gtd.project.updated" => "events.gtd.project.updated",
+    "gtd.log.entry.created" => "events.gtd.log.entry.created",
+    "gtd.log.entry.enriched" => "events.gtd.log.entry.enriched",
+    "gtd.log.daily.new" => "gtd.log.daily.new",
+    "gtd.error" => "events.gtd.error"
+  }
+
   defp derive_subject(event_type) when is_binary(event_type) do
-    # Map internal event types to NATS subject
-    case event_type do
-      "gtd.inbox.item.added" -> "events.gtd.inbox.item.added"
-      "gtd.task.created" -> "events.gtd.task.created"
-      "gtd.task.updated" -> "events.gtd.task.updated"
-      "gtd.task.completed" -> "events.gtd.task.completed"
-      "gtd.task.state.updated" -> "events.gtd.task.state.updated"
-      "gtd.decomposition.completed" -> "events.gtd.decomposition.completed"
-      "gtd.decomposition.due_for_review" -> "events.gtd.decomposition.due_for_review"
-      "gtd.decomposition.reviewed" -> "events.gtd.decomposition.reviewed"
-      "gtd.decomposition.approved" -> "events.gtd.decomposition.approved"
-      "gtd.project.created" -> "events.gtd.project.created"
-      "gtd.project.updated" -> "events.gtd.project.updated"
-      "gtd.log.entry.created" -> "events.gtd.log.entry.created"
-      "gtd.log.entry.enriched" -> "events.gtd.log.entry.enriched"
-      "gtd.log.daily.new" -> "gtd.log.daily.new"
-      "gtd.error" -> "events.gtd.error"
-      _ -> "events.gtd.unknown"
-    end
+    Map.get(@event_subject_map, event_type, "events.gtd.unknown")
   end
 
   defp derive_subject(_) do
