@@ -202,19 +202,23 @@ defmodule BotArmyGtd.IntentEvaluator do
     end
   end
 
+  defp handle_defer_result(bot_name, action, details, context, config, acc) do
+    case DeferHandler.handle_defer(bot_name, action, details, context, config) do
+      {:ok, conversation_id} ->
+        Map.put(acc, conversation_id, {action, details, config})
+
+      _ ->
+        acc
+    end
+  end
+
   defp process_defer_results(results, pending_defers) do
     Enum.reduce(results, pending_defers, fn
       {:deferred, action, details, context}, acc ->
         config = defer_config(action)
 
         if config do
-          case DeferHandler.handle_defer(@bot_name, action, details, context, config) do
-            {:ok, conversation_id} ->
-              Map.put(acc, conversation_id, {action, details, config})
-
-            _ ->
-              acc
-          end
+          handle_defer_result(@bot_name, action, details, context, config, acc)
         else
           acc
         end
