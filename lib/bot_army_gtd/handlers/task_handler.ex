@@ -693,17 +693,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
               refresh_payload_active_until(payload, task)
 
             current_status == "active" ->
-              case parse_active_until(task) do
-                {:ok, active_until} ->
-                  if DateTime.compare(active_until, DateTime.utc_now()) == :lt do
-                    demote_payload_to_inbox(payload, task)
-                  else
-                    refresh_payload_active_until(payload, task)
-                  end
-
-                _ ->
-                  refresh_payload_active_until(payload, task)
-              end
+              handle_active_task_status(task, payload)
 
             true ->
               payload
@@ -724,6 +714,24 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
       |> stamp_active_until()
 
     Map.put(payload, "source_metadata", source_metadata)
+  end
+
+  defp apply_active_until_status(active_until, payload, task) do
+    if DateTime.compare(active_until, DateTime.utc_now()) == :lt do
+      demote_payload_to_inbox(payload, task)
+    else
+      refresh_payload_active_until(payload, task)
+    end
+  end
+
+  defp handle_active_task_status(task, payload) do
+    case parse_active_until(task) do
+      {:ok, active_until} ->
+        apply_active_until_status(active_until, payload, task)
+
+      _ ->
+        refresh_payload_active_until(payload, task)
+    end
   end
 
   defp demote_payload_to_inbox(payload, task) do
@@ -827,39 +835,44 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
           Enum.reject(tasks, fn t -> t["status"] in ["completed", "deleted", "cancelled"] end)
 
         if Enum.empty?(incomplete_tasks) do
-          # All tasks complete, update plan status
-          case plan_store.update(tenant_id, plan_id, %{"status" => "completed"}) do
-            {:ok, updated_plan} ->
-              Logger.info("Plan completed: plan_id=#{plan_id}")
-
-              # Publish plan completion event
-              event_data =
-                EventBuilder.build_event(
-                  "events.gtd.plan.completed",
-                  %{
-                    "plan_id" => plan_id,
-                    "plan" => updated_plan,
-                    "completed_at" => DateTime.utc_now() |> DateTime.to_iso8601()
-                  },
-                  tenant_id: tenant_id,
-                  user_id: user_id
-                )
-
-              case Publisher.publish(event_data) do
-                {:ok, _} ->
-                  Logger.debug("Published plan completion event")
-
-                {:error, reason} ->
-                  Logger.error("Failed to publish plan completion: #{inspect(reason)}")
-              end
-
-            {:error, reason} ->
-              Logger.error("Failed to update plan status: #{inspect(reason)}")
-          end
+          finalize_completed_plan(plan_id, plan_store, tenant_id, user_id)
         end
 
       {:error, reason} ->
         Logger.warning("Failed to list tasks for plan #{plan_id}: #{inspect(reason)}")
+    end
+  end
+
+  defp finalize_completed_plan(plan_id, plan_store, tenant_id, user_id) do
+    case plan_store.update(tenant_id, plan_id, %{"status" => "completed"}) do
+      {:ok, updated_plan} ->
+        Logger.info("Plan completed: plan_id=#{plan_id}")
+        publish_plan_completion_event(plan_id, updated_plan, tenant_id, user_id)
+
+      {:error, reason} ->
+        Logger.error("Failed to update plan status: #{inspect(reason)}")
+    end
+  end
+
+  defp publish_plan_completion_event(plan_id, updated_plan, tenant_id, user_id) do
+    event_data =
+      EventBuilder.build_event(
+        "events.gtd.plan.completed",
+        %{
+          "plan_id" => plan_id,
+          "plan" => updated_plan,
+          "completed_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+        },
+        tenant_id: tenant_id,
+        user_id: user_id
+      )
+
+    case Publisher.publish(event_data) do
+      {:ok, _} ->
+        Logger.debug("Published plan completion event")
+
+      {:error, reason} ->
+        Logger.error("Failed to publish plan completion: #{inspect(reason)}")
     end
   end
 

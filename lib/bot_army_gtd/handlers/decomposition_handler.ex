@@ -366,19 +366,21 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
         {new_stability, new_difficulty, new_due_at} =
           BotArmyGtd.FSRSScheduler.schedule_next_review(decomposition, fsrs_grade)
 
-        finalize_approved_decomposition(
-          decomposition_id,
-          decomposition,
-          successful_count,
-          actual_total_effort_hours,
-          missing_subtasks,
-          extra_subtasks,
-          fsrs_grade,
-          new_stability,
-          new_difficulty,
-          new_due_at,
-          event_id
-        )
+        review_result = %{
+          decomposition_id: decomposition_id,
+          decomposition: decomposition,
+          successful_count: successful_count,
+          actual_total_effort_hours: actual_total_effort_hours,
+          missing_subtasks: missing_subtasks,
+          extra_subtasks: extra_subtasks,
+          fsrs_grade: fsrs_grade,
+          new_stability: new_stability,
+          new_difficulty: new_difficulty,
+          new_due_at: new_due_at,
+          event_id: event_id
+        }
+
+        finalize_approved_decomposition(review_result)
 
       {:error, :not_found} ->
         Logger.warning("Decomposition not found for approval: #{decomposition_id}")
@@ -461,19 +463,21 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     calculate_approval_grade(predicted_count, successful_count, combined_delta)
   end
 
-  defp finalize_approved_decomposition(
-         decomposition_id,
-         decomposition,
-         successful_count,
-         actual_total_effort_hours,
-         missing_subtasks,
-         extra_subtasks,
-         fsrs_grade,
-         new_stability,
-         new_difficulty,
-         new_due_at,
-         event_id
-       ) do
+  defp finalize_approved_decomposition(review_result) do
+    %{
+      decomposition_id: decomposition_id,
+      decomposition: decomposition,
+      successful_count: successful_count,
+      actual_total_effort_hours: actual_total_effort_hours,
+      missing_subtasks: missing_subtasks,
+      extra_subtasks: extra_subtasks,
+      fsrs_grade: fsrs_grade,
+      new_stability: new_stability,
+      new_difficulty: new_difficulty,
+      new_due_at: new_due_at,
+      event_id: event_id
+    } = review_result
+
     updated_decomposition =
       decomposition
       |> Map.put("actual_subtask_count", successful_count)
@@ -582,33 +586,18 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
           |> Map.put("due_at", new_due_at)
           |> Map.put("status", "reviewed")
 
-        case decomposition_store().update(decomposition_id, updated_decomposition) do
-          {:ok, updated} ->
-            Logger.info("Decomposition reviewed", %{
-              decomposition_id: decomposition_id,
-              parent_task_id: decomposition["parent_task_id"],
-              user_rating: rating,
-              fsrs_grade: fsrs_grade,
-              count_delta: count_delta,
-              effort_delta: effort_delta,
-              review_count: review_count + 1,
-              next_review_in: BotArmyGtd.FSRSScheduler.format_interval(new_due_at)
-            })
-
-            publish_decomposition_reviewed(updated, event_id)
-            publish_accuracy_metrics(updated, count_delta, effort_delta)
-
-            BotArmyLearning.OutcomeTracker.record(
-              decomposition_id,
-              "decomposition",
-              "approved",
-              if(fsrs_grade >= 2, do: "pass", else: "fail")
-            )
-
-          {:error, reason} ->
-            Logger.error("Failed to update decomposition on review: #{inspect(reason)}")
-            publish_error(event_id, reason, "Failed to update decomposition on review")
-        end
+        finalize_review_update(
+          decomposition_id,
+          decomposition,
+          updated_decomposition,
+          rating,
+          fsrs_grade,
+          count_delta,
+          effort_delta,
+          review_count,
+          new_due_at,
+          event_id
+        )
 
       {:error, :not_found} ->
         Logger.warning("Decomposition not found for review: #{decomposition_id}")
@@ -658,6 +647,49 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
       {:error, :not_found} ->
         Logger.warning("Decomposition not found for review request: #{decomposition_id}")
         publish_error(event_id, :not_found, "Decomposition not found", tenant_id, user_id)
+    end
+  end
+
+  defp finalize_review_update(
+         decomposition_id,
+         decomposition,
+         updated_decomposition,
+         rating,
+         fsrs_grade,
+         count_delta,
+         effort_delta,
+         review_count,
+         new_due_at,
+         event_id
+       ) do
+    case decomposition_store().update(decomposition_id, updated_decomposition) do
+      {:ok, updated} ->
+        Logger.info("Decomposition reviewed", %{
+          decomposition_id: decomposition_id,
+          parent_task_id: decomposition["parent_task_id"],
+          user_rating: rating,
+          fsrs_grade: fsrs_grade,
+          count_delta: count_delta,
+          effort_delta: effort_delta,
+          review_count: review_count + 1,
+          next_review_in: BotArmyGtd.FSRSScheduler.format_interval(new_due_at)
+        })
+
+        publish_decomposition_reviewed(updated, event_id)
+        publish_accuracy_metrics(updated, count_delta, effort_delta)
+
+        grade_result = if(fsrs_grade >= 2, do: "pass", else: "fail")
+
+        BotArmyLearning.OutcomeTracker.record(
+          decomposition_id,
+          "decomposition",
+          "approved",
+          grade_result
+        )
+
+      {:error, reason} ->
+        Logger.error("Failed to update decomposition on review: #{inspect(reason)}")
+        publish_error(event_id, reason, "Failed to update decomposition on review")
     end
   end
 

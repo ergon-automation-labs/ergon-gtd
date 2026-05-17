@@ -330,16 +330,7 @@ defmodule BotArmyGtd.ParaExporter do
           |> Enum.sort_by(& &1["updated_at"], :desc)
 
         today = Date.utc_today() |> Date.to_iso8601()
-
-        content =
-          case active_tasks do
-            [next | _rest] ->
-              title = next["title"] || "Untitled"
-              "# Next action\n\n**#{title}**\n\n_Rotated automatically on #{today}_\n"
-
-            [] ->
-              "# Next action\n\n_All tasks complete — no active next action._\n\n_Updated #{today}_\n"
-          end
+        content = build_next_action_content(active_tasks, today)
 
         do_publish("para.fs.write", %{
           "schema_version" => "1.0",
@@ -359,6 +350,17 @@ defmodule BotArmyGtd.ParaExporter do
     e ->
       Logger.warning("[ParaExporter] rotate_next_action failed: #{inspect(e)}")
       :ok
+  end
+
+  defp build_next_action_content(active_tasks, today) do
+    case active_tasks do
+      [next | _rest] ->
+        title = next["title"] || "Untitled"
+        "# Next action\n\n**#{title}**\n\n_Rotated automatically on #{today}_\n"
+
+      [] ->
+        "# Next action\n\n_All tasks complete — no active next action._\n\n_Updated #{today}_\n"
+    end
   end
 
   @doc """

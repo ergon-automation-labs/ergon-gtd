@@ -136,24 +136,26 @@ defmodule BotArmyGtd.PulsePublisher do
     }
   end
 
+  defp calculate_task_age(task, now) do
+    case task["created_at"] do
+      nil ->
+        nil
+
+      created_str ->
+        case DateTime.from_iso8601(created_str) do
+          {:ok, created_dt, _} ->
+            DateTime.diff(now, created_dt, :second)
+
+          :error ->
+            nil
+        end
+    end
+  end
+
   defp analyze_goal_tasks(tasks, now) do
     task_ages =
       tasks
-      |> Enum.map(fn task ->
-        case task["created_at"] do
-          nil ->
-            nil
-
-          created_str ->
-            case DateTime.from_iso8601(created_str) do
-              {:ok, created_dt, _} ->
-                DateTime.diff(now, created_dt, :second)
-
-              :error ->
-                nil
-            end
-        end
-      end)
+      |> Enum.map(&calculate_task_age(&1, now))
       |> Enum.filter(&(not is_nil(&1)))
 
     old_tasks = Enum.count(task_ages, &(&1 > 7 * 24 * 3600))
@@ -291,17 +293,7 @@ defmodule BotArmyGtd.PulsePublisher do
         end
 
         build_hydration_events(pulse, base_sequence)
-        |> Enum.each(fn event ->
-          case Gnat.pub(conn, event["event"], Jason.encode!(event)) do
-            :ok ->
-              :ok
-
-            {:error, reason} ->
-              Logger.warning(
-                "[PulsePublisher] Failed to publish hydration event #{event["event"]}: #{inspect(reason)}"
-              )
-          end
-        end)
+        |> Enum.each(&publish_hydration_event(conn, &1))
 
       {:error, reason} ->
         Logger.warning("[PulsePublisher] NATS unavailable, skipping pulse: #{inspect(reason)}")
@@ -309,6 +301,18 @@ defmodule BotArmyGtd.PulsePublisher do
   rescue
     e ->
       Logger.warning("[PulsePublisher] Error publishing pulse: #{inspect(e)}")
+  end
+
+  defp publish_hydration_event(conn, event) do
+    case Gnat.pub(conn, event["event"], Jason.encode!(event)) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "[PulsePublisher] Failed to publish hydration event #{event["event"]}: #{inspect(reason)}"
+        )
+    end
   end
 
   defp uptime_seconds do

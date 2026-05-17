@@ -404,7 +404,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:ok, decompositions} ->
         due =
           decompositions
-          |> Enum.filter(&is_due_for_review?(&1, now))
+          |> Enum.filter(&due_for_review?(&1, now))
           |> Enum.sort_by(fn d -> d["due_at"] end)
 
         Reply.ok(%{"decompositions" => due})
@@ -414,7 +414,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     end
   end
 
-  defp is_due_for_review?(decomposition, now) do
+  defp due_for_review?(decomposition, now) do
     decomposition["status"] in ["completed", "reviewed"] and
       decomposition["due_at"] != nil and
       case DateTime.from_iso8601(decomposition["due_at"]) do

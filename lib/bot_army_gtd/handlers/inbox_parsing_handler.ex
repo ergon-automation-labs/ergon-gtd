@@ -86,34 +86,22 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
   # Private processing
 
   defp process_parse(payload, event_id, _message, tenant_id, user_id) do
-    structured_data = payload["structured_data"]
     inbox_item_id = payload["inbox_item_id"]
     source = payload["source"] || "user"
     source_metadata = payload["source_metadata"] || %{}
+    structured_data = payload["structured_data"]
 
-    # Extract task fields from structured data, with defaults
-    title = structured_data["title"] || "Untitled Task"
-    description = structured_data["description"] || nil
-    project = structured_data["project"] || "_inbox"
-    priority = structured_data["priority"] || "normal"
-    due_date = structured_data["due_date"] || nil
-    labels = structured_data["labels"] || structured_data["tags"] || []
+    task_payload =
+      build_task_payload(
+        tenant_id,
+        user_id,
+        source,
+        source_metadata,
+        inbox_item_id,
+        structured_data
+      )
 
-    # Create task with parsed data
-    case task_store().create(%{
-           "tenant_id" => tenant_id,
-           "user_id" => user_id,
-           "title" => title,
-           "description" => description,
-           "project_id" => project,
-           "status" => "inbox",
-           "priority" => priority,
-           "due_date" => due_date,
-           "labels" => labels,
-           "source" => source,
-           "source_metadata" => source_metadata,
-           "inbox_item_id" => inbox_item_id
-         }) do
+    case task_store().create(task_payload) do
       {:ok, task} ->
         Logger.info("Parsed task created: task_id=#{task["id"]}, event_id=#{event_id}")
         publish_task_created(task, event_id, tenant_id, user_id)
@@ -129,6 +117,30 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
           user_id
         )
     end
+  end
+
+  defp build_task_payload(
+         tenant_id,
+         user_id,
+         source,
+         source_metadata,
+         inbox_item_id,
+         structured_data
+       ) do
+    %{
+      "tenant_id" => tenant_id,
+      "user_id" => user_id,
+      "title" => structured_data["title"] || "Untitled Task",
+      "description" => structured_data["description"],
+      "project_id" => structured_data["project"] || "_inbox",
+      "status" => "inbox",
+      "priority" => structured_data["priority"] || "normal",
+      "due_date" => structured_data["due_date"],
+      "labels" => structured_data["labels"] || structured_data["tags"] || [],
+      "source" => source,
+      "source_metadata" => source_metadata,
+      "inbox_item_id" => inbox_item_id
+    }
   end
 
   # Private publishing

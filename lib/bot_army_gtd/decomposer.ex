@@ -102,24 +102,21 @@ defmodule BotArmyGtd.Decomposer do
         # Fall back to LLM for complex goals
         Logger.info("[Decomposer] No deterministic match, falling back to LLM", goal: goal)
 
-        case call_llm(goal, context, constraints) do
-          {:ok, response} ->
-            case parse_subtasks(response) do
-              {:ok, subtasks} ->
-                Logger.info(
-                  "[Decomposer] Successfully decomposed goal via LLM into #{length(subtasks)} subtasks"
-                )
+        with {:ok, response} <- call_llm(goal, context, constraints),
+             {:ok, subtasks} <- parse_subtasks(response) do
+          Logger.info(
+            "[Decomposer] Successfully decomposed goal via LLM into #{length(subtasks)} subtasks"
+          )
 
-                emit_decomposition_metric("llm", nil)
-                {:ok, subtasks}
-
-              {:error, reason} ->
-                Logger.error("[Decomposer] Failed to parse LLM subtasks", reason: reason)
-                {:error, reason}
-            end
+          emit_decomposition_metric("llm", nil)
+          {:ok, subtasks}
+        else
+          {:error, :llm_failed, reason} ->
+            Logger.error("[Decomposer] LLM call failed", reason: reason)
+            {:error, reason}
 
           {:error, reason} ->
-            Logger.error("[Decomposer] LLM call failed", reason: reason)
+            Logger.error("[Decomposer] Failed to parse LLM subtasks", reason: reason)
             {:error, reason}
         end
     end

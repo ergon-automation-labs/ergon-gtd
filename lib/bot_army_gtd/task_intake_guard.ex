@@ -91,32 +91,28 @@ defmodule BotArmyGtd.TaskIntakeGuard do
     task = payload["task"]
 
     suspicious_trigger? = placeholder_id?(payload["triggered_by_event_id"])
-
-    suspicious_task_id? =
-      case task do
-        task_map when is_map(task_map) ->
-          [task_map["id"], task_map["inbox_item_id"]]
-          |> Enum.any?(&suspicious_identifier?/1)
-
-        _ ->
-          false
-      end
-
-    blank_task_shape? =
-      case task do
-        task_map when is_map(task_map) ->
-          title = task_map["title"]
-          id = task_map["id"]
-          blank_title? = is_nil(title) or (is_binary(title) and String.trim(title) == "")
-          missing_id? = is_nil(id) or (is_binary(id) and String.trim(id) == "")
-          blank_title? or missing_id?
-
-        _ ->
-          true
-      end
+    suspicious_task_id? = has_suspicious_task_id?(task)
+    blank_task_shape? = has_blank_task_shape?(task)
 
     suspicious_trigger? or suspicious_task_id? or blank_task_shape?
   end
+
+  defp has_suspicious_task_id?(task) when is_map(task) do
+    [task["id"], task["inbox_item_id"]]
+    |> Enum.any?(&suspicious_identifier?/1)
+  end
+
+  defp has_suspicious_task_id?(_), do: false
+
+  defp has_blank_task_shape?(task) when is_map(task) do
+    title = task["title"]
+    id = task["id"]
+    blank_title? = is_nil(title) or (is_binary(title) and String.trim(title) == "")
+    missing_id? = is_nil(id) or (is_binary(id) and String.trim(id) == "")
+    blank_title? or missing_id?
+  end
+
+  defp has_blank_task_shape?(_), do: true
 
   defp outbound_created_payload_suspicious?(_), do: true
 

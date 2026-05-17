@@ -67,17 +67,19 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
       {:ok, plan} ->
         Logger.info("Plan created: plan_id=#{plan["id"]}, goal=#{goal}, event_id=#{event_id}")
 
-        process_plan_decomposition(
-          plan,
-          goal,
-          context,
-          constraints,
-          notify_via_subject,
-          event_id,
-          message,
-          tenant_id,
-          user_id
-        )
+        plan_context = %{
+          plan: plan,
+          goal: goal,
+          context: context,
+          constraints: constraints,
+          notify_via_subject: notify_via_subject,
+          event_id: event_id,
+          message: message,
+          tenant_id: tenant_id,
+          user_id: user_id
+        }
+
+        process_plan_decomposition(plan_context)
 
       {:error, reason} ->
         Logger.error("Failed to create plan: #{inspect(reason)}")
@@ -86,28 +88,24 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
     end
   end
 
-  defp process_plan_decomposition(
-         plan,
-         goal,
-         context,
-         constraints,
-         notify_via_subject,
-         event_id,
-         message,
-         tenant_id,
-         user_id
-       ) do
+  defp process_plan_decomposition(plan_context) do
+    %{
+      plan: plan,
+      goal: goal,
+      context: context,
+      constraints: constraints,
+      notify_via_subject: notify_via_subject,
+      event_id: event_id,
+      message: message,
+      tenant_id: tenant_id,
+      user_id: user_id
+    } = plan_context
+
     case decompose_goal(goal, context, constraints) do
       {:ok, subtasks} ->
         process_plan_tasks(
-          plan,
-          subtasks,
-          goal,
-          notify_via_subject,
-          event_id,
-          message,
-          tenant_id,
-          user_id
+          plan_context
+          |> Map.put(:subtasks, subtasks)
         )
 
       {:error, reason} ->
@@ -117,30 +115,23 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
     end
   end
 
-  defp process_plan_tasks(
-         plan,
-         subtasks,
-         goal,
-         notify_via_subject,
-         event_id,
-         message,
-         tenant_id,
-         user_id
-       ) do
+  defp process_plan_tasks(plan_context) do
+    %{
+      plan: plan,
+      subtasks: subtasks,
+      goal: goal,
+      notify_via_subject: notify_via_subject,
+      event_id: event_id,
+      message: message,
+      tenant_id: tenant_id,
+      user_id: user_id
+    } = plan_context
+
     case create_tasks_from_decomposition(plan["id"], subtasks, tenant_id, user_id) do
       {:ok, tasks} ->
         Logger.info("Plan decomposed: plan_id=#{plan["id"]}, task_count=#{length(tasks)}")
 
-        finalize_plan_with_tasks(
-          plan,
-          tasks,
-          goal,
-          notify_via_subject,
-          event_id,
-          message,
-          tenant_id,
-          user_id
-        )
+        finalize_plan_with_tasks(plan_context |> Map.put(:tasks, tasks))
 
       {:error, reason} ->
         Logger.error("Failed to create plan tasks: #{inspect(reason)}")
@@ -436,16 +427,18 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
     end
   end
 
-  defp finalize_plan_with_tasks(
-         plan,
-         tasks,
-         goal,
-         notify_via_subject,
-         event_id,
-         message,
-         tenant_id,
-         user_id
-       ) do
+  defp finalize_plan_with_tasks(plan_context) do
+    %{
+      plan: plan,
+      tasks: tasks,
+      goal: goal,
+      notify_via_subject: notify_via_subject,
+      event_id: event_id,
+      message: message,
+      tenant_id: tenant_id,
+      user_id: user_id
+    } = plan_context
+
     plan_store().update(tenant_id, plan["id"], %{"status" => "executing"})
 
     if notify_via_subject do
