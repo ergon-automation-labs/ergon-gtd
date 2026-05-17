@@ -1153,6 +1153,16 @@ defmodule BotArmyGtd.NATS.Consumer do
     end
   end
 
+  defp complete_task_by_id(task_id, task_store, tenant_id, bot) do
+    case task_store.complete(tenant_id, task_id) do
+      {:ok, _} ->
+        Logger.info("[DeployConsumer] Completed waiting task #{task_id} for #{bot}")
+
+      {:error, reason} ->
+        Logger.error("[DeployConsumer] Failed to complete task #{task_id}: #{inspect(reason)}")
+    end
+  end
+
   defp complete_waiting_task(bot) do
     task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
     tenant_id = Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
@@ -1167,17 +1177,7 @@ defmodule BotArmyGtd.NATS.Consumer do
           end)
 
         if match do
-          task_id = match["id"]
-
-          case task_store.complete(tenant_id, task_id) do
-            {:ok, _} ->
-              Logger.info("[DeployConsumer] Completed waiting task #{task_id} for #{bot}")
-
-            {:error, reason} ->
-              Logger.error(
-                "[DeployConsumer] Failed to complete task #{task_id}: #{inspect(reason)}"
-              )
-          end
+          complete_task_by_id(match["id"], task_store, tenant_id, bot)
         else
           Logger.debug("[DeployConsumer] No waiting task found for #{bot}")
         end

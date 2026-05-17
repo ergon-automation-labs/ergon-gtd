@@ -587,18 +587,20 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
           |> Map.put("due_at", new_due_at)
           |> Map.put("status", "reviewed")
 
-        finalize_review_update(
-          decomposition_id,
-          decomposition,
-          updated_decomposition,
-          rating,
-          fsrs_grade,
-          count_delta,
-          effort_delta,
-          review_count,
-          new_due_at,
-          event_id
-        )
+        review_update = %{
+          decomposition_id: decomposition_id,
+          decomposition: decomposition,
+          updated_decomposition: updated_decomposition,
+          rating: rating,
+          fsrs_grade: fsrs_grade,
+          count_delta: count_delta,
+          effort_delta: effort_delta,
+          review_count: review_count,
+          new_due_at: new_due_at,
+          event_id: event_id
+        }
+
+        finalize_review_update(review_update)
 
       {:error, :not_found} ->
         Logger.warning("Decomposition not found for review: #{decomposition_id}")
@@ -651,18 +653,20 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     end
   end
 
-  defp finalize_review_update(
-         decomposition_id,
-         decomposition,
-         updated_decomposition,
-         rating,
-         fsrs_grade,
-         count_delta,
-         effort_delta,
-         review_count,
-         new_due_at,
-         event_id
-       ) do
+  defp finalize_review_update(review_update) do
+    %{
+      decomposition_id: decomposition_id,
+      decomposition: decomposition,
+      updated_decomposition: updated_decomposition,
+      rating: rating,
+      fsrs_grade: fsrs_grade,
+      count_delta: count_delta,
+      effort_delta: effort_delta,
+      review_count: review_count,
+      new_due_at: new_due_at,
+      event_id: event_id
+    } = review_update
+
     case decomposition_store().update(decomposition_id, updated_decomposition) do
       {:ok, updated} ->
         Logger.info("Decomposition reviewed", %{
