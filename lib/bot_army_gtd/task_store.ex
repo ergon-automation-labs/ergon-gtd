@@ -242,43 +242,7 @@ defmodule BotArmyGtd.TaskStore do
       _task ->
         task_uuid = Ecto.UUID.cast!(task_id)
 
-        case BotArmyGtd.Repo.transaction(fn ->
-               db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
-
-               if db_task do
-                 # Parse due_date if present
-                 due_date = parse_due_date(Map.get(payload, "due_date"))
-
-                 changeset =
-                   BotArmyGtd.Schemas.Task.changeset(
-                     db_task,
-                     %{
-                       "title" => Map.get(payload, "title", db_task.title),
-                       "description" => Map.get(payload, "description", db_task.description),
-                       "status" => Map.get(payload, "status", db_task.status),
-                       "priority" => Map.get(payload, "priority", db_task.priority),
-                       "context" => Map.get(payload, "context", db_task.context),
-                       "source" => Map.get(payload, "source", db_task.source),
-                       "source_metadata" =>
-                         Map.get(payload, "source_metadata", db_task.source_metadata),
-                       "due_date" => due_date || db_task.due_date,
-                       "result" => Map.get(payload, "result", db_task.result),
-                       "project_id" => Map.get(payload, "project_id", db_task.project_id),
-                       "goal_id" => Map.get(payload, "goal_id", db_task.goal_id),
-                       "parent_task_id" =>
-                         Map.get(payload, "parent_task_id", db_task.parent_task_id),
-                       "labels" => Map.get(payload, "labels", db_task.labels)
-                     }
-                   )
-
-                 case BotArmyGtd.Repo.update(changeset) do
-                   {:ok, updated} -> updated
-                   {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-                 end
-               else
-                 BotArmyGtd.Repo.rollback(:not_found)
-               end
-             end) do
+        case execute_update_transaction(task_uuid, payload) do
           {:ok, updated_db_task} ->
             updated_task = schema_to_map(updated_db_task)
             new_state = Map.put(state, task_id, updated_task)
@@ -307,42 +271,7 @@ defmodule BotArmyGtd.TaskStore do
         else
           task_uuid = Ecto.UUID.cast!(task_id)
 
-          case BotArmyGtd.Repo.transaction(fn ->
-                 db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
-
-                 if db_task && db_task.tenant_id |> to_string() == tenant_id do
-                   due_date = parse_due_date(Map.get(payload, "due_date"))
-
-                   changeset =
-                     BotArmyGtd.Schemas.Task.changeset(
-                       db_task,
-                       %{
-                         "title" => Map.get(payload, "title", db_task.title),
-                         "description" => Map.get(payload, "description", db_task.description),
-                         "status" => Map.get(payload, "status", db_task.status),
-                         "priority" => Map.get(payload, "priority", db_task.priority),
-                         "context" => Map.get(payload, "context", db_task.context),
-                         "source" => Map.get(payload, "source", db_task.source),
-                         "source_metadata" =>
-                           Map.get(payload, "source_metadata", db_task.source_metadata),
-                         "due_date" => due_date || db_task.due_date,
-                         "result" => Map.get(payload, "result", db_task.result),
-                         "project_id" => Map.get(payload, "project_id", db_task.project_id),
-                         "goal_id" => Map.get(payload, "goal_id", db_task.goal_id),
-                         "parent_task_id" =>
-                           Map.get(payload, "parent_task_id", db_task.parent_task_id),
-                         "labels" => Map.get(payload, "labels", db_task.labels)
-                       }
-                     )
-
-                   case BotArmyGtd.Repo.update(changeset) do
-                     {:ok, updated} -> updated
-                     {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-                   end
-                 else
-                   BotArmyGtd.Repo.rollback(:not_found)
-                 end
-               end) do
+          case execute_update_scoped_transaction(task_id, tenant_id, task_uuid, payload) do
             {:ok, updated_db_task} ->
               updated_task = schema_to_map(updated_db_task)
               new_state = Map.put(state, task_id, updated_task)
@@ -756,5 +685,58 @@ defmodule BotArmyGtd.TaskStore do
       {0, _} ->
         {:error, :not_found}
     end
+  end
+
+  defp build_and_update_task_changeset(db_task, payload) do
+    due_date = parse_due_date(Map.get(payload, "due_date"))
+
+    changeset =
+      BotArmyGtd.Schemas.Task.changeset(
+        db_task,
+        %{
+          "title" => Map.get(payload, "title", db_task.title),
+          "description" => Map.get(payload, "description", db_task.description),
+          "status" => Map.get(payload, "status", db_task.status),
+          "priority" => Map.get(payload, "priority", db_task.priority),
+          "context" => Map.get(payload, "context", db_task.context),
+          "source" => Map.get(payload, "source", db_task.source),
+          "source_metadata" => Map.get(payload, "source_metadata", db_task.source_metadata),
+          "due_date" => due_date || db_task.due_date,
+          "result" => Map.get(payload, "result", db_task.result),
+          "project_id" => Map.get(payload, "project_id", db_task.project_id),
+          "goal_id" => Map.get(payload, "goal_id", db_task.goal_id),
+          "parent_task_id" => Map.get(payload, "parent_task_id", db_task.parent_task_id),
+          "labels" => Map.get(payload, "labels", db_task.labels)
+        }
+      )
+
+    case BotArmyGtd.Repo.update(changeset) do
+      {:ok, updated} -> updated
+      {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
+    end
+  end
+
+  defp execute_update_transaction(task_uuid, payload) do
+    BotArmyGtd.Repo.transaction(fn ->
+      db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
+
+      if db_task do
+        build_and_update_task_changeset(db_task, payload)
+      else
+        BotArmyGtd.Repo.rollback(:not_found)
+      end
+    end)
+  end
+
+  defp execute_update_scoped_transaction(task_id, tenant_id, task_uuid, payload) do
+    BotArmyGtd.Repo.transaction(fn ->
+      db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
+
+      if db_task && db_task.tenant_id |> to_string() == tenant_id do
+        build_and_update_task_changeset(db_task, payload)
+      else
+        BotArmyGtd.Repo.rollback(:not_found)
+      end
+    end)
   end
 end
