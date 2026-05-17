@@ -299,43 +299,28 @@ defmodule BotArmyGtd.InboxItemStore do
 
   defp execute_mark_processed_transaction(item_uuid) do
     BotArmyGtd.Repo.transaction(fn ->
-      db_item = Repo.get(InboxItem, item_uuid)
-
-      if db_item do
-        now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
-
-        changeset =
-          InboxItem.changeset(db_item, %{
-            "status" => "clarified",
-            "processed_at" => now
-          })
-
-        case Repo.update(changeset) do
-          {:ok, updated} -> updated
-          {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-        end
+      with db_item when db_item != nil <- Repo.get(InboxItem, item_uuid),
+           now <- NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second),
+           changeset <-
+             InboxItem.changeset(db_item, %{"status" => "clarified", "processed_at" => now}),
+           {:ok, updated} <- Repo.update(changeset) do
+        updated
       else
-        BotArmyGtd.Repo.rollback(:not_found)
+        nil -> BotArmyGtd.Repo.rollback(:not_found)
+        {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
       end
     end)
   end
 
   defp execute_mark_discarded_transaction(item_uuid) do
     BotArmyGtd.Repo.transaction(fn ->
-      db_item = Repo.get(InboxItem, item_uuid)
-
-      if db_item do
-        changeset =
-          InboxItem.changeset(db_item, %{
-            "status" => "discarded"
-          })
-
-        case Repo.update(changeset) do
-          {:ok, updated} -> updated
-          {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-        end
+      with db_item when db_item != nil <- Repo.get(InboxItem, item_uuid),
+           changeset <- InboxItem.changeset(db_item, %{"status" => "discarded"}),
+           {:ok, updated} <- Repo.update(changeset) do
+        updated
       else
-        BotArmyGtd.Repo.rollback(:not_found)
+        nil -> BotArmyGtd.Repo.rollback(:not_found)
+        {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
       end
     end)
   end

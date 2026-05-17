@@ -174,20 +174,7 @@ defmodule BotArmyGtd.PlanStore do
         {:reply, {:error, :not_found}, state}
 
       plan ->
-        if plan["tenant_id"] != tenant_id do
-          {:reply, {:error, :not_found}, state}
-        else
-          plan_uuid = Ecto.UUID.cast!(plan_id)
-
-          case handle_plan_update(plan_id, plan_uuid, updates) do
-            {:ok, updated_plan, new_map} ->
-              new_state = Map.merge(state, new_map)
-              {:reply, {:ok, updated_plan}, new_state}
-
-            {:error, reason} ->
-              {:reply, {:error, reason}, state}
-          end
-        end
+        do_plan_update_scoped(plan, plan_id, tenant_id, updates, state)
     end
   rescue
     e ->
@@ -232,20 +219,7 @@ defmodule BotArmyGtd.PlanStore do
         {:reply, {:error, :not_found}, state}
 
       plan ->
-        if plan["tenant_id"] != tenant_id do
-          {:reply, {:error, :not_found}, state}
-        else
-          plan_uuid = Ecto.UUID.cast!(plan_id)
-
-          case handle_plan_delete(plan_id, plan_uuid) do
-            {:ok, deleted_plan, new_map} ->
-              new_state = Map.merge(state, new_map)
-              {:reply, {:ok, deleted_plan}, new_state}
-
-            {:error, reason} ->
-              {:reply, {:error, reason}, state}
-          end
-        end
+        do_plan_delete_scoped(plan, plan_id, tenant_id, state)
     end
   rescue
     e ->
@@ -257,6 +231,40 @@ defmodule BotArmyGtd.PlanStore do
   def handle_call(:clear, _from, _state) do
     Logger.info("Clearing PlanStore")
     {:reply, :ok, %{}}
+  end
+
+  defp do_plan_update_scoped(plan, plan_id, tenant_id, updates, state) do
+    if plan["tenant_id"] != tenant_id do
+      {:reply, {:error, :not_found}, state}
+    else
+      plan_uuid = Ecto.UUID.cast!(plan_id)
+
+      case handle_plan_update(plan_id, plan_uuid, updates) do
+        {:ok, updated_plan, new_map} ->
+          new_state = Map.merge(state, new_map)
+          {:reply, {:ok, updated_plan}, new_state}
+
+        {:error, reason} ->
+          {:reply, {:error, reason}, state}
+      end
+    end
+  end
+
+  defp do_plan_delete_scoped(plan, plan_id, tenant_id, state) do
+    if plan["tenant_id"] != tenant_id do
+      {:reply, {:error, :not_found}, state}
+    else
+      plan_uuid = Ecto.UUID.cast!(plan_id)
+
+      case handle_plan_delete(plan_id, plan_uuid) do
+        {:ok, deleted_plan, new_map} ->
+          new_state = Map.merge(state, new_map)
+          {:reply, {:ok, deleted_plan}, new_state}
+
+        {:error, reason} ->
+          {:reply, {:error, reason}, state}
+      end
+    end
   end
 
   # Private helpers

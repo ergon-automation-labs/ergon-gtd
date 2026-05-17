@@ -277,46 +277,32 @@ defmodule BotArmyGtd.LogEntryStore do
 
   defp execute_mark_file_written_transaction(entry_uuid) do
     BotArmyGtd.Repo.transaction(fn ->
-      db_entry = Repo.get(LogEntry, entry_uuid)
-
-      if db_entry do
-        changeset =
-          LogEntry.changeset(
-            db_entry,
-            %{"file_written" => true}
-          )
-
-        case Repo.update(changeset) do
-          {:ok, updated} -> updated
-          {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-        end
+      with db_entry when db_entry != nil <- Repo.get(LogEntry, entry_uuid),
+           changeset <- LogEntry.changeset(db_entry, %{"file_written" => true}),
+           {:ok, updated} <- Repo.update(changeset) do
+        updated
       else
-        BotArmyGtd.Repo.rollback(:not_found)
+        nil -> BotArmyGtd.Repo.rollback(:not_found)
+        {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
       end
     end)
   end
 
   defp execute_mark_enriched_transaction(entry_uuid, enrichment_data) do
     BotArmyGtd.Repo.transaction(fn ->
-      db_entry = Repo.get(LogEntry, entry_uuid)
-
-      if db_entry do
-        changeset =
-          LogEntry.changeset(
-            db_entry,
-            %{
-              "enriched" => true,
-              "enriched_at" => NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second),
-              "structured_data" => enrichment_data
-            }
-          )
-
-        case Repo.update(changeset) do
-          {:ok, updated} -> updated
-          {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
-        end
+      with db_entry when db_entry != nil <- Repo.get(LogEntry, entry_uuid),
+           enriched_at <- NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second),
+           changeset <-
+             LogEntry.changeset(db_entry, %{
+               "enriched" => true,
+               "enriched_at" => enriched_at,
+               "structured_data" => enrichment_data
+             }),
+           {:ok, updated} <- Repo.update(changeset) do
+        updated
       else
-        BotArmyGtd.Repo.rollback(:not_found)
+        nil -> BotArmyGtd.Repo.rollback(:not_found)
+        {:error, changeset} -> BotArmyGtd.Repo.rollback(changeset)
       end
     end)
   end

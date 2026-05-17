@@ -266,26 +266,7 @@ defmodule BotArmyGtd.TaskStore do
         {:reply, {:error, :not_found}, state}
 
       task ->
-        if task["tenant_id"] != tenant_id do
-          {:reply, {:error, :not_found}, state}
-        else
-          task_uuid = Ecto.UUID.cast!(task_id)
-
-          case execute_update_scoped_transaction(task_id, tenant_id, task_uuid, payload) do
-            {:ok, updated_db_task} ->
-              updated_task = schema_to_map(updated_db_task)
-              new_state = Map.put(state, task_id, updated_task)
-              Logger.info("Updated task in database (tenant scoped): #{task_id}")
-              {:reply, {:ok, updated_task}, new_state}
-
-            {:error, :not_found} ->
-              {:reply, {:error, :not_found}, state}
-
-            {:error, changeset} ->
-              Logger.error("Failed to update task (tenant scoped): #{inspect(changeset.errors)}")
-              {:reply, {:error, changeset_error_reason(changeset)}, state}
-          end
-        end
+        do_update_scoped_task(task, task_id, tenant_id, payload, state)
     end
   end
 
@@ -323,19 +304,7 @@ defmodule BotArmyGtd.TaskStore do
         {:reply, {:error, :not_found}, state}
 
       task ->
-        if task["tenant_id"] != tenant_id do
-          {:reply, {:error, :not_found}, state}
-        else
-          task_uuid = Ecto.UUID.cast!(task_id)
-
-          case handle_complete_scoped(task_id, tenant_id, task_uuid, state) do
-            {:ok, completed_task, new_state} ->
-              {:reply, {:ok, completed_task}, new_state}
-
-            {:error, reason} ->
-              {:reply, {:error, reason}, state}
-          end
-        end
+        do_complete_scoped_task(task, task_id, tenant_id, state)
     end
   end
 
@@ -627,6 +596,45 @@ defmodule BotArmyGtd.TaskStore do
     hash = :crypto.hash(:sha256, string)
     <<uuid_int::128>> = binary_part(hash, 0, 16)
     <<uuid_int::128>> |> Ecto.UUID.cast() |> elem(1)
+  end
+
+  defp do_update_scoped_task(task, task_id, tenant_id, payload, state) do
+    if task["tenant_id"] != tenant_id do
+      {:reply, {:error, :not_found}, state}
+    else
+      task_uuid = Ecto.UUID.cast!(task_id)
+
+      case execute_update_scoped_transaction(task_id, tenant_id, task_uuid, payload) do
+        {:ok, updated_db_task} ->
+          updated_task = schema_to_map(updated_db_task)
+          new_state = Map.put(state, task_id, updated_task)
+          Logger.info("Updated task in database (tenant scoped): #{task_id}")
+          {:reply, {:ok, updated_task}, new_state}
+
+        {:error, :not_found} ->
+          {:reply, {:error, :not_found}, state}
+
+        {:error, changeset} ->
+          Logger.error("Failed to update task (tenant scoped): #{inspect(changeset.errors)}")
+          {:reply, {:error, changeset_error_reason(changeset)}, state}
+      end
+    end
+  end
+
+  defp do_complete_scoped_task(task, task_id, tenant_id, state) do
+    if task["tenant_id"] != tenant_id do
+      {:reply, {:error, :not_found}, state}
+    else
+      task_uuid = Ecto.UUID.cast!(task_id)
+
+      case handle_complete_scoped(task_id, tenant_id, task_uuid, state) do
+        {:ok, completed_task, new_state} ->
+          {:reply, {:ok, completed_task}, new_state}
+
+        {:error, reason} ->
+          {:reply, {:error, reason}, state}
+      end
+    end
   end
 
   # Helper function to convert Ecto schema to map for GenServer state
