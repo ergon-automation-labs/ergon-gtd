@@ -131,30 +131,7 @@ defmodule BotArmyGtd.ProjectStore do
       _project ->
         project_uuid = Ecto.UUID.cast!(project_id)
 
-        case BotArmyGtd.Repo.transaction(fn ->
-               db_project = Repo.get(Project, project_uuid)
-
-               if db_project do
-                 changeset =
-                   Project.changeset(
-                     db_project,
-                     %{
-                       "name" => Map.get(payload, "name", db_project.name),
-                       "description" => Map.get(payload, "description", db_project.description),
-                       "status" => Map.get(payload, "status", db_project.status),
-                       "area" => Map.get(payload, "area", db_project.area),
-                       "labels" => Map.get(payload, "labels", db_project.labels)
-                     }
-                   )
-
-                 case Repo.update(changeset) do
-                   {:ok, updated} -> updated
-                   {:error, changeset} -> Repo.rollback(changeset)
-                 end
-               else
-                 Repo.rollback(:not_found)
-               end
-             end) do
+        case execute_update_transaction(project_uuid, payload) do
           {:ok, updated_db_project} ->
             updated_project = schema_to_map(updated_db_project)
             new_state = Map.put(state, project_id, updated_project)
@@ -243,5 +220,32 @@ defmodule BotArmyGtd.ProjectStore do
     hash = :crypto.hash(:sha256, string)
     <<uuid_int::128>> = binary_part(hash, 0, 16)
     <<uuid_int::128>> |> Ecto.UUID.cast() |> elem(1)
+  end
+
+  defp execute_update_transaction(project_uuid, payload) do
+    BotArmyGtd.Repo.transaction(fn ->
+      db_project = Repo.get(Project, project_uuid)
+
+      if db_project do
+        changeset =
+          Project.changeset(
+            db_project,
+            %{
+              "name" => Map.get(payload, "name", db_project.name),
+              "description" => Map.get(payload, "description", db_project.description),
+              "status" => Map.get(payload, "status", db_project.status),
+              "area" => Map.get(payload, "area", db_project.area),
+              "labels" => Map.get(payload, "labels", db_project.labels)
+            }
+          )
+
+        case Repo.update(changeset) do
+          {:ok, updated} -> updated
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      else
+        Repo.rollback(:not_found)
+      end
+    end)
   end
 end
