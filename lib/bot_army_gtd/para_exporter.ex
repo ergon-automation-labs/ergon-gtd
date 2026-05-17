@@ -363,6 +363,35 @@ defmodule BotArmyGtd.ParaExporter do
     end
   end
 
+  defp get_completed_projects(all_projects) do
+    all_projects
+    |> Enum.filter(&completed_project?/1)
+    |> Enum.map(fn p -> {slugify(p["name"] || ""), p} end)
+    |> Enum.reject(fn {slug, _} -> slug == "" or slug == "untitled" end)
+    |> Enum.uniq_by(fn {slug, _} -> slug end)
+  end
+
+  defp completed_project?(p) do
+    status = p["status"]
+    name = p["name"] || ""
+    slug_lower = String.downcase(name)
+
+    status in ["completed", "done", "archived"] and
+      String.length(name) >= 3 and
+      not String.starts_with?(slug_lower, "smoke_") and
+      not String.starts_with?(slug_lower, "[smoke]") and
+      not String.contains?(slug_lower, "smoke_bridge")
+  end
+
+  defp get_to_archive(completed, already_archived) do
+    Enum.reject(completed, fn {slug, _} -> MapSet.member?(already_archived, slug) end)
+  end
+
+  defp get_skipped(completed, already_archived) do
+    Enum.filter(completed, fn {slug, _} -> MapSet.member?(already_archived, slug) end)
+    |> Enum.map(fn {slug, _} -> slug end)
+  end
+
   @doc """
   Sweep stale PARA projects: find GTD projects that are completed
   but not yet archived in PARA, and archive them.
@@ -385,30 +414,9 @@ defmodule BotArmyGtd.ParaExporter do
         _ -> []
       end
 
-    # Find projects that are done/completed but not smoke tests
-    completed =
-      all_projects
-      |> Enum.filter(fn p ->
-        status = p["status"]
-        name = p["name"] || ""
-        slug_lower = String.downcase(name)
-
-        status in ["completed", "done", "archived"] and
-          String.length(name) >= 3 and
-          not String.starts_with?(slug_lower, "smoke_") and
-          not String.starts_with?(slug_lower, "[smoke]") and
-          not String.contains?(slug_lower, "smoke_bridge")
-      end)
-      |> Enum.map(fn p -> {slugify(p["name"] || ""), p} end)
-      |> Enum.reject(fn {slug, _} -> slug == "" or slug == "untitled" end)
-      |> Enum.uniq_by(fn {slug, _} -> slug end)
-
-    to_archive =
-      Enum.reject(completed, fn {slug, _} -> MapSet.member?(already_archived, slug) end)
-
-    skipped =
-      Enum.filter(completed, fn {slug, _} -> MapSet.member?(already_archived, slug) end)
-      |> Enum.map(fn {slug, _} -> slug end)
+    completed = get_completed_projects(all_projects)
+    to_archive = get_to_archive(completed, already_archived)
+    skipped = get_skipped(completed, already_archived)
 
     archived =
       if apply? do
