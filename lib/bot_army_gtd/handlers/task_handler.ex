@@ -140,10 +140,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
             )
 
             new_status = task["status"]
-
-            if old_status && new_status && old_status != new_status do
-              ParaExporter.notify_status_change(task, old_status, new_status)
-            end
+            notify_status_change_if_needed(task, old_status, new_status)
 
             :ok
 
@@ -370,6 +367,12 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
       handle_plan_task_failure(task, plan_id, failure_reason, tenant_id, user_id)
     else
       emit_failure_decision_event(:no_plan, 0, task_id, tenant_id, user_id)
+    end
+  end
+
+  defp notify_status_change_if_needed(task, old_status, new_status) do
+    if old_status && new_status && old_status != new_status do
+      ParaExporter.notify_status_change(task, old_status, new_status)
     end
   end
 
