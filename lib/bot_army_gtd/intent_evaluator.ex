@@ -142,6 +142,30 @@ defmodule BotArmyGtd.IntentEvaluator do
       evaluate_intent("propose_social_check_in", thresholds, context)
   end
 
+  defp handle_intent_publish_result(action, details, context) do
+    case Publisher.publish_intent(@bot_name, action, %{
+           threshold_result: details,
+           context_snapshot: %{entry_count: context.entry_count}
+         }) do
+      {:proceed, intent_id, endorsements} ->
+        endorsers = Enum.map(endorsements, fn {bot, _} -> bot end)
+
+        Logger.info(
+          "[IntentEvaluator] Proceeding with #{action} (intent_id=#{intent_id}, endorsed_by=#{inspect(endorsers)})"
+        )
+
+        [{:acted, action, intent_id, details, endorsements}]
+
+      {:vetoed, vetoing_bot, reason} ->
+        Logger.info("[IntentEvaluator] #{action} vetoed by #{vetoing_bot}: #{reason}")
+        [{:vetoed, action, vetoing_bot, reason}]
+
+      {:error, reason} ->
+        Logger.warning("[IntentEvaluator] Failed to publish #{action}: #{inspect(reason)}")
+        []
+    end
+  end
+
   defp evaluate_intent(action, thresholds, context) do
     case ThresholdModel.evaluate(@bot_name, action, thresholds, context) do
       {:ok, :act, details} ->
@@ -151,27 +175,7 @@ defmodule BotArmyGtd.IntentEvaluator do
           reason: details.reason
         )
 
-        case Publisher.publish_intent(@bot_name, action, %{
-               threshold_result: details,
-               context_snapshot: %{entry_count: context.entry_count}
-             }) do
-          {:proceed, intent_id, endorsements} ->
-            endorsers = Enum.map(endorsements, fn {bot, _} -> bot end)
-
-            Logger.info(
-              "[IntentEvaluator] Proceeding with #{action} (intent_id=#{intent_id}, endorsed_by=#{inspect(endorsers)})"
-            )
-
-            [{:acted, action, intent_id, details, endorsements}]
-
-          {:vetoed, vetoing_bot, reason} ->
-            Logger.info("[IntentEvaluator] #{action} vetoed by #{vetoing_bot}: #{reason}")
-            [{:vetoed, action, vetoing_bot, reason}]
-
-          {:error, reason} ->
-            Logger.warning("[IntentEvaluator] Failed to publish #{action}: #{inspect(reason)}")
-            []
-        end
+        handle_intent_publish_result(action, details, context)
 
       {:ok, :defer, details} ->
         Logger.debug(
