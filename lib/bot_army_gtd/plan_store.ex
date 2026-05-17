@@ -179,20 +179,13 @@ defmodule BotArmyGtd.PlanStore do
         else
           plan_uuid = Ecto.UUID.cast!(plan_id)
 
-          changeset =
-            Repo.get(Plan, plan_uuid)
-            |> Plan.changeset(updates)
-
-          case Repo.update(changeset) do
-            {:ok, db_plan} ->
-              updated_plan = schema_to_map(db_plan)
-              new_state = Map.put(state, plan_id, updated_plan)
-              Logger.info("Updated plan in database: #{plan_id}")
+          case handle_plan_update(plan_id, plan_uuid, updates) do
+            {:ok, updated_plan, new_map} ->
+              new_state = Map.merge(state, new_map)
               {:reply, {:ok, updated_plan}, new_state}
 
-            {:error, _changeset} ->
-              Logger.error("Failed to update plan #{plan_id}")
-              {:reply, {:error, :update_failed}, state}
+            {:error, reason} ->
+              {:reply, {:error, reason}, state}
           end
         end
     end
@@ -242,23 +235,15 @@ defmodule BotArmyGtd.PlanStore do
         if plan["tenant_id"] != tenant_id do
           {:reply, {:error, :not_found}, state}
         else
-          # Soft delete: set status to cancelled
           plan_uuid = Ecto.UUID.cast!(plan_id)
 
-          changeset =
-            Repo.get(Plan, plan_uuid)
-            |> Plan.changeset(%{"status" => "cancelled"})
-
-          case Repo.update(changeset) do
-            {:ok, db_plan} ->
-              deleted_plan = schema_to_map(db_plan)
-              new_state = Map.put(state, plan_id, deleted_plan)
-              Logger.info("Deleted plan in database: #{plan_id}")
+          case handle_plan_delete(plan_id, plan_uuid) do
+            {:ok, deleted_plan, new_map} ->
+              new_state = Map.merge(state, new_map)
               {:reply, {:ok, deleted_plan}, new_state}
 
-            {:error, _changeset} ->
-              Logger.error("Failed to delete plan #{plan_id}")
-              {:reply, {:error, :delete_failed}, state}
+            {:error, reason} ->
+              {:reply, {:error, reason}, state}
           end
         end
     end
@@ -275,6 +260,42 @@ defmodule BotArmyGtd.PlanStore do
   end
 
   # Private helpers
+
+  defp handle_plan_update(plan_id, plan_uuid, updates) do
+    changeset =
+      Repo.get(Plan, plan_uuid)
+      |> Plan.changeset(updates)
+
+    case Repo.update(changeset) do
+      {:ok, db_plan} ->
+        updated_plan = schema_to_map(db_plan)
+        new_state = Map.put(%{}, plan_id, updated_plan)
+        Logger.info("Updated plan in database: #{plan_id}")
+        {:ok, updated_plan, new_state}
+
+      {:error, _changeset} ->
+        Logger.error("Failed to update plan #{plan_id}")
+        {:error, :update_failed}
+    end
+  end
+
+  defp handle_plan_delete(plan_id, plan_uuid) do
+    changeset =
+      Repo.get(Plan, plan_uuid)
+      |> Plan.changeset(%{"status" => "cancelled"})
+
+    case Repo.update(changeset) do
+      {:ok, db_plan} ->
+        deleted_plan = schema_to_map(db_plan)
+        new_state = Map.put(%{}, plan_id, deleted_plan)
+        Logger.info("Deleted plan in database: #{plan_id}")
+        {:ok, deleted_plan, new_state}
+
+      {:error, _changeset} ->
+        Logger.error("Failed to delete plan #{plan_id}")
+        {:error, :delete_failed}
+    end
+  end
 
   defp schema_to_map(schema) do
     %{

@@ -236,18 +236,18 @@ defmodule BotArmyGtd.NATS.Consumer do
   def route_message(message) do
     event = message["event"]
 
-    if is_binary(event) and String.starts_with?(event, "conv.request.gtd.") do
-      ConversationHandler.handle_request(message)
-    else
-      if is_binary(event) and String.starts_with?(event, "conv.followup.") do
+    cond do
+      is_binary(event) and String.starts_with?(event, "conv.request.gtd.") ->
         ConversationHandler.handle_request(message)
-      else
-        if event == "conv.mailbox.gtd" do
-          ConversationHandler.handle_mailbox(message)
-        else
-          route_event(event, message)
-        end
-      end
+
+      is_binary(event) and String.starts_with?(event, "conv.followup.") ->
+        ConversationHandler.handle_request(message)
+
+      event == "conv.mailbox.gtd" ->
+        ConversationHandler.handle_mailbox(message)
+
+      true ->
+        route_event(event, message)
     end
   end
 
@@ -578,31 +578,14 @@ defmodule BotArmyGtd.NATS.Consumer do
       {tenant_id, task_id} =
         case Jason.decode(body) do
           {:ok, params} ->
-            tid =
-              case params["tenant_id"] do
-                t when is_binary(t) and t != "" -> t
-                _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
-              end
-
+            tid = extract_tenant_id_from_params(params)
             {tid, params["task_id"]}
 
           _ ->
             {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), nil}
         end
 
-      response =
-        if task_id do
-          case task_store.get(tenant_id, task_id) do
-            {:ok, task} ->
-              Reply.ok(%{"task" => task})
-
-            {:error, reason} ->
-              Reply.error(inspect(reason), :not_found)
-          end
-        else
-          Reply.error("task_id required", :missing_field)
-        end
-
+      response = build_task_get_response(task_store, tenant_id, task_id)
       reply_traced(state.conn, reply_to, response)
     end)
 
@@ -618,29 +601,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     Tracing.with_consumer_span("gtd.task.search", Map.get(msg, :headers, []), fn ->
       task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
-      {tenant_id, query, filters, pagination} =
-        case Jason.decode(body) do
-          {:ok, params} ->
-            tid =
-              case params["tenant_id"] do
-                t when is_binary(t) and t != "" -> t
-                _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
-              end
-
-            q = params["query"] || ""
-            f = Map.get(params, "filters", %{})
-
-            p = %{
-              "limit" => min(params["limit"] || 50, 500),
-              "offset" => params["offset"] || 0
-            }
-
-            {tid, q, f, p}
-
-          _ ->
-            {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), "", %{},
-             %{"limit" => 50, "offset" => 0}}
-        end
+      {tenant_id, query, filters, pagination} = parse_search_params(body)
 
       response =
         case task_store.search(tenant_id, query, filters, pagination) do
@@ -927,18 +888,21 @@ defmodule BotArmyGtd.NATS.Consumer do
 
         _ ->
           Logger.debug("Received NATS message on subject: #{topic}")
-
-          case Decoder.decode(msg.body) do
-            {:ok, decoded_message} ->
-              route_message(decoded_message)
-
-            {:error, reason} ->
-              Logger.warning("Failed to decode message from #{topic}: #{inspect(reason)}")
-          end
+          handle_fallback_message(msg, topic)
       end
     end)
 
     {:noreply, state}
+  end
+
+  defp handle_fallback_message(msg, topic) do
+    case Decoder.decode(msg.body) do
+      {:ok, decoded_message} ->
+        route_message(decoded_message)
+
+      {:error, reason} ->
+        Logger.warning("Failed to decode message from #{topic}: #{inspect(reason)}")
+    end
   end
 
   defp handle_gossip_message(msg, type) do
@@ -968,19 +932,23 @@ defmodule BotArmyGtd.NATS.Consumer do
   defp handle_task_create_request(msg, reply_to, state) do
     case Decoder.decode(msg.body) do
       {:ok, decoded_message} ->
-        case TaskHandler.handle_create(decoded_message) do
-          {:ok, task} ->
-            response = Reply.ok(%{"task_id" => task["id"], "task" => task})
-            reply_traced(state.conn, reply_to, response)
-
-          {:error, reason} ->
-            error_response = Reply.error(inspect(reason), :create_failed)
-            reply_traced(state.conn, reply_to, error_response)
-        end
+        process_task_create(decoded_message, reply_to, state)
 
       {:error, reason} ->
         Logger.warning("Failed to decode task create message: #{inspect(reason)}")
         error_response = Reply.error("Invalid message format", :decode_error)
+        reply_traced(state.conn, reply_to, error_response)
+    end
+  end
+
+  defp process_task_create(decoded_message, reply_to, state) do
+    case TaskHandler.handle_create(decoded_message) do
+      {:ok, task} ->
+        response = Reply.ok(%{"task_id" => task["id"], "task" => task})
+        reply_traced(state.conn, reply_to, response)
+
+      {:error, reason} ->
+        error_response = Reply.error(inspect(reason), :create_failed)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
@@ -1222,6 +1190,34 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   defp schedule_post_deploy_verification(_, _), do: :ok
 
+  defp parse_search_params(body) do
+    case Jason.decode(body) do
+      {:ok, params} ->
+        tid = extract_tenant_id_or_default(params["tenant_id"])
+        q = params["query"] || ""
+        f = Map.get(params, "filters", %{})
+
+        p = %{
+          "limit" => min(params["limit"] || 50, 500),
+          "offset" => params["offset"] || 0
+        }
+
+        {tid, q, f, p}
+
+      _ ->
+        {Application.get_env(:bot_army_gtd, :default_tenant_id, "default"), "", %{},
+         %{"limit" => 50, "offset" => 0}}
+    end
+  end
+
+  defp extract_tenant_id_or_default(tenant_id) when is_binary(tenant_id) and tenant_id != "" do
+    tenant_id
+  end
+
+  defp extract_tenant_id_or_default(_) do
+    Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+  end
+
   defp reply_traced(conn, reply_to, body) do
     if conn do
       headers = Tracing.inject_trace_context([])
@@ -1276,6 +1272,27 @@ defmodule BotArmyGtd.NATS.Consumer do
     end)
 
     {:noreply, state}
+  end
+
+  defp build_task_get_response(_task_store, _tenant_id, nil) do
+    Reply.error("task_id required", :missing_field)
+  end
+
+  defp build_task_get_response(task_store, tenant_id, task_id) do
+    case task_store.get(tenant_id, task_id) do
+      {:ok, task} ->
+        Reply.ok(%{"task" => task})
+
+      {:error, reason} ->
+        Reply.error(inspect(reason), :not_found)
+    end
+  end
+
+  defp extract_tenant_id_from_params(params) do
+    case params["tenant_id"] do
+      t when is_binary(t) and t != "" -> t
+      _ -> Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+    end
   end
 
   @impl true

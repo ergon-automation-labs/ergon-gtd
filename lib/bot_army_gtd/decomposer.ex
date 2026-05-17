@@ -386,24 +386,25 @@ defmodule BotArmyGtd.Decomposer do
   end
 
   defp validate_subtasks(subtasks) when is_list(subtasks) do
-    case Enum.reduce_while(subtasks, [], fn subtask, acc ->
-           case validate_subtask_structure(subtask) do
-             :ok -> {:cont, [subtask | acc]}
-             {:error, reason} -> {:halt, {:error, reason}}
-           end
-         end) do
+    case Enum.reduce_while(subtasks, [], &validate_subtask_reducer/2) do
       {:error, reason} ->
         Logger.error("[Decomposer] Invalid subtask structure", reason: reason)
         {:error, :invalid_structure}
 
       valid_subtasks ->
-        # Sort by order field
         sorted =
           valid_subtasks
           |> Enum.reverse()
           |> Enum.sort_by(&get_subtask_order/1)
 
         {:ok, sorted}
+    end
+  end
+
+  defp validate_subtask_reducer(subtask, acc) do
+    case validate_subtask_structure(subtask) do
+      :ok -> {:cont, [subtask | acc]}
+      {:error, reason} -> {:halt, {:error, reason}}
     end
   end
 
