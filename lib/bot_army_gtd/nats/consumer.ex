@@ -855,44 +855,61 @@ defmodule BotArmyGtd.NATS.Consumer do
     reply_to = Map.get(msg, :reply_to)
 
     Tracing.with_consumer_span(topic, Map.get(msg, :headers, []), fn ->
-      case topic do
-        "gtd.task.create" when is_binary(reply_to) and reply_to != "" ->
-          handle_task_create_request(msg, reply_to, state)
-
-        "gtd.task.update" when is_binary(reply_to) and reply_to != "" ->
-          handle_task_update_request(msg, reply_to, state)
-
-        "gtd.task.complete" when is_binary(reply_to) and reply_to != "" ->
-          handle_task_complete_request(msg, reply_to, state)
-
-        "gtd.project.create" when is_binary(reply_to) and reply_to != "" ->
-          handle_project_create_request(msg, reply_to, state)
-
-        "gtd.project.update" when is_binary(reply_to) and reply_to != "" ->
-          handle_project_update_request(msg, reply_to, state)
-
-        "gtd.project.list" when is_binary(reply_to) and reply_to != "" ->
-          handle_project_list_request(msg, reply_to, state)
-
-        "gossip.intent.proposed" ->
-          handle_gossip_message(msg, :intent_proposed)
-
-        "gossip.social.invite" ->
-          handle_gossip_message(msg, :social_invite)
-
-        "gossip.poll.broadcast" ->
-          handle_gossip_message(msg, :poll_broadcast)
-
-        "synapse.army_general.poll.broadcast" ->
-          handle_gtd_poll_broadcast(msg)
-
-        _ ->
-          Logger.debug("Received NATS message on subject: #{topic}")
-          handle_fallback_message(msg, topic)
-      end
+      dispatch_message(msg, topic, reply_to, state)
     end)
 
     {:noreply, state}
+  end
+
+  defp dispatch_message(msg, "gtd.task.create", reply_to, state)
+       when is_binary(reply_to) and reply_to != "" do
+    handle_task_create_request(msg, reply_to, state)
+  end
+
+  defp dispatch_message(msg, "gtd.task.update", reply_to, state)
+       when is_binary(reply_to) and reply_to != "" do
+    handle_task_update_request(msg, reply_to, state)
+  end
+
+  defp dispatch_message(msg, "gtd.task.complete", reply_to, state)
+       when is_binary(reply_to) and reply_to != "" do
+    handle_task_complete_request(msg, reply_to, state)
+  end
+
+  defp dispatch_message(msg, "gtd.project.create", reply_to, state)
+       when is_binary(reply_to) and reply_to != "" do
+    handle_project_create_request(msg, reply_to, state)
+  end
+
+  defp dispatch_message(msg, "gtd.project.update", reply_to, state)
+       when is_binary(reply_to) and reply_to != "" do
+    handle_project_update_request(msg, reply_to, state)
+  end
+
+  defp dispatch_message(msg, "gtd.project.list", reply_to, state)
+       when is_binary(reply_to) and reply_to != "" do
+    handle_project_list_request(msg, reply_to, state)
+  end
+
+  defp dispatch_message(msg, "gossip.intent.proposed", _reply_to, _state) do
+    handle_gossip_message(msg, :intent_proposed)
+  end
+
+  defp dispatch_message(msg, "gossip.social.invite", _reply_to, _state) do
+    handle_gossip_message(msg, :social_invite)
+  end
+
+  defp dispatch_message(msg, "gossip.poll.broadcast", _reply_to, _state) do
+    handle_gossip_message(msg, :poll_broadcast)
+  end
+
+  defp dispatch_message(msg, "synapse.army_general.poll.broadcast", _reply_to, _state) do
+    handle_gtd_poll_broadcast(msg)
+  end
+
+  defp dispatch_message(msg, topic, _reply_to, _state) do
+    Logger.debug("Received NATS message on subject: #{topic}")
+    handle_fallback_message(msg, topic)
   end
 
   defp handle_fallback_message(msg, topic) do
