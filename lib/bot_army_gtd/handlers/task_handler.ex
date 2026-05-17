@@ -344,15 +344,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
               user_id
             )
 
-            # Attempt replan if task is part of a plan
-            plan_id = task["plan_id"]
-
-            if is_binary(plan_id) and plan_id != "" do
-              handle_plan_task_failure(task, plan_id, failure_reason, tenant_id, user_id)
-            else
-              # No plan associated, just mark as handled
-              emit_failure_decision_event(:no_plan, 0, task_id, tenant_id, user_id)
-            end
+            handle_task_failure_by_plan(task, task_id, failure_reason, tenant_id, user_id)
 
             :ok
 
@@ -370,6 +362,16 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   end
 
   # Private functions
+
+  defp handle_task_failure_by_plan(task, task_id, failure_reason, tenant_id, user_id) do
+    plan_id = task["plan_id"]
+
+    if is_binary(plan_id) and plan_id != "" do
+      handle_plan_task_failure(task, plan_id, failure_reason, tenant_id, user_id)
+    else
+      emit_failure_decision_event(:no_plan, 0, task_id, tenant_id, user_id)
+    end
+  end
 
   defp validate_create_payload(payload) when is_map(payload) do
     require_field(payload, "title")

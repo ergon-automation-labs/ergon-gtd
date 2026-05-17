@@ -427,16 +427,17 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     |> Enum.reduce(0.0, fn {subtask, result}, acc ->
       case result do
         {:ok, _} ->
-          hours =
-            Map.get(subtask, "estimated_hours") || Map.get(subtask, :estimated_hours, 0)
-
-          acc + if(is_number(hours), do: hours, else: 0)
+          hours = Map.get(subtask, "estimated_hours") || Map.get(subtask, :estimated_hours, 0)
+          acc + normalize_effort_hours(hours)
 
         _ ->
           acc
       end
     end)
   end
+
+  defp normalize_effort_hours(hours) when is_number(hours), do: hours
+  defp normalize_effort_hours(_), do: 0
 
   defp identify_subtask_differences(subtask_list, successful_tasks) do
     predicted_titles = Enum.map(subtask_list, &Map.get(&1, "title"))
