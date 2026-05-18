@@ -349,43 +349,145 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
         parent_task_id = decomposition["parent_task_id"]
         subtask_list = get_subtask_list(decomposition)
 
-        created_subtasks =
-          create_decomposition_subtasks(subtask_list, parent_task_id, tenant_id, user_id)
-
-        successful_tasks = extract_successful_tasks(created_subtasks)
-        successful_count = length(successful_tasks)
-
-        actual_total_effort_hours = calculate_actual_effort(subtask_list, created_subtasks)
-
-        {missing_subtasks, extra_subtasks} =
-          identify_subtask_differences(subtask_list, successful_tasks)
-
-        fsrs_grade =
-          grade_decomposition_accuracy(decomposition, successful_count, actual_total_effort_hours)
-
-        {new_stability, new_difficulty, new_due_at} =
-          BotArmyGtd.FSRSScheduler.schedule_next_review(decomposition, fsrs_grade)
-
-        review_result = %{
-          decomposition_id: decomposition_id,
-          decomposition: decomposition,
-          successful_count: successful_count,
-          actual_total_effort_hours: actual_total_effort_hours,
-          missing_subtasks: missing_subtasks,
-          extra_subtasks: extra_subtasks,
-          fsrs_grade: fsrs_grade,
-          new_stability: new_stability,
-          new_difficulty: new_difficulty,
-          new_due_at: new_due_at,
-          event_id: event_id
-        }
-
-        finalize_approved_decomposition(review_result)
+        # Phase 2: Try to execute via Orchestrator if we have routing-capable subtasks
+        try_orchestrator_execution(
+          decomposition,
+          decomposition_id,
+          subtask_list,
+          parent_task_id,
+          tenant_id,
+          user_id,
+          event_id
+        )
 
       {:error, :not_found} ->
         Logger.warning("Decomposition not found for approval: #{decomposition_id}")
         publish_error(event_id, :not_found, "Decomposition not found")
     end
+  end
+
+  defp try_orchestrator_execution(
+         decomposition,
+         decomposition_id,
+         subtask_list,
+         parent_task_id,
+         tenant_id,
+         user_id,
+         event_id
+       ) do
+    # Try to get the parent task title for pattern learning
+    parent_task_goal =
+      case task_store().get(tenant_id, parent_task_id) do
+        {:ok, task} -> Map.get(task, "title", "unknown task")
+        {:error, _} -> "unknown task"
+      end
+
+    # Try Decomposer to see if we have a high-confidence template match
+    case try_decomposer(parent_task_goal) do
+      {:ok, decomposer_subtasks} ->
+        # Use orchestrator for deterministic template
+        Logger.info("[DecompositionHandler] Using Decomposer template for orchestration",
+          decomposition_id: decomposition_id,
+          goal: String.slice(parent_task_goal, 0, 50)
+        )
+
+        orchestrator_outcome =
+          BotArmyDispatcher.Orchestrator.execute(decomposer_subtasks,
+            decomposition_id: decomposition_id
+          )
+
+        # Record success pattern in Learning for future reuse
+        case orchestrator_outcome do
+          {:ok, outcome} ->
+            BotArmyDispatcher.Learning.record_success(
+              parent_task_goal,
+              decomposer_subtasks,
+              %{
+                success_rate: outcome["success_rate"],
+                execution_time_ms: outcome["execution_time_ms"]
+              }
+            )
+
+          {:error, _} ->
+            nil
+        end
+
+        # Still create GTD tasks for tracking/visibility
+        created_subtasks =
+          create_decomposition_subtasks(subtask_list, parent_task_id, tenant_id, user_id)
+
+        finalize_approval_with_subtasks(
+          decomposition,
+          decomposition_id,
+          subtask_list,
+          created_subtasks,
+          event_id
+        )
+
+      :no_match ->
+        # Fall back to traditional LLM chain + GTD task creation
+        Logger.debug("[DecompositionHandler] No Decomposer template match, using LLM subtasks",
+          decomposition_id: decomposition_id
+        )
+
+        created_subtasks =
+          create_decomposition_subtasks(subtask_list, parent_task_id, tenant_id, user_id)
+
+        finalize_approval_with_subtasks(
+          decomposition,
+          decomposition_id,
+          subtask_list,
+          created_subtasks,
+          event_id
+        )
+    end
+  end
+
+  defp try_decomposer(goal) do
+    case BotArmyGtd.Decomposer.decompose_goal(goal) do
+      {:ok, subtasks} -> {:ok, subtasks}
+      {:error, _} -> :no_match
+    end
+  rescue
+    _ -> :no_match
+  end
+
+  defp finalize_approval_with_subtasks(
+         decomposition,
+         decomposition_id,
+         subtask_list,
+         created_subtasks,
+         event_id
+       ) do
+    successful_tasks = extract_successful_tasks(created_subtasks)
+    successful_count = length(successful_tasks)
+
+    actual_total_effort_hours = calculate_actual_effort(subtask_list, created_subtasks)
+
+    {missing_subtasks, extra_subtasks} =
+      identify_subtask_differences(subtask_list, successful_tasks)
+
+    fsrs_grade =
+      grade_decomposition_accuracy(decomposition, successful_count, actual_total_effort_hours)
+
+    {new_stability, new_difficulty, new_due_at} =
+      BotArmyGtd.FSRSScheduler.schedule_next_review(decomposition, fsrs_grade)
+
+    review_result = %{
+      decomposition_id: decomposition_id,
+      decomposition: decomposition,
+      successful_count: successful_count,
+      actual_total_effort_hours: actual_total_effort_hours,
+      missing_subtasks: missing_subtasks,
+      extra_subtasks: extra_subtasks,
+      fsrs_grade: fsrs_grade,
+      new_stability: new_stability,
+      new_difficulty: new_difficulty,
+      new_due_at: new_due_at,
+      event_id: event_id
+    }
+
+    finalize_approved_decomposition(review_result)
   end
 
   defp create_decomposition_subtasks(subtask_list, parent_task_id, tenant_id, user_id) do
