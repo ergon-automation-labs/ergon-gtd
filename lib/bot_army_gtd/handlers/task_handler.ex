@@ -193,12 +193,11 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
             # Record outcome: task was completed
             try do
-              BotArmyLearning.OutcomeTracker.record(
+              BotArmyGtd.OutcomeTracker.record(
                 task_id,
                 "gtd.task_completion",
                 "completed",
-                "completed",
-                true
+                "completed"
               )
             rescue
               _ -> :ok

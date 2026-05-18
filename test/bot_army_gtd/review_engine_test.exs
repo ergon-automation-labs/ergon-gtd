@@ -7,8 +7,8 @@ defmodule BotArmyGtd.ReviewEngineTest do
   describe "weekly_review/1" do
     test "returns summary with completed, stale, and orphaned projects" do
       now = DateTime.utc_now()
-      recent = DateTime.to_iso8601(DateTime.add(now, -2 * 86400, :second))
-      stale = DateTime.to_iso8601(DateTime.add(now, -10 * 86400, :second))
+      recent = DateTime.to_iso8601(DateTime.add(now, -2 * 86_400, :second))
+      stale = DateTime.to_iso8601(DateTime.add(now, -10 * 86_400, :second))
 
       tasks = [
         %{

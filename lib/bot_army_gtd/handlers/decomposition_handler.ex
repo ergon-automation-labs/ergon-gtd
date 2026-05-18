@@ -787,7 +787,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
 
         grade_result = if(fsrs_grade >= 2, do: "pass", else: "fail")
 
-        BotArmyLearning.OutcomeTracker.record(
+        BotArmyGtd.OutcomeTracker.record(
           decomposition_id,
           "decomposition",
           "approved",

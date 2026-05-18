@@ -13,8 +13,7 @@ defmodule BotArmyGtd.Application do
   # Derive version from mix.exs at compile time (available in releases via @attrs)
   @version Mix.Project.config()[:version]
 
-  # Use System.get_env for runtime (Mix not available in releases)
-  @env String.to_atom(System.get_env("MIX_ENV") || "prod")
+  defp env, do: String.to_atom(System.get_env("MIX_ENV") || "prod")
 
   @impl true
   def start(_type, _args) do
@@ -44,43 +43,43 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_repo(children) do
-    if @env == :test, do: children, else: [BotArmyGtd.Repo | children]
+    if env() == :test, do: children, else: [BotArmyGtd.Repo | children]
   end
 
   defp maybe_add_task_store(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.TaskStore, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.TaskStore, []} | children]
   end
 
   defp maybe_add_project_store(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.ProjectStore, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.ProjectStore, []} | children]
   end
 
   defp maybe_add_plan_store(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.PlanStore, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.PlanStore, []} | children]
   end
 
   defp maybe_add_inbox_item_store(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.InboxItemStore, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.InboxItemStore, []} | children]
   end
 
   defp maybe_add_decomposition_store(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.DecompositionStore, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.DecompositionStore, []} | children]
   end
 
   defp maybe_add_log_entry_store(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.LogEntryStore, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.LogEntryStore, []} | children]
   end
 
   defp maybe_add_review_scheduler(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.ReviewScheduler, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.ReviewScheduler, []} | children]
   end
 
   defp maybe_add_consumer(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
   end
 
   defp maybe_add_health_responder(children) do
-    if @env == :test,
+    if env() == :test,
       do: children,
       else: [
         {BotArmyRuntime.Health.Responder,
@@ -89,19 +88,19 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_army_context_consumer(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.ArmyContextConsumer, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.ArmyContextConsumer, []} | children]
   end
 
   defp maybe_add_pulse_publisher(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.PulsePublisher, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.PulsePublisher, []} | children]
   end
 
   defp maybe_add_intent_evaluator(children) do
-    if @env == :test, do: children, else: [{BotArmyGtd.IntentEvaluator, []} | children]
+    if env() == :test, do: children, else: [{BotArmyGtd.IntentEvaluator, []} | children]
   end
 
   defp maybe_add_veto_listener(children) do
-    if @env == :test do
+    if env() == :test do
       children
     else
       veto_rules = [
@@ -125,6 +124,8 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_outcome_tracker(children) do
-    if @env == :test, do: children, else: [{BotArmyLearning.OutcomeTracker, []} | children]
+    if env() == :test,
+      do: children,
+      else: [{BotArmyLearning.OutcomeTracker, [name: :gtd_outcome_tracker]} | children]
   end
 end

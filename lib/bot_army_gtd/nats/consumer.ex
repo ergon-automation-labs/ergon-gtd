@@ -365,7 +365,14 @@ defmodule BotArmyGtd.NATS.Consumer do
         tid = extract_tenant_id(params)
         lim = min(params["limit"] || 100, 500)
         off = params["offset"] || 0
-        filters = %{"status" => params["status"], "labels" => params["labels"]}
+
+        filters = %{
+          "status" => params["status"],
+          "labels" => params["labels"],
+          "sort" => params["sort"],
+          "order" => params["order"]
+        }
+
         {tid, lim, off, filters}
 
       _ ->
@@ -1226,7 +1233,9 @@ defmodule BotArmyGtd.NATS.Consumer do
 
         p = %{
           "limit" => min(params["limit"] || 50, 500),
-          "offset" => params["offset"] || 0
+          "offset" => params["offset"] || 0,
+          "sort" => params["sort"],
+          "order" => params["order"]
         }
 
         {tid, q, f, p}

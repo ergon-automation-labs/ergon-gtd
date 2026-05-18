@@ -351,6 +351,7 @@ defmodule BotArmyGtd.TaskStore do
       |> Enum.filter(&(&1["tenant_id"] == tenant_id))
       |> Enum.reject(&(&1["status"] in ["deleted", "completed"]))
       |> apply_list_filters(filters)
+      |> sort_tasks(filters)
 
     {:reply, {:ok, tasks}, state_to_use}
   end
@@ -435,6 +436,7 @@ defmodule BotArmyGtd.TaskStore do
     filtered_tasks =
       filtered_tasks
       |> apply_filter(filters, no_project?)
+      |> sort_tasks(pagination)
 
     # Apply pagination
     total_count = length(filtered_tasks)
@@ -568,6 +570,22 @@ defmodule BotArmyGtd.TaskStore do
   end
 
   defp apply_list_labels_filter(tasks, _), do: tasks
+
+  defp sort_tasks(tasks, %{"sort" => sort_field, "order" => "desc"}) do
+    Enum.sort_by(tasks, &sort_value(&1, sort_field), :desc)
+  end
+
+  defp sort_tasks(tasks, %{"sort" => sort_field}) do
+    Enum.sort_by(tasks, &sort_value(&1, sort_field), :asc)
+  end
+
+  defp sort_tasks(tasks, _), do: tasks
+
+  defp sort_value(task, "created_at"), do: task["created_at"] || ""
+  defp sort_value(task, "updated_at"), do: task["updated_at"] || ""
+  defp sort_value(task, "title"), do: task["title"] || ""
+  defp sort_value(task, "priority"), do: task["priority"] || ""
+  defp sort_value(task, field), do: Map.get(task, field, "")
 
   defp changeset_error_reason(%Ecto.Changeset{} = changeset) do
     {:validation_error, Ecto.Changeset.traverse_errors(changeset, &translate_error/1)}
