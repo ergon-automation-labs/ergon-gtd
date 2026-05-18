@@ -44,6 +44,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     LogEntryHandler,
     PlanHandler,
     ProjectHandler,
+    SubtaskHandler,
     TaskHandler,
     WhatsNextHandler
   }
@@ -218,6 +219,11 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "gtd.goal.cancel",
       type: :request_reply,
       description: "Cancel a plan"
+    },
+    %{
+      subject: "dispatcher.subtask.intent.bot_army_gtd",
+      type: :subscribe,
+      description: "Dispatcher subtask intent (Phase 2: autonomous execution)"
     }
   ]
 
@@ -343,6 +349,10 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   defp route_event("claude.operation.success", message) do
     ClaudeHandler.handle_operation_success(message)
+  end
+
+  defp route_event("dispatcher.subtask.intent", message) do
+    SubtaskHandler.handle_subtask_intent(message)
   end
 
   defp route_event(event, _message) do
