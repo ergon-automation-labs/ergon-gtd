@@ -24,7 +24,7 @@ defmodule BotArmyGtd.Handlers.SubtaskHandler do
 
   require Logger
   alias BotArmyCore.Tenant
-  alias BotArmyGtd.{TaskStore, EventBuilder}
+  alias BotArmyGtd.{EventBuilder, TaskStore}
   alias BotArmyRuntime.NATS.Publisher
 
   defp task_store do
