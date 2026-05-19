@@ -289,6 +289,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
          }}
       end)
 
+      expect(BotArmyGtd.TaskStoreMock, :get, fn ^default_tenant_id, ^task_id ->
+        {:ok,
+         %{
+           "id" => task_id,
+           "title" => "Parent task",
+           "status" => "active"
+         }}
+      end)
+
       expect(BotArmyGtd.TaskStoreMock, :create, 3, fn payload when is_map(payload) ->
         {:ok,
          %{
@@ -333,6 +342,15 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
            "parent_task_id" => task_id,
            "subtask_list" => [],
            "status" => "completed"
+         }}
+      end)
+
+      expect(BotArmyGtd.TaskStoreMock, :get, fn ^default_tenant_id, ^task_id ->
+        {:ok,
+         %{
+           "id" => task_id,
+           "title" => "Parent task",
+           "status" => "active"
          }}
       end)
 

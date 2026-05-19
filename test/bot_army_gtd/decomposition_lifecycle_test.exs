@@ -130,6 +130,19 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
         {:ok, %{"id" => UUID.uuid4(), "title" => "Task"}}
       end)
 
+      expect(BotArmyGtd.TaskStoreMock, :get, fn ^default_tenant_id, task_id ->
+        if task_id do
+          {:ok,
+           %{
+             "id" => task_id,
+             "title" => "Parent task",
+             "status" => "active"
+           }}
+        else
+          {:error, :not_found}
+        end
+      end)
+
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, payload ->
         # Verify approval updated FSRS fields
         assert payload["status"] == "reviewed"
@@ -311,6 +324,19 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
 
       expect(BotArmyGtd.TaskStoreMock, :create, fn _ ->
         {:ok, %{"id" => UUID.uuid4(), "title" => "Task"}}
+      end)
+
+      expect(BotArmyGtd.TaskStoreMock, :get, fn ^default_tenant_id, task_id ->
+        if task_id do
+          {:ok,
+           %{
+             "id" => task_id,
+             "title" => "Parent task",
+             "status" => "active"
+           }}
+        else
+          {:error, :not_found}
+        end
       end)
 
       expect(BotArmyGtd.DecompositionStoreMock, :update, fn ^decomposition_id, payload ->
