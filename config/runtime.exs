@@ -5,7 +5,7 @@ import Config
 
 # Auto-start bot_army_runtime services (Registry, NATS connection, etc.)
 # This is needed when starting the application manually (not via supervisor)
-config :bot_army_runtime, :auto_start_services, true
+config :bot_army_library_runtime, :auto_start_services, true
 
 # Keep test traffic isolated from shared dev/prod NATS.
 nats_host = System.get_env("NATS_HOST", "localhost")
@@ -17,7 +17,7 @@ nats_port =
     String.to_integer(System.get_env("NATS_PORT", "4223"))
   end
 
-config :bot_army_runtime, :nats,
+config :bot_army_library_runtime, :nats,
   servers: [{nats_host, nats_port}],
   ping_interval: 5000,
   max_reconnect_attempts: 3,
@@ -52,9 +52,9 @@ config :bot_army_gtd, BotArmyGtd.Repo,
   ssl: false
 
 # Learning library configuration (uses same database as this bot)
-config :bot_army_learning, ecto_repos: [BotArmyLearning.Repo]
+config :bot_army_library_learning, ecto_repos: [BotArmyLearning.Repo]
 
-config :bot_army_learning, BotArmyLearning.Repo,
+config :bot_army_library_learning, BotArmyLearning.Repo,
   database:
     System.get_env("BOT_ARMY_GTD_DB_NAME") || System.get_env("DATABASE_NAME") || "ergon_gtd",
   hostname:
