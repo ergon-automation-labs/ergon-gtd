@@ -100,7 +100,13 @@ pipeline {
           cp -r ./release-artifact/* "${DEST}/"
 
           echo "Updating current symlink..."
-          ln -sfn "${DEST}" "${RELEASE_DIR}/current"
+          # Some tarballs extract with a top-level ${BOT_NAME}/ subdirectory.
+          # The wrapper script and release runner expect bin/ to live directly under current/.
+          if [ -d "${DEST}/${BOT_NAME}" ] && [ ! -d "${DEST}/bin" ]; then
+            ln -sfn "${DEST}/${BOT_NAME}" "${RELEASE_DIR}/current"
+          else
+            ln -sfn "${DEST}" "${RELEASE_DIR}/current"
+          fi
 
           echo "Deploying service via Salt..."
           salt_apply() {
@@ -140,7 +146,7 @@ pipeline {
           echo "==============================================="
 
           # Get the release binary path
-          RELEASE_BIN="${RELEASE_DIR}/current/${BOT_NAME}/bin/${BOT_NAME}"
+          RELEASE_BIN="${RELEASE_DIR}/current/bin/${BOT_NAME}"
 
           if [ ! -f "$RELEASE_BIN" ]; then
             echo "⚠️  Release binary not found at $RELEASE_BIN"
@@ -180,7 +186,7 @@ pipeline {
           echo "==============================================="
 
           # Get the release binary path
-          RELEASE_BIN="${RELEASE_DIR}/current/gtd_bot/bin/gtd_bot"
+          RELEASE_BIN="${RELEASE_DIR}/current/bin/gtd_bot"
 
           if [ ! -f "$RELEASE_BIN" ]; then
             echo "⚠️  Release binary not found at $RELEASE_BIN"
@@ -208,7 +214,7 @@ pipeline {
     success {
       sh '''
         # Extract version from the deployed release (not workspace - may be cleaned)
-        START_ERL="${RELEASE_DIR}/current/${BOT_NAME}/releases/start_erl.data"
+        START_ERL="${RELEASE_DIR}/current/releases/start_erl.data"
         if [ -f "$START_ERL" ]; then
           VERSION=$(awk '{print $2}' "$START_ERL")
         else
