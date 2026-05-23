@@ -3,7 +3,7 @@ import Config
 # Runtime configuration — evaluated when the app starts, not at compile time
 # This allows environment variables set by launchd/Salt to be read properly
 
-# Auto-start bot_army_runtime services (Registry, NATS connection, etc.)
+# Auto-start bot_army_library_runtime services (Registry, NATS connection, etc.)
 # This is needed when starting the application manually (not via supervisor)
 config :bot_army_library_runtime, :auto_start_services, true
 
