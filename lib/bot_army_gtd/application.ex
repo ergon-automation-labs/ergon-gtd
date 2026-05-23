@@ -126,6 +126,9 @@ defmodule BotArmyGtd.Application do
   defp maybe_add_outcome_tracker(children) do
     if env() == :test,
       do: children,
-      else: [{BotArmyLearning.OutcomeTracker, [name: :gtd_outcome_tracker]} | children]
+      else: [
+        {BotArmyLearning.OutcomeTracker, [name: :gtd_outcome_tracker, repo: BotArmyGtd.Repo]}
+        | children
+      ]
   end
 end
