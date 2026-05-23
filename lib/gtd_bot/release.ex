@@ -2,26 +2,21 @@ defmodule GtdBot.Release do
   @moduledoc """
   Release tasks for the GTD bot.
 
-  Used for running database migrations from a compiled OTP release:
+  Migrations are run via the shared BotArmyRuntime.Ecto.MigrationRunner:
 
       /path/to/gtd_bot/bin/gtd_bot eval 'GtdBot.Release.migrate()'
+
+  Called from Salt during bot deployment, before the bot starts.
   """
+
+  alias BotArmyRuntime.Ecto.MigrationRunner
 
   @app :bot_army_gtd
 
   def migrate do
-    load_app()
-
-    for repo <- repos() do
-      {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
-    end
-  end
-
-  defp repos do
-    Application.fetch_env!(@app, :ecto_repos)
-  end
-
-  defp load_app do
-    Application.load(@app)
+    MigrationRunner.run(
+      repo_module: GtdBot.Repo,
+      app_module: @app
+    )
   end
 end
