@@ -79,7 +79,7 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_health_responder(children) do
-    if env() == :test,
+    if env() == :test or Application.get_env(:bot_army_library_runtime, :pack_mode, false),
       do: children,
       else: [
         {BotArmyRuntime.Health.Responder,
