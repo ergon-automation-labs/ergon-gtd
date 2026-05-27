@@ -525,7 +525,8 @@ defmodule BotArmyGtd.NATS.Consumer do
             end)
             |> Enum.filter(&(not is_nil(&1)))
 
-          Registry.register("gtd", @subjects, @version)
+          deployment_status = Application.get_env(:bot_army_gtd, :deployment_status, "deployed")
+          Registry.register("gtd", @subjects, @version, deployment_status)
           Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
           {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
@@ -1334,7 +1335,8 @@ defmodule BotArmyGtd.NATS.Consumer do
   @impl true
   def handle_info(:registry_heartbeat, state) do
     if state.subscriptions != [] do
-      Registry.register("gtd", @subjects, @version)
+      deployment_status = Application.get_env(:bot_army_gtd, :deployment_status, "deployed")
+      Registry.register("gtd", @subjects, @version, deployment_status)
       BotArmyGtd.Gossip.maybe_vote_on_heartbeat()
       Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
     end

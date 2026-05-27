@@ -23,6 +23,9 @@ config :bot_army_gtd, BotArmyGtd.ReviewScheduler,
   # Every 5 minutes
   interval_seconds: 300
 
+# Deployment status for registry reporting
+config :bot_army_gtd, :deployment_status, "deployed"
+
 # Intent thresholds for autonomous heartbeat decisions
 config :bot_army_gtd, :intent_thresholds, %{
   stale_task_count: %{min: 3, weight: 0.6},
