@@ -237,7 +237,7 @@ defmodule BotArmyGtd.ReflectionEvaluator do
       goal_prefix <>
         "Decomposition quality is excellent. All criteria met: atomic subtasks, clean dependency order, complete prerequisites."
     else
-      goal_prefix <> "Issues found:\n" <> (issues |> Enum.map(&"  - #{&1}") |> Enum.join("\n"))
+      goal_prefix <> "Issues found:\n" <> Enum.map_join(issues, "\n", &"  - #{&1}")
     end
   end
 end
