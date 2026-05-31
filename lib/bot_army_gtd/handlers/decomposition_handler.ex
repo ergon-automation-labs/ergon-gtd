@@ -385,31 +385,57 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
     # Try Decomposer to see if we have a high-confidence template match
     case try_decomposer(parent_task_goal) do
       {:ok, decomposer_subtasks} ->
-        # Use orchestrator for deterministic template
-        Logger.info("[DecompositionHandler] Using Decomposer template for orchestration",
+        # Phase 2: Evaluate decomposition quality via reflection
+        {:ok, reflection_score, reflection_notes} =
+          BotArmyGtd.ReflectionEvaluator.evaluate_decomposition(
+            decomposer_subtasks,
+            parent_task_goal
+          )
+
+        Logger.info("[DecompositionHandler] Reflection evaluation complete",
           decomposition_id: decomposition_id,
+          reflection_score: reflection_score,
           goal: String.slice(parent_task_goal, 0, 50)
         )
 
-        orchestrator_outcome =
-          BotArmyDispatcher.Orchestrator.execute(decomposer_subtasks,
-            decomposition_id: decomposition_id
+        # Gate execution on reflection score >= 4
+        if reflection_score >= 4 do
+          # Use orchestrator for deterministic template
+          Logger.info("[DecompositionHandler] Using Decomposer template for orchestration",
+            decomposition_id: decomposition_id,
+            goal: String.slice(parent_task_goal, 0, 50)
           )
 
-        # Record success pattern in Learning for future reuse
-        case orchestrator_outcome do
-          {:ok, outcome} ->
-            BotArmyDispatcher.Learning.record_success(
-              parent_task_goal,
-              decomposer_subtasks,
-              %{
-                success_rate: outcome["success_rate"],
-                execution_time_ms: outcome["execution_time_ms"]
-              }
+          orchestrator_outcome =
+            BotArmyDispatcher.Orchestrator.execute(decomposer_subtasks,
+              decomposition_id: decomposition_id
             )
 
-          {:error, _} ->
-            nil
+          # Record success pattern in Learning for future reuse (with reflection score)
+          case orchestrator_outcome do
+            {:ok, outcome} ->
+              BotArmyDispatcher.Learning.record_success(
+                parent_task_goal,
+                decomposer_subtasks,
+                %{
+                  success_rate: outcome["success_rate"],
+                  execution_time_ms: outcome["execution_time_ms"],
+                  reflection_score: reflection_score
+                }
+              )
+
+            {:error, _} ->
+              nil
+          end
+        else
+          # Quality gate failed - log and don't execute
+          Logger.warning("[DecompositionHandler] Decomposition quality too low",
+            decomposition_id: decomposition_id,
+            reflection_score: reflection_score,
+            notes: reflection_notes
+          )
+
+          publish_error(event_id, :quality_gate_failed, reflection_notes)
         end
 
         # Still create GTD tasks for tracking/visibility
