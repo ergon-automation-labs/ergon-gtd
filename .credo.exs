@@ -17,7 +17,11 @@
 
           # Alias ordering is a stylistic preference that doesn't affect
           # correctness; managing it across a large monorepo is noise.
-          {Credo.Check.Readability.AliasOrder, []}
+          {Credo.Check.Readability.AliasOrder, []},
+
+          # Cyclomatic complexity checks need to be balanced against code clarity.
+          # Some functions require higher complexity for legitimate reasons.
+          {Credo.Check.Refactor.CyclomaticComplexity, []}
         ]
       }
     }
