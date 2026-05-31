@@ -38,6 +38,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     ClaudeHandler,
     ConversationHandler,
     DecompositionHandler,
+    HealthHandler,
     InboxHandler,
     InboxParsingHandler,
     LogEnrichmentHandler,
@@ -149,6 +150,11 @@ defmodule BotArmyGtd.NATS.Consumer do
       subject: "gtd.whats_next",
       type: :request_reply,
       description: "Get what's-next ranking snapshot"
+    },
+    %{
+      subject: "gtd.health",
+      type: :request_reply,
+      description: "Check system health - service metrics from aggregator"
     },
     %{
       subject: "gossip.poll.broadcast",
@@ -676,6 +682,25 @@ defmodule BotArmyGtd.NATS.Consumer do
         case WhatsNextHandler.handle_request(params) do
           {:ok, result} -> Reply.ok(result)
           {:error, reason} -> Reply.error(inspect(reason), :whats_next_failed)
+        end
+
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  # System health check - queries aggregator for service metrics
+  @impl true
+  def handle_info({:msg, %{topic: "gtd.health", reply_to: reply_to, body: body} = msg}, state)
+      when is_binary(reply_to) and reply_to != "" do
+    Tracing.with_consumer_span("gtd.health", Map.get(msg, :headers, []), fn ->
+      params = decode_body(body)
+
+      response =
+        case HealthHandler.handle_health_check(params) do
+          {:ok, health_data} -> Reply.ok(health_data)
+          {:error, reason} -> Reply.error(inspect(reason), :health_check_failed)
         end
 
       reply_traced(state.conn, reply_to, response)
