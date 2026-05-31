@@ -39,9 +39,25 @@ defmodule BotArmyGtd.ReflectionEvaluator do
     dependency_score = evaluate_dependencies(subtasks)
     completeness_score = evaluate_completeness(subtasks)
 
-    # Average the three criteria
+    # If any dimension scores <= 4, it indicates a problem
+    # Otherwise all dimensions are excellent (5), so overall is excellent
     scores = [atomicity_score, dependency_score, completeness_score]
-    avg_score = round(Enum.sum(scores) / length(scores))
+    min_score = Enum.min(scores)
+
+    avg_score =
+      cond do
+        # If any dimension is < 4, overall is poor
+        min_score < 4 ->
+          min(3, round(Enum.sum(scores) / length(scores)))
+
+        # If any dimension is exactly 4 (but not all 5), overall is good not excellent
+        min_score == 4 ->
+          3
+
+        # All dimensions are 5: excellent
+        true ->
+          5
+      end
 
     notes = build_notes(atomicity_score, dependency_score, completeness_score, goal)
 
@@ -97,21 +113,25 @@ defmodule BotArmyGtd.ReflectionEvaluator do
   # ============================================================================
 
   defp evaluate_dependencies(subtasks) do
-    # Check for dependency violations: a task depending on something later
-    dependency_errors =
-      Enum.with_index(subtasks)
-      |> Enum.count(fn {subtask, idx} ->
+    # Normalize subtasks to use order numbers for dependency checking
+    indexed_subtasks =
+      Enum.map(subtasks, fn subtask ->
+        order = Map.get(subtask, "order", 0)
         depends_on = Map.get(subtask, "depends_on", [])
+        {order, subtask, depends_on}
+      end)
 
-        # Check if any dependency is a forward reference
-        Enum.any?(depends_on, fn dep_idx ->
-          # Depending on self or later task
-          dep_idx >= idx
+    # Check for forward references: depends on a task with order >= current order
+    dependency_errors =
+      Enum.count(indexed_subtasks, fn {order, _subtask, depends_on} ->
+        Enum.any?(depends_on, fn dep_order ->
+          # Forward reference if dependency order >= current order
+          dep_order >= order
         end)
       end)
 
     # Check for disconnected components (orphaned subtasks)
-    orphan_count = count_orphaned_subtasks(subtasks)
+    orphan_count = count_orphaned_subtasks(indexed_subtasks)
 
     total_issues = dependency_errors + orphan_count
 
@@ -127,31 +147,21 @@ defmodule BotArmyGtd.ReflectionEvaluator do
     end
   end
 
-  defp count_orphaned_subtasks(subtasks) do
+  defp count_orphaned_subtasks(indexed_subtasks) do
+    # indexed_subtasks: [{order, subtask, depends_on}, ...]
     # Find tasks that have no incoming or outgoing edges
-    all_indices = Enum.map(subtasks, &get_index/1)
+    all_orders = Enum.map(indexed_subtasks, fn {order, _, _} -> order end)
 
-    Enum.count(subtasks, fn subtask ->
-      idx = get_index(subtask)
-      depends_on = Map.get(subtask, "depends_on", [])
-
+    Enum.count(indexed_subtasks, fn {order, _subtask, depends_on} ->
       # No incoming edges (not depended on by anyone)
-      no_incoming =
-        !Enum.any?(subtasks, fn other ->
-          other_deps = Map.get(other, "depends_on", [])
-          idx in other_deps
-        end)
+      no_incoming = !Enum.any?(indexed_subtasks, fn {_, _, other_deps} -> order in other_deps end)
 
       # No outgoing edges (doesn't depend on anyone)
       no_outgoing = Enum.empty?(depends_on)
 
-      # Orphaned if isolated (first/only task is OK)
-      no_incoming && no_outgoing && idx > 0
+      # Orphaned if isolated and not the first task
+      no_incoming && no_outgoing && order != Enum.min(all_orders)
     end)
-  end
-
-  defp get_index(subtask) do
-    Map.get(subtask, "order") || Map.get(subtask, "index", 0)
   end
 
   # ============================================================================
@@ -179,16 +189,34 @@ defmodule BotArmyGtd.ReflectionEvaluator do
         end
       end)
 
-    case missing_count do
-      # All prerequisites present
-      0 -> 5
-      # One missing detail
-      n when n == 1 -> 4
-      # Several missing
-      n when n <= div(length(subtasks), 2) -> 3
-      # Major gaps
-      _ -> 2
-    end
+    # Bonus: check if subtasks reference available resources (improves quality)
+    context_references =
+      Enum.count(subtasks, fn subtask ->
+        has_resource_reference(subtask)
+      end)
+
+    context_score_bonus =
+      if context_references > 0 do
+        min(1, div(context_references * 100, length(subtasks)) / 100)
+      else
+        0
+      end
+
+    base_score =
+      case missing_count do
+        # All prerequisites present
+        0 -> 5
+        # One missing detail
+        n when n == 1 -> 4
+        # Several missing
+        n when n <= div(length(subtasks), 2) -> 3
+        # Major gaps
+        _ -> 2
+      end
+
+    # Bonus up to +1 for referencing context
+    final_score = min(5, base_score + context_score_bonus)
+    round(final_score)
   end
 
   defp has_query(payload) do
@@ -203,6 +231,39 @@ defmodule BotArmyGtd.ReflectionEvaluator do
     Map.has_key?(payload, "content") || Map.has_key?(payload, "text")
   end
 
+  defp has_resource_reference(subtask) do
+    # Check if subtask references available resources (docs, runbooks, examples)
+    desc = Map.get(subtask, "description", "")
+    payload = Map.get(subtask, "payload", %{})
+
+    # Look for common resource references in description or payload
+    resource_keywords = [
+      "docs",
+      "guide",
+      "runbook",
+      "example",
+      "reference",
+      "template",
+      "sample",
+      "see also",
+      "find in",
+      "check",
+      "documented"
+    ]
+
+    desc_has_ref =
+      resource_keywords
+      |> Enum.any?(fn keyword -> String.contains?(String.downcase(desc), keyword) end)
+
+    payload_str = inspect(payload) |> String.downcase()
+    payload_has_ref = Enum.any?(resource_keywords, fn k -> String.contains?(payload_str, k) end)
+
+    # Bonus: if subtask has context enrichment, consider it referenced
+    has_context = Map.has_key?(subtask, "context")
+
+    desc_has_ref || payload_has_ref || has_context
+  end
+
   # ============================================================================
   # Build reflection notes
   # ============================================================================
@@ -211,21 +272,21 @@ defmodule BotArmyGtd.ReflectionEvaluator do
     issues = []
 
     issues =
-      if atomicity < 4 do
+      if atomicity <= 4 do
         issues ++ ["Some subtasks may be over-scoped (too big for 1-2 hours)"]
       else
         issues
       end
 
     issues =
-      if dependency < 4 do
+      if dependency <= 4 do
         issues ++ ["Dependency graph has issues (forward refs or orphans)"]
       else
         issues
       end
 
     issues =
-      if completeness < 4 do
+      if completeness <= 4 do
         issues ++ ["Some subtasks missing prerequisites (query, title, content)"]
       else
         issues

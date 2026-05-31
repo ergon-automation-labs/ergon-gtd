@@ -470,9 +470,31 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   end
 
   defp try_decomposer(goal) do
-    case BotArmyGtd.Decomposer.decompose_goal(goal) do
-      {:ok, subtasks} -> {:ok, subtasks}
-      {:error, _} -> :no_match
+    # Phase 2: Try pattern suggestion from Learning service first
+    case try_learn_pattern(goal) do
+      {:ok, subtasks} ->
+        {:ok, subtasks}
+
+      :no_match ->
+        # Fall back to Decomposer if no cached pattern
+        case BotArmyGtd.Decomposer.decompose_goal(goal) do
+          {:ok, subtasks} -> {:ok, subtasks}
+          {:error, _} -> :no_match
+        end
+    end
+  rescue
+    _ -> :no_match
+  end
+
+  defp try_learn_pattern(goal) do
+    case BotArmyDispatcher.Learning.suggest_pattern(goal) do
+      {:ok, pattern} ->
+        # Enrich pattern with context before returning
+        enriched_pattern = BotArmyDispatcher.ContextEnricher.enrich_pattern(pattern, goal)
+        {:ok, enriched_pattern["subtasks"]}
+
+      :no_match ->
+        :no_match
     end
   rescue
     _ -> :no_match
