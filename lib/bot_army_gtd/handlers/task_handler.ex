@@ -203,6 +203,9 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
               _ -> :ok
             end
 
+            # Publish outcome to aggregator for learning
+            publish_outcome_to_aggregator(task, tenant_id)
+
             :ok
 
           {:error, reason} ->
@@ -992,6 +995,43 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
       {:error, reason} ->
         Logger.warning("[TaskHandler] Failed to publish failure decision: #{inspect(reason)}")
+    end
+  end
+
+  defp publish_outcome_to_aggregator(task, tenant_id) do
+    try do
+      # Calculate time to complete in hours
+      time_hours =
+        case {task["inserted_at"], task["completed_at"]} do
+          {inserted_iso, completed_iso}
+          when is_binary(inserted_iso) and is_binary(completed_iso) ->
+            {:ok, inserted, _} = DateTime.from_iso8601(inserted_iso)
+            {:ok, completed, _} = DateTime.from_iso8601(completed_iso)
+            DateTime.diff(completed, inserted) / 3600.0
+
+          _ ->
+            0.0
+        end
+
+      # Determine task type from status or labels
+      task_type =
+        case task["status"] do
+          "inbox" -> "inbox"
+          "next_action" -> "next_action"
+          _ -> "general"
+        end
+
+      # Publish to aggregator for learning
+      BotArmyAggregator.GTDOutcomes.task_completed(
+        task["id"],
+        time_hours,
+        team_id: tenant_id,
+        user_email: System.get_env("USER_EMAIL", "system@bot-army.local"),
+        task_type: task_type
+      )
+    rescue
+      e ->
+        Logger.warning("Failed to publish outcome to aggregator: #{inspect(e)}")
     end
   end
 end
