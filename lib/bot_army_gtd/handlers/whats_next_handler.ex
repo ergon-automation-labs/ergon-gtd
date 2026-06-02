@@ -40,8 +40,8 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
     |> BotArmyGtd.Repo.all()
     |> Enum.map(&score_to_map/1)
   rescue
-    _ ->
-      Logger.warning("Could not query item scores for whats_next")
+    e ->
+      Logger.error("[WhatsNextHandler] Error querying scores: #{inspect(e)}")
       []
   end
 
