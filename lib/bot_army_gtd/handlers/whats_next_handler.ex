@@ -93,7 +93,9 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
   defp enrich_with_task_details(tenant_id, scores) do
     import Ecto.Query
 
-    Logger.debug("[enrich_with_task_details] Starting with #{length(scores)} scores")
+    Logger.info(
+      "[enrich_with_task_details] Starting with #{length(scores)} scores, tenant=#{inspect(tenant_id)}"
+    )
 
     # Convert string UUIDs to binary safely
     task_ids =
@@ -106,14 +108,14 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
       end)
       |> Enum.reject(&is_nil/1)
 
-    Logger.debug("[enrich_with_task_details] Converted to #{length(task_ids)} task_ids")
+    Logger.info("[enrich_with_task_details] Converted to #{length(task_ids)} task_ids")
 
     if Enum.empty?(task_ids) do
-      Logger.debug("[enrich_with_task_details] No task_ids, returning scores as-is")
+      Logger.info("[enrich_with_task_details] No task_ids, returning scores as-is")
       Enum.sort_by(scores, & &1["why_next_score"], :desc)
     else
-      Logger.debug(
-        "[enrich_with_task_details] Querying #{length(task_ids)} tasks for tenant #{tenant_id}"
+      Logger.info(
+        "[enrich_with_task_details] Querying #{length(task_ids)} tasks for tenant #{inspect(tenant_id)}"
       )
 
       tasks =
@@ -121,14 +123,14 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
         |> where([t], t.tenant_id == ^tenant_id and t.id in ^task_ids)
         |> BotArmyGtd.Repo.all()
 
-      Logger.debug("[enrich_with_task_details] Query returned #{length(tasks)} tasks")
+      Logger.info("[enrich_with_task_details] Query returned #{length(tasks)} tasks")
 
       task_map =
         tasks
         |> Enum.map(&task_to_map/1)
         |> Map.new(fn t -> {t["id"], t} end)
 
-      Logger.debug("[enrich_with_task_details] Built map with #{map_size(task_map)} entries")
+      Logger.info("[enrich_with_task_details] Built map with #{map_size(task_map)} entries")
 
       # Merge scores with task details
       Enum.map(scores, fn score ->
