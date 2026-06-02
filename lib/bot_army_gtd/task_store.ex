@@ -337,15 +337,22 @@ defmodule BotArmyGtd.TaskStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
-          Logger.info("TaskStore recovered #{length(tasks)} tasks from database")
+          tasks =
+            BotArmyGtd.Schemas.Task
+            |> where([t], t.status in ["active", "inbox"])
+            |> BotArmyGtd.Repo.all()
+
+          Logger.info("TaskStore recovered #{length(tasks)} active/inbox tasks from database")
 
           Enum.reduce(tasks, %{}, fn task, acc ->
             Map.put(acc, task.id |> to_string(), schema_to_map(task))
           end)
         rescue
-          _ ->
-            Logger.warning("TaskStore recovery from database failed, using empty state")
+          e ->
+            Logger.warning(
+              "TaskStore recovery from database failed, using empty state: #{inspect(e)}"
+            )
+
             state
         end
       else
@@ -369,15 +376,22 @@ defmodule BotArmyGtd.TaskStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
-          Logger.info("TaskStore recovered #{length(tasks)} tasks from database")
+          tasks =
+            BotArmyGtd.Schemas.Task
+            |> where([t], t.status in ["active", "inbox"])
+            |> BotArmyGtd.Repo.all()
+
+          Logger.info("TaskStore recovered #{length(tasks)} active/inbox tasks from database")
 
           Enum.reduce(tasks, %{}, fn task, acc ->
             Map.put(acc, task.id |> to_string(), schema_to_map(task))
           end)
         rescue
-          _ ->
-            Logger.warning("TaskStore recovery from database failed, using empty state")
+          e ->
+            Logger.warning(
+              "TaskStore recovery from database failed, using empty state: #{inspect(e)}"
+            )
+
             state
         end
       else
@@ -407,15 +421,21 @@ defmodule BotArmyGtd.TaskStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
-          Logger.info("TaskStore recovered #{length(tasks)} tasks from database for search")
+          tasks =
+            BotArmyGtd.Schemas.Task
+            |> where([t], t.status in ["active", "inbox"])
+            |> BotArmyGtd.Repo.all()
+
+          Logger.info(
+            "TaskStore recovered #{length(tasks)} active/inbox tasks from database for search"
+          )
 
           Enum.reduce(tasks, %{}, fn task, acc ->
             Map.put(acc, task.id |> to_string(), schema_to_map(task))
           end)
         rescue
-          _ ->
-            Logger.warning("TaskStore recovery from database failed for search")
+          e ->
+            Logger.warning("TaskStore recovery from database failed for search: #{inspect(e)}")
             state
         end
       else
