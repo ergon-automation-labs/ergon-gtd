@@ -26,11 +26,25 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
     task_scores = Enum.filter(scores, &(&1["item_type"] == "task"))
     enriched_tasks = enrich_with_task_details(tenant_id, task_scores)
 
+    human_section = categorize_tasks(enriched_tasks, limit_human)
+
+    human_section =
+      Map.put(
+        human_section,
+        "due_today",
+        filter_due_today(enriched_tasks) |> Enum.take(limit_human)
+      )
+
+    human_section =
+      Map.put(
+        human_section,
+        "in_progress",
+        filter_status(enriched_tasks, "active") |> Enum.take(limit_human)
+      )
+
     result = %{
-      "human" => categorize_tasks(enriched_tasks, limit_human),
+      "human" => human_section,
       "bots" => %{"task" => Enum.take(enriched_tasks, limit_bot)},
-      "due_today" => filter_due_today(enriched_tasks) |> Enum.take(limit_human),
-      "in_progress" => filter_status(enriched_tasks, "active") |> Enum.take(limit_human),
       "snapshot_generated_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "score_version" => "v1"
     }
