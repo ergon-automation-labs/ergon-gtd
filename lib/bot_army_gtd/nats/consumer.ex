@@ -456,6 +456,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:error, {:already_started, :logger}} -> :ok
     end
 
+    IO.puts("DEBUG: Consumer.init called, starting GenServer")
     Logger.info("Starting GTD NATS consumer")
 
     state = %{
@@ -471,10 +472,13 @@ defmodule BotArmyGtd.NATS.Consumer do
   @impl true
   def handle_continue(:connect, state) do
     # credo:disable-for-next-line
+    IO.puts("DEBUG: handle_continue(:connect) called")
+
     try do
       case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
         {:ok, conn} ->
           Connection.subscribe_to_status()
+          IO.puts("DEBUG: Got NATS connection, subscribing to topics")
           Logger.info("Connected to NATS, subscribing to GTD topics")
 
           subscriptions =
