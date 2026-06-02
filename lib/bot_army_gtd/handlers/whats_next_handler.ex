@@ -3,6 +3,7 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
   Handler for the "what's next" query to suggest the next best action for users.
   """
   require Logger
+  alias Ecto.UUID
 
   def handle_request(message) do
     params = message["payload"] || message
@@ -21,9 +22,15 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
     scores = query_scores(tenant_id)
     Logger.debug("[WhatsNextHandler] scores count=#{length(scores)}")
 
+    # Enrich scores with full task details for categorization
+    task_scores = Enum.filter(scores, &(&1["item_type"] == "task"))
+    enriched_tasks = enrich_with_task_details(tenant_id, task_scores)
+
     result = %{
-      "human" => build_ranked_snapshot(scores, "human", include, limit_human),
-      "bots" => build_ranked_snapshot(scores, "bot", include, limit_bot),
+      "human" => categorize_tasks(enriched_tasks, limit_human),
+      "bots" => %{"task" => Enum.take(enriched_tasks, limit_bot)},
+      "due_today" => filter_due_today(enriched_tasks) |> Enum.take(limit_human),
+      "in_progress" => filter_status(enriched_tasks, "active") |> Enum.take(limit_human),
       "snapshot_generated_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "score_version" => "v1"
     }
@@ -64,5 +71,60 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
       "why_next_reason" => score.why_next_reason,
       "top_evidence" => score.top_evidence || []
     }
+  end
+
+  defp enrich_with_task_details(tenant_id, scores) do
+    import Ecto.Query
+
+    task_ids = Enum.map(scores, &UUID.string_to_binary!(&1["item_id"]))
+
+    tasks =
+      BotArmyGtd.Schemas.Task
+      |> where([t], t.tenant_id == ^tenant_id and t.id in ^task_ids)
+      |> BotArmyGtd.Repo.all()
+      |> Enum.map(&task_to_map/1)
+      |> Map.new(fn t -> {t["id"], t} end)
+
+    # Merge scores with task details
+    Enum.map(scores, fn score ->
+      Map.merge(score, Map.get(tasks, score["item_id"], %{}))
+    end)
+    |> Enum.sort_by(& &1["why_next_score"], :desc)
+  rescue
+    _ -> []
+  end
+
+  defp task_to_map(task) do
+    %{
+      "id" => UUID.binary_to_string!(task.id),
+      "title" => task.title,
+      "status" => task.status,
+      "due_date" => task.due_date,
+      "priority" => task.priority
+    }
+  end
+
+  defp categorize_tasks(tasks, limit) do
+    %{
+      "task" => Enum.take(tasks, limit)
+    }
+  end
+
+  defp filter_due_today(tasks) do
+    today = DateTime.utc_now() |> DateTime.to_date()
+
+    Enum.filter(tasks, fn t ->
+      case t["due_date"] do
+        %DateTime{} = dt -> DateTime.to_date(dt) == today
+        nil -> false
+        _ -> false
+      end
+    end)
+    |> Enum.sort_by(& &1["why_next_score"], :desc)
+  end
+
+  defp filter_status(tasks, status) do
+    Enum.filter(tasks, &(&1["status"] == status))
+    |> Enum.sort_by(& &1["why_next_score"], :desc)
   end
 end
