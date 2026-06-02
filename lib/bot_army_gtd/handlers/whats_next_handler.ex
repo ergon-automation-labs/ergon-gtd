@@ -183,13 +183,12 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
         uuid
 
       :error ->
-        # If it's a string like "default", convert to the default UUID
-        case tenant_id do
-          "default" -> UUID.string_to_binary!("00000000-0000-0000-0000-000000000001")
-          _ -> UUID.string_to_binary!("00000000-0000-0000-0000-000000000001")
-        end
+        # If it's a string, use the default UUID
+        <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1>>
     end
   end
 
-  defp normalize_tenant_id(_), do: UUID.string_to_binary!("00000000-0000-0000-0000-000000000001")
+  defp normalize_tenant_id(_) do
+    <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1>>
+  end
 end
