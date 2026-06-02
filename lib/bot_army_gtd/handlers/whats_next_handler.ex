@@ -90,6 +90,8 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
   defp enrich_with_task_details(tenant_id, scores) do
     import Ecto.Query
 
+    Logger.debug("[enrich_with_task_details] Starting with #{length(scores)} scores")
+
     # Convert string UUIDs to binary safely
     task_ids =
       scores
@@ -101,26 +103,40 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
       end)
       |> Enum.reject(&is_nil/1)
 
+    Logger.debug("[enrich_with_task_details] Converted to #{length(task_ids)} task_ids")
+
     if Enum.empty?(task_ids) do
-      # No valid task IDs, return scores as-is
+      Logger.debug("[enrich_with_task_details] No task_ids, returning scores as-is")
       Enum.sort_by(scores, & &1["why_next_score"], :desc)
     else
+      Logger.debug(
+        "[enrich_with_task_details] Querying #{length(task_ids)} tasks for tenant #{tenant_id}"
+      )
+
       tasks =
         BotArmyGtd.Schemas.Task
         |> where([t], t.tenant_id == ^tenant_id and t.id in ^task_ids)
         |> BotArmyGtd.Repo.all()
+
+      Logger.debug("[enrich_with_task_details] Query returned #{length(tasks)} tasks")
+
+      task_map =
+        tasks
         |> Enum.map(&task_to_map/1)
         |> Map.new(fn t -> {t["id"], t} end)
 
+      Logger.debug("[enrich_with_task_details] Built map with #{map_size(task_map)} entries")
+
       # Merge scores with task details
       Enum.map(scores, fn score ->
-        Map.merge(score, Map.get(tasks, score["item_id"], %{}))
+        Map.merge(score, Map.get(task_map, score["item_id"], %{}))
       end)
       |> Enum.sort_by(& &1["why_next_score"], :desc)
     end
   rescue
     e ->
-      Logger.error("[WhatsNextHandler] Error enriching tasks: #{inspect(e)}")
+      Logger.error("[enrich_with_task_details] Error: #{inspect(e)}")
+      Logger.error("[enrich_with_task_details] Backtrace: #{inspect(__STACKTRACE__)}")
       Enum.sort_by(scores, & &1["why_next_score"], :desc)
   end
 
