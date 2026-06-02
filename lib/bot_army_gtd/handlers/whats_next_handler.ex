@@ -146,8 +146,20 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
   end
 
   defp task_to_map(task) do
+    task_id =
+      case task.id do
+        id when is_binary(id) and byte_size(id) == 16 ->
+          UUID.binary_to_string(id)
+
+        id when is_binary(id) ->
+          id
+
+        _ ->
+          to_string(task.id)
+      end
+
     %{
-      "id" => UUID.binary_to_string!(task.id),
+      "id" => task_id,
       "title" => task.title,
       "status" => task.status,
       "due_date" => task.due_date,
