@@ -23,6 +23,12 @@ config :bot_army_gtd, BotArmyGtd.ReviewScheduler,
   # Every 5 minutes
   interval_seconds: 300
 
+# ScoreScheduler: Periodic recomputation of item scores for "what's next" ranking
+config :bot_army_gtd, BotArmyGtd.ScoreScheduler,
+  enabled: true,
+  # Every 5 minutes
+  interval_seconds: 300
+
 # Deployment status for registry reporting
 config :bot_army_gtd, :deployment_status, "deployed"
 

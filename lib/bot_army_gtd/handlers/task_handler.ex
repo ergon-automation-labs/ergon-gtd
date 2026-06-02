@@ -101,6 +101,13 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         maybe_trigger_decomposition(task, stamped_payload, tenant_id, user_id)
         maybe_notify_para(task, tenant_id)
 
+        # Score the new task for "what's next" ranking
+        try do
+          BotArmyGtd.ScoreEngine.recompute_item(tenant_id, "task", task["id"])
+        rescue
+          _ -> :ok
+        end
+
         {:ok, task}
 
       {:error, reason} ->
@@ -141,6 +148,13 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
             new_status = task["status"]
             notify_status_change_if_needed(task, old_status, new_status)
+
+            # Update score when task changes
+            try do
+              BotArmyGtd.ScoreEngine.recompute_item(tenant_id, "task", task_id)
+            rescue
+              _ -> :ok
+            end
 
             :ok
 
@@ -205,6 +219,13 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
             # Publish outcome to aggregator for learning
             publish_outcome_to_aggregator(task, tenant_id)
+
+            # Update score: task is now completed
+            try do
+              BotArmyGtd.ScoreEngine.recompute_item(tenant_id, "task", task_id)
+            rescue
+              _ -> :ok
+            end
 
             :ok
 
