@@ -154,19 +154,26 @@ defmodule BotArmyGtd.TaskStore do
   @impl true
   def init(_opts) do
     Logger.info("TaskStore started")
-    # Load all tasks from database into GenServer state
+    # Load active/inbox tasks from database into GenServer state
+    # Only load actionable tasks to avoid memory bloat (7000+ tasks in DB)
     # Gracefully handle database unavailability (e.g., in tests)
     state =
       try do
-        tasks = BotArmyGtd.Repo.all(BotArmyGtd.Schemas.Task)
+        tasks =
+          BotArmyGtd.Schemas.Task
+          |> where([t], t.status in ["active", "inbox"])
+          |> BotArmyGtd.Repo.all()
+
+        count = length(tasks)
+        Logger.info("TaskStore loaded #{count} active/inbox tasks from database")
 
         Enum.reduce(tasks, %{}, fn task, acc ->
           Map.put(acc, task.id |> to_string(), schema_to_map(task))
         end)
       rescue
-        _ ->
+        e ->
           Logger.warning(
-            "Could not load tasks from database (database unavailable). Starting with empty state."
+            "Could not load tasks from database: #{inspect(e)}. Starting with empty state."
           )
 
           %{}
