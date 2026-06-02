@@ -13,7 +13,9 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
 
     limit_human = Map.get(params, "limit_human", 5)
     limit_bot = Map.get(params, "limit_bot", 10)
-    include = Map.get(params, "include", ["tasks", "projects", "goals"])
+    # Normalize plural form to singular (tasks -> task, etc.)
+    raw_include = Map.get(params, "include", ["task", "project", "goal"])
+    include = Enum.map(raw_include, &String.replace_suffix(&1, "s", ""))
 
     scores = query_scores(tenant_id)
 
