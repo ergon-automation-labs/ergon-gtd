@@ -75,12 +75,7 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_consumer(children) do
-    result = if env() == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
-    require Logger
-
-    File.write("/tmp/gtd_startup.log", "maybe_add_consumer called: env=#{env()}\n", [:append])
-
-    result
+    if env() == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
   end
 
   defp maybe_add_health_responder(children) do
