@@ -8,9 +8,12 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
   def handle_request(message) do
     params = message["payload"] || message
 
-    tenant_id =
+    tenant_id_raw =
       params["tenant_id"] || message["tenant_id"] ||
         Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
+
+    # Convert tenant_id to UUID if it's a string
+    tenant_id = normalize_tenant_id(tenant_id_raw)
 
     limit_human = Map.get(params, "limit_human", 5)
     limit_bot = Map.get(params, "limit_bot", 10)
@@ -18,7 +21,7 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
     raw_include = Map.get(params, "include", ["task", "project", "goal"])
     include = Enum.map(raw_include, &String.replace_suffix(&1, "s", ""))
 
-    Logger.debug("[WhatsNextHandler] tenant=#{tenant_id}, include=#{inspect(include)}")
+    Logger.debug("[WhatsNextHandler] tenant=#{inspect(tenant_id)}, include=#{inspect(include)}")
     scores = query_scores(tenant_id)
     Logger.debug("[WhatsNextHandler] scores count=#{length(scores)}")
 
@@ -173,4 +176,20 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
     Enum.filter(tasks, &(&1["status"] == status))
     |> Enum.sort_by(& &1["why_next_score"], :desc)
   end
+
+  defp normalize_tenant_id(tenant_id) when is_binary(tenant_id) and tenant_id != "" do
+    case UUID.cast(tenant_id) do
+      {:ok, uuid} ->
+        uuid
+
+      :error ->
+        # If it's a string like "default", convert to the default UUID
+        case tenant_id do
+          "default" -> UUID.string_to_binary!("00000000-0000-0000-0000-000000000001")
+          _ -> UUID.string_to_binary!("00000000-0000-0000-0000-000000000001")
+        end
+    end
+  end
+
+  defp normalize_tenant_id(_), do: UUID.string_to_binary!("00000000-0000-0000-0000-000000000001")
 end
