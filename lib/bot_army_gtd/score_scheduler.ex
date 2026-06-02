@@ -79,7 +79,7 @@ defmodule BotArmyGtd.ScoreScheduler do
   defp initialize_missing_scores do
     # Find tasks that don't have scores yet
     sql = """
-    INSERT INTO gtd_item_scores (id, item_type, item_id, tenant_id, why_next_score, why_next_reason, inserted_at, updated_at)
+    INSERT INTO gtd_item_scores (id, item_type, item_id, tenant_id, why_next_score, why_next_reason, top_evidence, inserted_at, updated_at)
     SELECT
       gen_random_uuid(),
       'task',
@@ -91,6 +91,7 @@ defmodule BotArmyGtd.ScoreScheduler do
         ELSE 0.0
       END,
       'initialized: status=' || t.status,
+      '[]'::jsonb,
       now(),
       now()
     FROM tasks t
