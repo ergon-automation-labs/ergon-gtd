@@ -456,6 +456,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:error, {:already_started, :logger}} -> :ok
     end
 
+    Logger.error("🟢 Consumer.init called, opts=#{inspect(opts)}")
     Logger.info("Starting GTD NATS consumer")
 
     state = %{
@@ -470,10 +471,12 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @impl true
   def handle_continue(:connect, state) do
+    Logger.error("🟡 handle_continue(:connect) called")
     # credo:disable-for-next-line
     try do
       case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
         {:ok, conn} ->
+          Logger.error("🟡 Got NATS connection, subscribing...")
           Connection.subscribe_to_status()
           Logger.info("Connected to NATS, subscribing to GTD topics")
 
@@ -536,14 +539,17 @@ defmodule BotArmyGtd.NATS.Consumer do
           Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
           {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
-        {:error, _reason} ->
-          Logger.warning("NATS connection not ready, will retry")
+        {:error, reason} ->
+          Logger.error("🔴 NATS connection error: #{inspect(reason)}, will retry")
           Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
           {:noreply, state}
       end
     rescue
       e ->
-        Logger.error("Error connecting to NATS: #{inspect(e)}")
+        Logger.error(
+          "🔴 Rescue: Error connecting to NATS: #{inspect(e)}, stacktrace: #{inspect(__STACKTRACE__)}"
+        )
+
         Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
         {:noreply, state}
     catch

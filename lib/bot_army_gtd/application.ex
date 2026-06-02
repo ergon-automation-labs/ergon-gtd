@@ -75,7 +75,14 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_consumer(children) do
-    if env() == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
+    result = if env() == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
+    require Logger
+
+    Logger.error(
+      "🔵 maybe_add_consumer: env=#{env()}, adding_consumer=#{env() != :test}, children_count=#{length(result)}"
+    )
+
+    result
   end
 
   defp maybe_add_health_responder(children) do
