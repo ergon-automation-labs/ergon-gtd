@@ -30,7 +30,6 @@ defmodule BotArmyGtd.Schemas.Task do
     field(:plan_id, Ecto.UUID)
     field(:plan_order, :integer)
     field(:verified_by, :string)
-    field(:domain, :string)
 
     # Relationships - parent_task_id stored as string for simplicity
     belongs_to(:parent_task, __MODULE__,
