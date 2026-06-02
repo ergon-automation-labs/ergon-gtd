@@ -17,7 +17,9 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
     raw_include = Map.get(params, "include", ["task", "project", "goal"])
     include = Enum.map(raw_include, &String.replace_suffix(&1, "s", ""))
 
+    Logger.debug("[WhatsNextHandler] tenant=#{tenant_id}, include=#{inspect(include)}")
     scores = query_scores(tenant_id)
+    Logger.debug("[WhatsNextHandler] scores count=#{length(scores)}")
 
     result = %{
       "human" => build_ranked_snapshot(scores, "human", include, limit_human),
