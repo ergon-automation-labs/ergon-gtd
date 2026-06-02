@@ -21,9 +21,9 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
     raw_include = Map.get(params, "include", ["task", "project", "goal"])
     include = Enum.map(raw_include, &String.replace_suffix(&1, "s", ""))
 
-    Logger.debug("[WhatsNextHandler] tenant=#{inspect(tenant_id)}, include=#{inspect(include)}")
+    Logger.info("[WhatsNextHandler] tenant=#{inspect(tenant_id)}, include=#{inspect(include)}")
     scores = query_scores(tenant_id)
-    Logger.debug("[WhatsNextHandler] scores count=#{length(scores)}")
+    Logger.info("[WhatsNextHandler] scores count=#{length(scores)}")
 
     # Enrich scores with full task details for categorization
     task_scores = Enum.filter(scores, &(&1["item_type"] == "task"))
