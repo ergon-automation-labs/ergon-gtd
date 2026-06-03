@@ -156,6 +156,20 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
               _ -> :ok
             end
 
+            # Fire-and-forget context signal for context broker
+            task_context = task["context"]
+
+            if task["status"] == "active" and is_binary(task_context) and task_context != "" do
+              try do
+                BotArmyRuntime.NATS.Publisher.publish("context.signal.gtd", %{
+                  "task" => task["title"],
+                  "context" => task_context
+                })
+              rescue
+                _ -> :ok
+              end
+            end
+
             :ok
 
           {:error, reason} ->
