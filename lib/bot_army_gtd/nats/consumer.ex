@@ -451,12 +451,16 @@ defmodule BotArmyGtd.NATS.Consumer do
   @impl true
   def init(opts) do
     # Ensure Logger is started (in case we're starting before app full initialization)
+    IO.puts("DEBUG: GTD.NATS.Consumer.init called!")
+
     case :application.start(:logger) do
       :ok -> :ok
       {:error, {:already_started, :logger}} -> :ok
     end
 
+    IO.puts("DEBUG: GTD.NATS.Consumer about to log info message")
     Logger.info("Starting GTD NATS consumer")
+    IO.puts("DEBUG: GTD.NATS.Consumer logged info message")
 
     state = %{
       subscriptions: [],
@@ -470,13 +474,18 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @impl true
   def handle_continue(:connect, state) do
+    IO.puts("DEBUG: GTD.NATS.Consumer.handle_continue called")
     # credo:disable-for-next-line
     try do
+      IO.puts("DEBUG: GTD.NATS.Consumer calling GenServer.call for NATS connection")
+
       case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
         {:ok, conn} ->
+          IO.puts("DEBUG: Got NATS connection successfully!")
           Logger.debug("Got NATS connection, subscribing to topics")
           Connection.subscribe_to_status()
           Logger.info("Connected to NATS, subscribing to GTD topics")
+          IO.puts("DEBUG: About to subscribe to GTD topics")
 
           subscriptions =
             [
@@ -538,6 +547,8 @@ defmodule BotArmyGtd.NATS.Consumer do
           {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
         {:error, reason} ->
+          IO.puts("DEBUG: NATS connection error: #{inspect(reason)}")
+
           File.write("/tmp/gtd_startup.log", "NATS connection error: #{inspect(reason)}\n", [
             :append
           ])
