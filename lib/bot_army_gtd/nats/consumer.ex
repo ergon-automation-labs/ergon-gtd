@@ -477,83 +477,101 @@ defmodule BotArmyGtd.NATS.Consumer do
     IO.puts(:stderr, "[Consumer.handle_continue] Starting NATS connection attempt")
     # credo:disable-for-next-line
     try do
-      IO.puts(:stderr, "[Consumer.handle_continue] Calling GenServer.call for NATS.Connection")
+      IO.puts(:stderr, "[Consumer.handle_continue] Checking if NATS.Connection process exists")
 
-      case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
-        {:ok, conn} ->
-          Logger.debug("Got NATS connection, subscribing to topics")
-          Connection.subscribe_to_status()
-          Logger.info("Connected to NATS, subscribing to GTD topics")
+      # Check if NATS.Connection is running before calling it
+      case GenServer.whereis(BotArmyRuntime.NATS.Connection) do
+        nil ->
+          IO.puts(:stderr, "[Consumer] NATS.Connection not ready yet, will retry")
 
-          subscriptions =
-            [
-              "gtd.inbox.add",
-              "gtd.task.create",
-              "gtd.task.update",
-              "gtd.task.complete",
-              "gtd.task.command.defer",
-              "gtd.task.command.delete",
-              "gtd.task.decompose",
-              "gtd.decomposition.approve",
-              "gtd.decomposition.reject",
-              "gtd.decomposition.review",
-              "gtd.decomposition.request_review",
-              "gtd.project.create",
-              "gtd.project.update",
-              "gtd.project.list",
-              "gtd.log.create",
-              "events.llm.response.parsed",
-              "events.llm.chain.completed",
-              "gtd.task.list",
-              "gtd.task.get",
-              "gtd.task.search",
-              "gtd.decomposition.list_due",
-              "claude.task.create",
-              "claude.operation.success",
-              "conv.request.gtd.>",
-              "conv.mailbox.gtd",
-              "conv.followup.>",
-              "ops.deploy.>",
-              "gossip.intent.proposed",
-              "gossip.social.invite",
-              "gossip.poll.broadcast",
-              "gtd.whats_next",
-              "synapse.army_general.poll.broadcast",
-              "gtd.army.opinion.vote",
-              "gtd.para.backfill",
-              "gtd.para.cleanup",
-              "gtd.review.weekly",
-              "gtd.review.inbox_aging",
-              "gtd.review.coherence"
-            ]
-            |> Enum.map(fn subject ->
-              case Gnat.sub(conn, self(), subject) do
-                {:ok, sub} ->
-                  Logger.info("GTD consumer subscribed to #{subject}")
-                  sub
-
-                {:error, reason} ->
-                  Logger.error("Failed to subscribe to #{subject}: #{inspect(reason)}")
-                  nil
-              end
-            end)
-            |> Enum.filter(&(not is_nil(&1)))
-
-          deployment_status = Application.get_env(:bot_army_gtd, :deployment_status, "deployed")
-          Registry.register("gtd", @subjects, @version, deployment_status)
-          Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
-          {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
-
-        {:error, reason} ->
-          IO.puts(:stderr, "[Consumer] NATS connection error: #{inspect(reason)}, will retry")
-
-          File.write("/tmp/gtd_startup.log", "NATS connection error: #{inspect(reason)}\n", [
-            :append
-          ])
-
-          Logger.error("NATS connection error: #{inspect(reason)}, will retry")
+          Logger.warning("NATS.Connection not available, will retry in 5s")
           Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
           {:noreply, state}
+
+        _ ->
+          IO.puts(
+            :stderr,
+            "[Consumer.handle_continue] NATS.Connection exists, calling get_connection"
+          )
+
+          case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
+            {:ok, conn} ->
+              Logger.debug("Got NATS connection, subscribing to topics")
+              Connection.subscribe_to_status()
+              Logger.info("Connected to NATS, subscribing to GTD topics")
+
+              subscriptions =
+                [
+                  "gtd.inbox.add",
+                  "gtd.task.create",
+                  "gtd.task.update",
+                  "gtd.task.complete",
+                  "gtd.task.command.defer",
+                  "gtd.task.command.delete",
+                  "gtd.task.decompose",
+                  "gtd.decomposition.approve",
+                  "gtd.decomposition.reject",
+                  "gtd.decomposition.review",
+                  "gtd.decomposition.request_review",
+                  "gtd.project.create",
+                  "gtd.project.update",
+                  "gtd.project.list",
+                  "gtd.log.create",
+                  "events.llm.response.parsed",
+                  "events.llm.chain.completed",
+                  "gtd.task.list",
+                  "gtd.task.get",
+                  "gtd.task.search",
+                  "gtd.decomposition.list_due",
+                  "claude.task.create",
+                  "claude.operation.success",
+                  "conv.request.gtd.>",
+                  "conv.mailbox.gtd",
+                  "conv.followup.>",
+                  "ops.deploy.>",
+                  "gossip.intent.proposed",
+                  "gossip.social.invite",
+                  "gossip.poll.broadcast",
+                  "gtd.whats_next",
+                  "synapse.army_general.poll.broadcast",
+                  "gtd.army.opinion.vote",
+                  "gtd.para.backfill",
+                  "gtd.para.cleanup",
+                  "gtd.review.weekly",
+                  "gtd.review.inbox_aging",
+                  "gtd.review.coherence"
+                ]
+                |> Enum.map(fn subject ->
+                  case Gnat.sub(conn, self(), subject) do
+                    {:ok, sub} ->
+                      Logger.info("GTD consumer subscribed to #{subject}")
+                      sub
+
+                    {:error, reason} ->
+                      Logger.error("Failed to subscribe to #{subject}: #{inspect(reason)}")
+                      nil
+                  end
+                end)
+                |> Enum.filter(&(not is_nil(&1)))
+
+              deployment_status =
+                Application.get_env(:bot_army_gtd, :deployment_status, "deployed")
+
+              Registry.register("gtd", @subjects, @version, deployment_status)
+              Process.send_after(self(), :registry_heartbeat, @registry_heartbeat_ms)
+              {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
+
+            {:error, reason} ->
+              IO.puts(:stderr, "[Consumer] NATS connection error: #{inspect(reason)}, will retry")
+
+              File.write("/tmp/gtd_startup.log", "NATS connection error: #{inspect(reason)}\n", [
+                :append
+              ])
+
+              Logger.error("NATS connection error: #{inspect(reason)}, will retry")
+              Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
+              {:noreply, state}
+          end
       end
     rescue
       e ->
