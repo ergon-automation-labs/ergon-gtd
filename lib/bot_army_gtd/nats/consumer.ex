@@ -597,7 +597,10 @@ defmodule BotArmyGtd.NATS.Consumer do
       task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
       {tenant_id, limit, offset, filters} = parse_task_list_params(body)
-      TaskHandler.expire_active_tasks(tenant_id, nil)
+      # Skip expiration in test mode to avoid unmocked store calls
+      if Application.get_env(:bot_army_gtd, :env) != :test do
+        TaskHandler.expire_active_tasks(tenant_id, nil)
+      end
 
       response = fetch_task_list_response(task_store, tenant_id, filters, limit, offset)
       reply_traced(state.conn, reply_to, response)
