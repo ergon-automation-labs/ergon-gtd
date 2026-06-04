@@ -73,8 +73,7 @@ defmodule BotArmyGtd.Schemas.Task do
       :generated_by_ai,
       :plan_id,
       :plan_order,
-      :verified_by,
-      :domain
+      :verified_by
     ])
     |> validate_required([:title, :tenant_id])
     |> validate_inclusion(:status, [

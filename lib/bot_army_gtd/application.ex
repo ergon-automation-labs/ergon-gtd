@@ -17,8 +17,6 @@ defmodule BotArmyGtd.Application do
 
   @impl true
   def start(_type, _args) do
-    IO.puts("DEBUG: Application.start called, env=#{env()}")
-
     base_children =
       []
       |> maybe_add_repo()
@@ -82,13 +80,7 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_consumer(children) do
-    result = if env() == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
-
-    IO.puts(
-      "DEBUG: maybe_add_consumer returning #{if env() == :test, do: "empty (test mode)", else: "with consumer"}, children count: #{length(result)}"
-    )
-
-    result
+    if env() == :test, do: children, else: [{BotArmyGtd.NATS.Consumer, []} | children]
   end
 
   defp maybe_add_health_responder(children) do
