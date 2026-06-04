@@ -586,8 +586,9 @@ defmodule BotArmyGtd.NATS.Consumer do
   end
 
   @impl true
-  def handle_info({:msg, %{topic: "gtd.task.list", reply_to: reply_to, body: body} = msg}, state)
-      when is_binary(reply_to) and reply_to != "" do
+  def handle_info({:msg, %{topic: "gtd.task.list", body: body} = msg}, state) do
+    reply_to = Map.get(msg, :reply_to)
+
     Tracing.with_consumer_span("gtd.task.list", Map.get(msg, :headers, []), fn ->
       task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
@@ -595,7 +596,10 @@ defmodule BotArmyGtd.NATS.Consumer do
       TaskHandler.expire_active_tasks(tenant_id, nil)
 
       response = fetch_task_list_response(task_store, tenant_id, filters, limit, offset)
-      reply_traced(state.conn, reply_to, response)
+
+      if is_binary(reply_to) and reply_to != "" do
+        reply_traced(state.conn, reply_to, response)
+      end
     end)
 
     {:noreply, state}
