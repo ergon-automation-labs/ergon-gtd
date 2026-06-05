@@ -18,5 +18,29 @@ defmodule GtdBot.Release do
       repo_module: GtdBot.Repo,
       app_module: @app
     )
+
+    # Also run aggregator migrations
+    run_aggregator_migrations()
+  end
+
+  defp run_aggregator_migrations do
+    load_app(:bot_army_aggregator)
+
+    case Ecto.Migrator.run(GtdBot.Repo, aggregator_migrations_path(), :up, all: true) do
+      {:ok, _migrations, _} ->
+        :ok
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  defp aggregator_migrations_path do
+    :bot_army_aggregator
+    |> Application.app_dir("priv/repo/migrations")
+  end
+
+  defp load_app(app) do
+    Application.load(app)
   end
 end
