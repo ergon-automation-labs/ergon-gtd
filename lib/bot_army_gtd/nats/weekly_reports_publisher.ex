@@ -138,27 +138,21 @@ defmodule BotArmyGtd.NATS.WeeklyReportsPublisher do
   defp render_report_from_map(_), do: ""
 
   defp render_metrics(metrics) when is_map(metrics) do
-    metrics
-    |> Enum.map(fn {name, data} ->
+    Enum.map_join(metrics, "\n", fn {name, data} ->
       "- **#{humanize(name)}**: #{format_value(data)}"
     end)
-    |> Enum.join("\n")
   end
 
   defp render_metrics(_), do: "No metrics available"
 
-  defp render_anomalies(anomalies) when is_list(anomalies) and length(anomalies) > 0 do
-    anomalies
-    |> Enum.map(fn anomaly -> "- #{anomaly}" end)
-    |> Enum.join("\n")
+  defp render_anomalies([_ | _] = anomalies) do
+    Enum.map_join(anomalies, "\n", fn anomaly -> "- #{anomaly}" end)
   end
 
   defp render_anomalies(_), do: "No anomalies detected — everything looks normal."
 
-  defp render_highlights(highlights) when is_list(highlights) and length(highlights) > 0 do
-    highlights
-    |> Enum.map(fn highlight -> "- #{highlight}" end)
-    |> Enum.join("\n")
+  defp render_highlights([_ | _] = highlights) do
+    Enum.map_join(highlights, "\n", fn highlight -> "- #{highlight}" end)
   end
 
   defp render_highlights(_), do: "Continue your current pace."
