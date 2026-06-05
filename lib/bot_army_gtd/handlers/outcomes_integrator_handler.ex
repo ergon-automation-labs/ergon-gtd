@@ -154,7 +154,7 @@ defmodule BotArmyGtd.Handlers.OutcomesIntegratorHandler do
     value = metrics.value || 0
 
     case value do
-      l when l > 10000 ->
+      l when l > 10_000 ->
         Logger.warning("High latency detected, may affect task responsiveness",
           latency_ms: l
         )
