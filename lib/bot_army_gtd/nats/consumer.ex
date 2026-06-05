@@ -456,8 +456,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:error, {:already_started, :logger}} -> :ok
     end
 
-    Logger.info("🟢 [Consumer.init] Starting GTD NATS consumer")
-    IO.puts(:stderr, "[Consumer.init] Starting GTD NATS consumer")
+    Logger.info("Starting GTD NATS consumer")
 
     state = %{
       subscriptions: [],
@@ -466,34 +465,21 @@ defmodule BotArmyGtd.NATS.Consumer do
       opts: opts
     }
 
-    Logger.info("🟢 [Consumer.init] Returning state, triggering :connect")
-    IO.puts(:stderr, "[Consumer.init] Returning state, triggering :connect")
     {:ok, state, {:continue, :connect}}
   end
 
   @impl true
   def handle_continue(:connect, state) do
-    Logger.info("🔵 [Consumer.handle_continue] Starting NATS connection attempt")
-    IO.puts(:stderr, "[Consumer.handle_continue] Starting NATS connection attempt")
     # credo:disable-for-next-line
     try do
-      IO.puts(:stderr, "[Consumer.handle_continue] Checking if NATS.Connection process exists")
-
       # Check if NATS.Connection is running before calling it
       case GenServer.whereis(BotArmyRuntime.NATS.Connection) do
         nil ->
-          IO.puts(:stderr, "[Consumer] NATS.Connection not ready yet, will retry")
-
           Logger.warning("NATS.Connection not available, will retry in 5s")
           Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
           {:noreply, state}
 
         _ ->
-          IO.puts(
-            :stderr,
-            "[Consumer.handle_continue] NATS.Connection exists, calling get_connection"
-          )
-
           case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
             {:ok, conn} ->
               Logger.debug("Got NATS connection, subscribing to topics")
