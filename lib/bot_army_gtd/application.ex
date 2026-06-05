@@ -29,6 +29,8 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_review_scheduler()
       |> maybe_add_score_scheduler()
       |> maybe_add_army_context_consumer()
+      |> maybe_add_outcomes_consumer()
+      |> maybe_add_weekly_reports_publisher()
       |> maybe_add_pulse_publisher()
       |> maybe_add_intent_evaluator()
       |> maybe_add_veto_listener()
@@ -94,6 +96,16 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_army_context_consumer(children) do
     if env() == :test, do: children, else: [{BotArmyGtd.ArmyContextConsumer, []} | children]
+  end
+
+  defp maybe_add_outcomes_consumer(children) do
+    if env() == :test, do: children, else: [{BotArmyGtd.NATS.OutcomesConsumer, []} | children]
+  end
+
+  defp maybe_add_weekly_reports_publisher(children) do
+    if env() == :test,
+      do: children,
+      else: [{BotArmyGtd.NATS.WeeklyReportsPublisher, []} | children]
   end
 
   defp maybe_add_pulse_publisher(children) do
