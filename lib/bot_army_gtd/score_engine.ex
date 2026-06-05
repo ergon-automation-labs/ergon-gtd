@@ -7,6 +7,7 @@ defmodule BotArmyGtd.ScoreEngine do
 
   alias BotArmyGtd.Repo
   alias BotArmyGtd.Schemas.{ItemScore, ItemSignal}
+  alias BotArmyGtd.BehavioralLearningIntegrator
 
   def recompute_from_vote_totals(tenant_id, vote_totals) do
     Enum.each(vote_totals, fn total ->
@@ -16,10 +17,26 @@ defmodule BotArmyGtd.ScoreEngine do
 
   def recompute_item(tenant_id, item_type, item_id) do
     signals = query_signals(tenant_id, item_type, item_id)
-    score = aggregate_score(signals)
+    base_score = aggregate_score(signals)
     evidence = build_evidence(signals)
 
-    upsert_score(tenant_id, item_type, item_id, score, evidence)
+    # Apply behavioral learning adjustments (safe fallback to base score)
+    final_score =
+      try do
+        task_data = %{
+          "item_type" => item_type,
+          "item_id" => item_id,
+          "signal_count" => length(signals)
+        }
+
+        BehavioralLearningIntegrator.adjust_score_for_behavior(base_score, task_data, tenant_id)
+      rescue
+        _ ->
+          Logger.debug("[ScoreEngine] Behavioral learning unavailable, using base score")
+          base_score
+      end
+
+    upsert_score(tenant_id, item_type, item_id, final_score, evidence)
   end
 
   defp query_signals(tenant_id, item_type, item_id) do

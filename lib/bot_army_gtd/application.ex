@@ -31,6 +31,7 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_army_context_consumer()
       |> maybe_add_outcomes_consumer()
       |> maybe_add_weekly_reports_publisher()
+      |> maybe_add_anomaly_alerter()
       |> maybe_add_pulse_publisher()
       |> maybe_add_intent_evaluator()
       |> maybe_add_veto_listener()
@@ -106,6 +107,10 @@ defmodule BotArmyGtd.Application do
     if env() == :test,
       do: children,
       else: [{BotArmyGtd.NATS.WeeklyReportsPublisher, []} | children]
+  end
+
+  defp maybe_add_anomaly_alerter(children) do
+    if env() == :test, do: children, else: [{BotArmyGtd.NATS.AnomalyAlerter, []} | children]
   end
 
   defp maybe_add_pulse_publisher(children) do
