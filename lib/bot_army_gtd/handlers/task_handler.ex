@@ -18,7 +18,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
   require Logger
 
-  alias BotArmyCore.Tenant
+  alias BotArmyCore.{Tenant, OutcomesEmitter}
 
   alias BotArmyGtd.{
     Adapters.ConfidenceAdapter,
@@ -230,6 +230,13 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
             rescue
               _ -> :ok
             end
+
+            # Emit outcomes event for measurement system
+            OutcomesEmitter.emit_task_completed(task_id, %{
+              "bot_name" => "gtd",
+              "priority" => task["priority"],
+              "project_id" => task["project_id"]
+            })
 
             # Publish outcome to aggregator for learning
             publish_outcome_to_aggregator(task, tenant_id)

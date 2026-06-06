@@ -509,6 +509,7 @@ defmodule BotArmyGtd.NATS.Consumer do
                   "gtd.task.get",
                   "gtd.task.search",
                   "gtd.decomposition.list_due",
+                  "gtd.health",
                   "claude.task.create",
                   "claude.operation.success",
                   "conv.request.gtd.>",
@@ -525,7 +526,11 @@ defmodule BotArmyGtd.NATS.Consumer do
                   "gtd.para.cleanup",
                   "gtd.review.weekly",
                   "gtd.review.inbox_aging",
-                  "gtd.review.coherence"
+                  "gtd.review.coherence",
+                  "gtd.goal.plan",
+                  "gtd.goal.status",
+                  "gtd.goal.list",
+                  "gtd.goal.cancel"
                 ]
                 |> Enum.map(fn subject ->
                   case Gnat.sub(conn, self(), subject) do
