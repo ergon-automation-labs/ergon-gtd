@@ -51,59 +51,11 @@ config :bot_army_gtd, BotArmyGtd.Repo,
 # Logger with correlation_id + bot-specific metadata
 config :logger,
   level: :info,
-  backends: [:console],
-  default_formatter:
-    {BotArmyRuntime.LoggerFormatter,
-     [
-       :action,
-       :score,
-       :reason,
-       :item_type,
-       :item_id,
-       :error,
-       :template,
-       :goal,
-       :subject,
-       :timeout_ms,
-       :strategy,
-       :method,
-       :subtask_count
-     ]}
+  backends: [:console]
 
 config :logger, :console,
-  format:
-    {BotArmyRuntime.LoggerFormatter,
-     [
-       :action,
-       :score,
-       :reason,
-       :item_type,
-       :item_id,
-       :error,
-       :template,
-       :goal,
-       :subject,
-       :timeout_ms,
-       :strategy,
-       :method,
-       :subtask_count
-     ]},
-  metadata: [
-    :correlation_id,
-    :action,
-    :score,
-    :reason,
-    :item_type,
-    :item_id,
-    :error,
-    :template,
-    :goal,
-    :subject,
-    :timeout_ms,
-    :strategy,
-    :method,
-    :subtask_count
-  ]
+  format: {BotArmyRuntime.LoggerFormatter, []},
+  metadata: [:correlation_id]
 
 # Import environment-specific config
 if File.exists?("config/#{Mix.env()}.exs") do
