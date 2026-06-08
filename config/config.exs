@@ -48,9 +48,48 @@ config :bot_army_gtd, BotArmyGtd.Repo,
   password: "postgres",
   pool_size: 10
 
-# Logger metadata keys used by IntentEvaluator, PlanAdapter, and other modules
-config :logger, :default_formatter,
+# Logger with correlation_id + bot-specific metadata
+config :logger,
+  level: :info,
+  backends: [:console],
+  default_formatter:
+    {BotArmyRuntime.LoggerFormatter,
+     [
+       :action,
+       :score,
+       :reason,
+       :item_type,
+       :item_id,
+       :error,
+       :template,
+       :goal,
+       :subject,
+       :timeout_ms,
+       :strategy,
+       :method,
+       :subtask_count
+     ]}
+
+config :logger, :console,
+  format:
+    {BotArmyRuntime.LoggerFormatter,
+     [
+       :action,
+       :score,
+       :reason,
+       :item_type,
+       :item_id,
+       :error,
+       :template,
+       :goal,
+       :subject,
+       :timeout_ms,
+       :strategy,
+       :method,
+       :subtask_count
+     ]},
   metadata: [
+    :correlation_id,
     :action,
     :score,
     :reason,
