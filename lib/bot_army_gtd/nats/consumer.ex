@@ -1450,7 +1450,8 @@ defmodule BotArmyGtd.NATS.Consumer do
   alias BotArmyGtd.Schemas.TaskCheckout
 
   defp handle_task_checkout(body) do
-    with {:ok, params} <- Jason.decode(body),
+    with {:ok, envelope} <- Jason.decode(body),
+         params when is_map(params) <- envelope["payload"],
          task_id when is_binary(task_id) and task_id != "" <- params["task_id"],
          agent_id when is_binary(agent_id) and agent_id != "" <- params["agent_id"] do
       agent_type = Map.get(params, "agent_type", "unknown")
@@ -1507,7 +1508,8 @@ defmodule BotArmyGtd.NATS.Consumer do
   end
 
   defp handle_task_checkin(body) do
-    with {:ok, params} <- Jason.decode(body),
+    with {:ok, envelope} <- Jason.decode(body),
+         params when is_map(params) <- envelope["payload"],
          task_id when is_binary(task_id) and task_id != "" <- params["task_id"],
          agent_id when is_binary(agent_id) and agent_id != "" <- params["agent_id"] do
       force = Map.get(params, "force", false)
@@ -1547,7 +1549,8 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   defp handle_task_checkout_query(body) do
     case Jason.decode(body) do
-      {:ok, params} ->
+      {:ok, envelope} ->
+        params = envelope["payload"] || %{}
         task_id = params["task_id"]
         agent_id = params["agent_id"]
 
