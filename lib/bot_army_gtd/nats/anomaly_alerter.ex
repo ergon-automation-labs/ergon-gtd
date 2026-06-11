@@ -76,6 +76,11 @@ defmodule BotArmyGtd.NATS.AnomalyAlerter do
   end
 
   @impl true
+  def handle_info(:retry_subscribe, state) do
+    {:noreply, state, {:continue, :subscribe}}
+  end
+
+  @impl true
   def handle_info({:msg, %{body: body}}, state) do
     Task.start(fn -> process_metric(body) end)
     {:noreply, state}
