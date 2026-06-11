@@ -15,7 +15,7 @@ defmodule GtdBot.Release do
 
   def migrate do
     MigrationRunner.run(
-      repo_module: GtdBot.Repo,
+      repo_module: BotArmyGtd.Repo,
       app_module: @app
     )
 
