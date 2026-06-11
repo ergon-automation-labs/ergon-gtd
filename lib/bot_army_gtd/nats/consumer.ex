@@ -31,6 +31,7 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   use GenServer
   require Logger
+  import Ecto.Query
 
   alias BotArmyCore.NATS.Decoder
 
@@ -68,6 +69,21 @@ defmodule BotArmyGtd.NATS.Consumer do
     %{subject: "gtd.task.get", type: :request_reply, description: "Get single task by id"},
     %{subject: "gtd.task.search", type: :request_reply, description: "Search tasks"},
     %{subject: "gtd.task.complete", type: :request_reply, description: "Complete a task"},
+    %{
+      subject: "gtd.task.checkout",
+      type: :request_reply,
+      description: "Checkout a task for active work"
+    },
+    %{
+      subject: "gtd.task.checkin",
+      type: :request_reply,
+      description: "Checkin a previously checked-out task"
+    },
+    %{
+      subject: "gtd.task.checkout.query",
+      type: :request_reply,
+      description: "Query active checkout for task or agent"
+    },
     %{subject: "gtd.task.command.defer", type: :subscribe, description: "Defer task"},
     %{subject: "gtd.task.command.delete", type: :subscribe, description: "Delete task"},
     %{subject: "gtd.task.decompose", type: :subscribe, description: "Decompose task"},
@@ -508,6 +524,9 @@ defmodule BotArmyGtd.NATS.Consumer do
                   "gtd.task.list",
                   "gtd.task.get",
                   "gtd.task.search",
+                  "gtd.task.checkout",
+                  "gtd.task.checkin",
+                  "gtd.task.checkout.query",
                   "gtd.decomposition.list_due",
                   "gtd.health",
                   "claude.task.create",
@@ -675,6 +694,48 @@ defmodule BotArmyGtd.NATS.Consumer do
             Reply.error(inspect(reason), :search_failed)
         end
 
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.task.checkout", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    Tracing.with_consumer_span("gtd.task.checkout", Map.get(msg, :headers, []), fn ->
+      response = handle_task_checkout(body)
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.task.checkin", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    Tracing.with_consumer_span("gtd.task.checkin", Map.get(msg, :headers, []), fn ->
+      response = handle_task_checkin(body)
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.task.checkout.query", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    Tracing.with_consumer_span("gtd.task.checkout.query", Map.get(msg, :headers, []), fn ->
+      response = handle_task_checkout_query(body)
       reply_traced(state.conn, reply_to, response)
     end)
 
@@ -1380,6 +1441,190 @@ defmodule BotArmyGtd.NATS.Consumer do
 
       {:error, reason} ->
         Reply.error(inspect(reason), :not_found)
+    end
+  end
+
+  # --- Task checkout helpers ---
+
+  alias BotArmyGtd.Repo
+  alias BotArmyGtd.Schemas.TaskCheckout
+
+  defp handle_task_checkout(body) do
+    with {:ok, params} <- Jason.decode(body),
+         task_id when is_binary(task_id) and task_id != "" <- params["task_id"],
+         agent_id when is_binary(agent_id) and agent_id != "" <- params["agent_id"] do
+      agent_type = Map.get(params, "agent_type", "unknown")
+
+      metadata =
+        Map.get(params, "metadata", %{"repo" => params["repo"], "branch" => params["branch"]})
+
+      now = DateTime.utc_now()
+
+      # Check if already checked out
+      existing =
+        Repo.one(
+          from(c in TaskCheckout,
+            where: c.task_id == ^task_id and is_nil(c.checked_in_at),
+            order_by: [desc: c.checked_out_at],
+            limit: 1
+          )
+        )
+
+      cond do
+        is_nil(existing) ->
+          checkout = %TaskCheckout{
+            task_id: task_id,
+            agent_id: agent_id,
+            agent_type: agent_type,
+            checked_out_at: now,
+            metadata: metadata
+          }
+
+          case Repo.insert(checkout) do
+            {:ok, _record} ->
+              Reply.ok(%{"status" => "checked_out", "task_id" => task_id, "agent_id" => agent_id})
+
+            {:error, changeset} ->
+              Reply.error("Checkout failed: #{inspect(changeset.errors)}", :db_error)
+          end
+
+        existing.agent_id == agent_id ->
+          # Same agent — extend checkout (update timestamp)
+          Repo.update!(Ecto.Changeset.change(existing, checked_out_at: now))
+          Reply.ok(%{"status" => "extended", "task_id" => task_id, "agent_id" => agent_id})
+
+        true ->
+          # Different agent — conflict
+          Reply.error(
+            "Task #{task_id} already checked out by #{existing.agent_id} (#{existing.agent_type}) at #{existing.checked_out_at}",
+            :conflict
+          )
+      end
+    else
+      _ ->
+        Reply.error("task_id and agent_id required", :validation_error)
+    end
+  end
+
+  defp handle_task_checkin(body) do
+    with {:ok, params} <- Jason.decode(body),
+         task_id when is_binary(task_id) and task_id != "" <- params["task_id"],
+         agent_id when is_binary(agent_id) and agent_id != "" <- params["agent_id"] do
+      force = Map.get(params, "force", false)
+
+      now = DateTime.utc_now()
+
+      existing =
+        Repo.one(
+          from(c in TaskCheckout,
+            where: c.task_id == ^task_id and is_nil(c.checked_in_at),
+            order_by: [desc: c.checked_out_at],
+            limit: 1
+          )
+        )
+
+      cond do
+        is_nil(existing) ->
+          Reply.error("Task #{task_id} is not checked out", :not_found)
+
+        existing.agent_id == agent_id or force == true ->
+          Repo.update!(Ecto.Changeset.change(existing, checked_in_at: now))
+
+          status = if force, do: "force_checked_in", else: "checked_in"
+          Reply.ok(%{"status" => status, "task_id" => task_id, "agent_id" => agent_id})
+
+        true ->
+          Reply.error(
+            "Task #{task_id} checked out by #{existing.agent_id}. Use force=true to override.",
+            :conflict
+          )
+      end
+    else
+      _ ->
+        Reply.error("task_id and agent_id required", :validation_error)
+    end
+  end
+
+  defp handle_task_checkout_query(body) do
+    case Jason.decode(body) do
+      {:ok, params} ->
+        task_id = params["task_id"]
+        agent_id = params["agent_id"]
+
+        cond do
+          is_binary(task_id) and task_id != "" ->
+            checkout =
+              Repo.one(
+                from(c in TaskCheckout,
+                  where: c.task_id == ^task_id and is_nil(c.checked_in_at),
+                  order_by: [desc: c.checked_out_at],
+                  limit: 1
+                )
+              )
+
+            if checkout do
+              Reply.ok(%{
+                "checked_out" => true,
+                "task_id" => checkout.task_id,
+                "agent_id" => checkout.agent_id,
+                "agent_type" => checkout.agent_type,
+                "checked_out_at" => DateTime.to_iso8601(checkout.checked_out_at),
+                "metadata" => checkout.metadata
+              })
+            else
+              Reply.ok(%{"checked_out" => false, "task_id" => task_id})
+            end
+
+          is_binary(agent_id) and agent_id != "" ->
+            checkouts =
+              Repo.all(
+                from(c in TaskCheckout,
+                  where: c.agent_id == ^agent_id and is_nil(c.checked_in_at),
+                  order_by: [desc: c.checked_out_at]
+                )
+              )
+
+            Reply.ok(%{
+              "agent_id" => agent_id,
+              "checked_out_count" => length(checkouts),
+              "checkouts" =>
+                Enum.map(checkouts, fn c ->
+                  %{
+                    "task_id" => c.task_id,
+                    "agent_type" => c.agent_type,
+                    "checked_out_at" => DateTime.to_iso8601(c.checked_out_at),
+                    "metadata" => c.metadata
+                  }
+                end)
+            })
+
+          true ->
+            # No filters — return all active checkouts
+            checkouts =
+              Repo.all(
+                from(c in TaskCheckout,
+                  where: is_nil(c.checked_in_at),
+                  order_by: [desc: c.checked_out_at]
+                )
+              )
+
+            Reply.ok(%{
+              "total_active" => length(checkouts),
+              "checkouts" =>
+                Enum.map(checkouts, fn c ->
+                  %{
+                    "task_id" => c.task_id,
+                    "agent_id" => c.agent_id,
+                    "agent_type" => c.agent_type,
+                    "checked_out_at" => DateTime.to_iso8601(c.checked_out_at),
+                    "metadata" => c.metadata
+                  }
+                end)
+            })
+        end
+
+      _ ->
+        Reply.error("Invalid JSON body", :validation_error)
     end
   end
 

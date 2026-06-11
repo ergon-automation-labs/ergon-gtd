@@ -75,9 +75,9 @@ defmodule BotArmyGtd.BehavioralLearningIntegrator do
       {:error, reason} ->
         {:error, reason}
     end
-  rescue
-    e ->
-      {:error, inspect(e)}
+  catch
+    :exit, reason ->
+      {:error, "nats_connection_unavailable: #{inspect(reason)}"}
   end
 
   defp request_payload(task_data) do
