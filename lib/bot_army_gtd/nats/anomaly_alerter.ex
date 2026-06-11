@@ -21,6 +21,7 @@ defmodule BotArmyGtd.NATS.AnomalyAlerter do
   @completion_rate_drop_threshold 30.0
   @latency_spike_threshold 50.0
   @accuracy_drop_threshold 20.0
+  @reconnect_delay_ms 5000
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
