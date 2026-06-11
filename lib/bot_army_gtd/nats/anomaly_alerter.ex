@@ -43,10 +43,33 @@ defmodule BotArmyGtd.NATS.AnomalyAlerter do
     ]
 
     subscriptions =
-      Enum.map(topics, fn topic ->
-        {:ok, sub} = Gnat.sub(:nats_connection, self(), topic)
-        {topic, sub}
+      Enum.flat_map(topics, fn topic ->
+        try do
+          case Gnat.sub(:nats_connection, self(), topic) do
+            {:ok, sub} ->
+              [{topic, sub}]
+
+            {:error, reason} ->
+              Logger.warning(
+                "[AnomalyAlerter] Failed to subscribe to #{topic}: #{inspect(reason)}"
+              )
+
+              []
+          end
+        catch
+          :exit, reason ->
+            Logger.warning("[AnomalyAlerter] NATS unavailable for #{topic}: #{inspect(reason)}")
+            []
+        end
       end)
+
+    if subscriptions == [] do
+      Logger.warning(
+        "[AnomalyAlerter] No subscriptions active, retrying in #{@reconnect_delay_ms}ms"
+      )
+
+      Process.send_after(self(), :retry_subscribe, @reconnect_delay_ms)
+    end
 
     {:noreply, %{state | subscriptions: subscriptions}}
   end
