@@ -14,6 +14,8 @@ defmodule BotArmyGtd.NATS.OutcomesConsumer do
 
   alias BotArmyGtd.Handlers.OutcomesIntegratorHandler
 
+  @reconnect_delay_ms 5000
+
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -34,12 +36,41 @@ defmodule BotArmyGtd.NATS.OutcomesConsumer do
     ]
 
     subscriptions =
-      Enum.map(topics, fn topic ->
-        {:ok, sub} = Gnat.sub(:nats_connection, self(), topic)
-        {topic, sub}
+      Enum.flat_map(topics, fn topic ->
+        try do
+          case Gnat.sub(:nats_connection, self(), topic) do
+            {:ok, sub} ->
+              [{topic, sub}]
+
+            {:error, reason} ->
+              Logger.warning(
+                "[OutcomesConsumer] Failed to subscribe to #{topic}: #{inspect(reason)}"
+              )
+
+              []
+          end
+        catch
+          :exit, reason ->
+            Logger.warning("[OutcomesConsumer] NATS unavailable for #{topic}: #{inspect(reason)}")
+
+            []
+        end
       end)
 
+    if subscriptions == [] do
+      Logger.warning(
+        "[OutcomesConsumer] No subscriptions active, retrying in #{@reconnect_delay_ms}ms"
+      )
+
+      Process.send_after(self(), :retry_subscribe, @reconnect_delay_ms)
+    end
+
     {:noreply, %{state | subscriptions: subscriptions}}
+  end
+
+  @impl true
+  def handle_info(:retry_subscribe, state) do
+    {:noreply, state, {:continue, :subscribe}}
   end
 
   @impl true

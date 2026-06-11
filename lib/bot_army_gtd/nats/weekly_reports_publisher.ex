@@ -15,6 +15,8 @@ defmodule BotArmyGtd.NATS.WeeklyReportsPublisher do
   use GenServer
   require Logger
 
+  @reconnect_delay_ms 5000
+
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -28,10 +30,38 @@ defmodule BotArmyGtd.NATS.WeeklyReportsPublisher do
   def handle_continue(:subscribe, state) do
     Logger.info("[WeeklyReportsPublisher] Subscribing to outcomes.report.weekly")
 
-    {:ok, sub} = Gnat.sub(:nats_connection, self(), "outcomes.report.weekly")
-    subscriptions = [{"outcomes.report.weekly", sub}]
+    subscriptions =
+      try do
+        case Gnat.sub(:nats_connection, self(), "outcomes.report.weekly") do
+          {:ok, sub} ->
+            [{"outcomes.report.weekly", sub}]
+
+          {:error, reason} ->
+            Logger.warning("[WeeklyReportsPublisher] Failed to subscribe: #{inspect(reason)}")
+
+            []
+        end
+      catch
+        :exit, reason ->
+          Logger.warning("[WeeklyReportsPublisher] NATS unavailable: #{inspect(reason)}")
+
+          []
+      end
+
+    if subscriptions == [] do
+      Logger.warning(
+        "[WeeklyReportsPublisher] No subscription active, retrying in #{@reconnect_delay_ms}ms"
+      )
+
+      Process.send_after(self(), :retry_subscribe, @reconnect_delay_ms)
+    end
 
     {:noreply, %{state | subscriptions: subscriptions}}
+  end
+
+  @impl true
+  def handle_info(:retry_subscribe, state) do
+    {:noreply, state, {:continue, :subscribe}}
   end
 
   @impl true
