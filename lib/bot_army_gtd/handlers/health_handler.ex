@@ -57,56 +57,55 @@ defmodule BotArmyGtd.Handlers.HealthHandler do
     type = payload["type"] || "summary"
     days = payload["days"] || 7
 
-    if Application.get_env(:bot_army_gtd, :aggregator_enabled) do
-      query_aggregator_health(type, days)
-    else
-      {:ok,
-       %{
-         "status" => "unavailable",
-         "summary" => "Analytics disabled. Enable GTD_AGGREGATOR_ENABLED=true to use aggregator.",
-         "services" => [],
-         "period_days" => days,
-         "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-       }}
-    end
-  end
+    request_body = Jason.encode!(%{"days" => days})
 
-  defp query_aggregator_health(type, days) do
-    try do
-      # Query aggregator for all service metrics
-      services = BotArmyAggregator.QueryService.list_services_health(days: days)
+    case Publisher.request("aggregator.health.query", request_body, timeout: 5000) do
+      {:ok, response} ->
+        case Jason.decode(response) do
+          {:ok, services} when is_list(services) and length(services) > 0 ->
+            formatted =
+              case type do
+                "full" ->
+                  format_full_health(services, days)
 
-      case services do
-        [] ->
-          # No data yet from aggregator
-          {:ok,
-           %{
-             "status" => "initializing",
-             "summary" => "No service data yet. Aggregator starting up.",
-             "services" => [],
-             "period_days" => days,
-             "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-           }}
+                "summary" ->
+                  format_summary_health(services, days)
 
-        services ->
-          # Format the health data
-          formatted =
-            case type do
-              "full" ->
-                format_full_health(services, days)
+                _ ->
+                  format_summary_health(services, days)
+              end
 
-              "summary" ->
-                format_summary_health(services, days)
+            {:ok, formatted}
 
-              _ ->
-                format_summary_health(services, days)
-            end
+          {:ok, _} ->
+            {:ok,
+             %{
+               "status" => "initializing",
+               "summary" => "No service data yet. Aggregator starting up.",
+               "services" => [],
+               "period_days" => days,
+               "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+             }}
 
-          {:ok, formatted}
-      end
-    rescue
-      e ->
-        Logger.error("Health check exception: #{inspect(e)}")
+          {:error, _} ->
+            {:error, :aggregator_unavailable}
+        end
+
+      {:error, :no_responder} ->
+        {:ok,
+         %{
+           "status" => "unavailable",
+           "summary" => "Aggregator not available. Check if bot is running.",
+           "services" => [],
+           "period_days" => days,
+           "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+         }}
+
+      {:error, :timeout} ->
+        {:error, :aggregator_timeout}
+
+      {:error, reason} ->
+        Logger.warning("Health check NATS request failed: #{inspect(reason)}")
         {:error, :aggregator_unavailable}
     end
   end

@@ -4,7 +4,7 @@ defmodule BotArmyGtd.MixProject do
   def project do
     [
       app: :bot_army_gtd,
-      version: "0.7.154",
+      version: "0.7.155",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -42,14 +42,5 @@ defmodule BotArmyGtd.MixProject do
       {:excoveralls, "~> 0.17", only: :test},
       {:mox, "~> 1.0", only: :test}
     ]
-    |> add_optional_aggregator()
-  end
-
-  defp add_optional_aggregator(deps) do
-    if System.get_env("GTD_AGGREGATOR_ENABLED") == "true" do
-      deps ++ [{:bot_army_aggregator, path: "../../bot_army_aggregator"}]
-    else
-      deps
-    end
   end
 end

@@ -1041,14 +1041,6 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   end
 
   defp publish_outcome_to_aggregator(task, tenant_id) do
-    unless Application.get_env(:bot_army_gtd, :aggregator_enabled) do
-      :ok
-    else
-      do_publish_outcome_to_aggregator(task, tenant_id)
-    end
-  end
-
-  defp do_publish_outcome_to_aggregator(task, tenant_id) do
     # Calculate time to complete in hours
     time_hours =
       case {task["inserted_at"], task["completed_at"]} do
@@ -1070,16 +1062,32 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
         _ -> "general"
       end
 
-    # Publish to aggregator for learning
-    BotArmyAggregator.GTDOutcomes.task_completed(
-      task["id"],
-      time_hours,
-      team_id: tenant_id,
-      user_email: System.get_env("USER_EMAIL", "system@bot-army.local"),
-      task_type: task_type
-    )
+    # Publish outcome event (aggregator will consume if available)
+    outcome_event =
+      EventBuilder.build_event(
+        "gtd.outcomes.recorded",
+        %{
+          "task_id" => task["id"],
+          "time_hours" => time_hours,
+          "task_type" => task_type,
+          "user_email" => System.get_env("USER_EMAIL", "system@bot-army.local"),
+          "tenant_id" => tenant_id
+        },
+        tenant_id: tenant_id
+      )
+
+    case Publisher.publish(outcome_event) do
+      {:ok, _} ->
+        Logger.debug("[TaskHandler] Published outcome event for task #{task["id"]}")
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to publish outcome event: #{inspect(reason)}")
+        :ok
+    end
   rescue
     e ->
-      Logger.warning("Failed to publish outcome to aggregator: #{inspect(e)}")
+      Logger.warning("Exception publishing outcome: #{inspect(e)}")
+      :ok
   end
 end
