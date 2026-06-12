@@ -1041,6 +1041,14 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   end
 
   defp publish_outcome_to_aggregator(task, tenant_id) do
+    unless Application.get_env(:bot_army_gtd, :aggregator_enabled) do
+      :ok
+    else
+      do_publish_outcome_to_aggregator(task, tenant_id)
+    end
+  end
+
+  defp do_publish_outcome_to_aggregator(task, tenant_id) do
     # Calculate time to complete in hours
     time_hours =
       case {task["inserted_at"], task["completed_at"]} do

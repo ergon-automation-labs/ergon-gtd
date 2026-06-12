@@ -29,6 +29,11 @@ config :bot_army_gtd, BotArmyGtd.ScoreScheduler,
   # Every 5 minutes
   interval_seconds: 300
 
+# Aggregator analytics integration (opt-in)
+config :bot_army_gtd,
+       :aggregator_enabled,
+       String.to_existing_atom(System.get_env("GTD_AGGREGATOR_ENABLED", "false"))
+
 # Deployment status for registry reporting
 config :bot_army_gtd, :deployment_status, "deployed"
 

@@ -24,6 +24,12 @@ defmodule GtdBot.Release do
   end
 
   defp run_aggregator_migrations do
+    if Application.get_env(:bot_army_gtd, :aggregator_enabled) do
+      do_run_aggregator_migrations()
+    end
+  end
+
+  defp do_run_aggregator_migrations do
     load_app(:bot_army_aggregator)
 
     case Ecto.Migrator.run(GtdBot.Repo, aggregator_migrations_path(), :up, all: true) do
@@ -33,6 +39,10 @@ defmodule GtdBot.Release do
       {:error, _} = err ->
         err
     end
+  rescue
+    _ ->
+      # Aggregator unavailable; migrations can't run without the app
+      :ok
   end
 
   defp aggregator_migrations_path do

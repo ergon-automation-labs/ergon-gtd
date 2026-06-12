@@ -57,6 +57,21 @@ defmodule BotArmyGtd.Handlers.HealthHandler do
     type = payload["type"] || "summary"
     days = payload["days"] || 7
 
+    if Application.get_env(:bot_army_gtd, :aggregator_enabled) do
+      query_aggregator_health(type, days)
+    else
+      {:ok,
+       %{
+         "status" => "unavailable",
+         "summary" => "Analytics disabled. Enable GTD_AGGREGATOR_ENABLED=true to use aggregator.",
+         "services" => [],
+         "period_days" => days,
+         "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+       }}
+    end
+  end
+
+  defp query_aggregator_health(type, days) do
     try do
       # Query aggregator for all service metrics
       services = BotArmyAggregator.QueryService.list_services_health(days: days)
