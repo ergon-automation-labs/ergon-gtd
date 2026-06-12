@@ -161,7 +161,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
             if task["status"] == "active" and is_binary(task_context) and task_context != "" do
               try do
-                BotArmyRuntime.NATS.Publisher.publish("context.signal.gtd", %{
+                BotArmyCore.IntegrationGates.context_publish("context.signal.gtd", %{
                   "task" => task["title"],
                   "context" => task_context
                 })
