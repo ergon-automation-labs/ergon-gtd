@@ -472,7 +472,14 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:error, {:already_started, :logger}} -> :ok
     end
 
-    Logger.info("Starting GTD NATS consumer")
+    # Log both to Logger and file for visibility
+    File.write(
+      "/tmp/gtd_consumer_init.log",
+      "#{DateTime.utc_now() |> inspect} - Consumer init starting\n",
+      [:append]
+    )
+
+    Logger.info("🟢 [Consumer] init() called - starting GTD NATS consumer")
 
     state = %{
       subscriptions: [],
@@ -481,26 +488,70 @@ defmodule BotArmyGtd.NATS.Consumer do
       opts: opts
     }
 
+    File.write(
+      "/tmp/gtd_consumer_init.log",
+      "#{DateTime.utc_now() |> inspect} - Consumer init returning {:continue, :connect}\n",
+      [:append]
+    )
+
+    Logger.info("🟢 [Consumer] init() returning control flow to handle_continue(:connect)")
+
     {:ok, state, {:continue, :connect}}
   end
 
   @impl true
   def handle_continue(:connect, state) do
+    File.write(
+      "/tmp/gtd_consumer_init.log",
+      "#{DateTime.utc_now() |> inspect} - handle_continue(:connect) called\n",
+      [:append]
+    )
+
+    Logger.info("🟢 [Consumer] handle_continue(:connect) starting")
+
     # credo:disable-for-next-line
     try do
+      File.write(
+        "/tmp/gtd_consumer_init.log",
+        "#{DateTime.utc_now() |> inspect} - Checking if NATS.Connection is running\n",
+        [:append]
+      )
+
+      Logger.info("🟢 [Consumer] Checking GenServer.whereis(BotArmyRuntime.NATS.Connection)")
+
       # Check if NATS.Connection is running before calling it
       case GenServer.whereis(BotArmyRuntime.NATS.Connection) do
         nil ->
-          Logger.warning("NATS.Connection not available, will retry in 5s")
+          File.write(
+            "/tmp/gtd_consumer_init.log",
+            "#{DateTime.utc_now() |> inspect} - NATS.Connection not running, scheduling retry\n",
+            [:append]
+          )
+
+          Logger.warning("🔴 NATS.Connection not available, will retry in 5s")
           Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
           {:noreply, state}
 
         _ ->
+          File.write(
+            "/tmp/gtd_consumer_init.log",
+            "#{DateTime.utc_now() |> inspect} - NATS.Connection found, calling :get_connection\n",
+            [:append]
+          )
+
+          Logger.info("🟢 [Consumer] NATS.Connection found, calling :get_connection")
+
           case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5000) do
             {:ok, conn} ->
+              File.write(
+                "/tmp/gtd_consumer_init.log",
+                "#{DateTime.utc_now() |> inspect} - Got NATS connection successfully\n",
+                [:append]
+              )
+
               Logger.debug("Got NATS connection, subscribing to topics")
               Connection.subscribe_to_status()
-              Logger.info("Connected to NATS, subscribing to GTD topics")
+              Logger.info("🟢 [Consumer] Connected to NATS, subscribing to GTD topics")
 
               subscriptions =
                 [
@@ -572,19 +623,31 @@ defmodule BotArmyGtd.NATS.Consumer do
               {:noreply, %{state | subscriptions: subscriptions, conn: conn}}
 
             {:error, reason} ->
+              File.write(
+                "/tmp/gtd_consumer_init.log",
+                "#{DateTime.utc_now() |> inspect} - NATS connection error: #{inspect(reason)}\n",
+                [:append]
+              )
+
               IO.puts(:stderr, "[Consumer] NATS connection error: #{inspect(reason)}, will retry")
 
               File.write("/tmp/gtd_startup.log", "NATS connection error: #{inspect(reason)}\n", [
                 :append
               ])
 
-              Logger.error("NATS connection error: #{inspect(reason)}, will retry")
+              Logger.error("🔴 NATS connection error: #{inspect(reason)}, will retry")
               Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
               {:noreply, state}
           end
       end
     rescue
       e ->
+        File.write(
+          "/tmp/gtd_consumer_init.log",
+          "#{DateTime.utc_now() |> inspect} - RESCUE: #{inspect(e)}\n",
+          [:append]
+        )
+
         IO.puts(:stderr, "[Consumer] Rescue: Error connecting to NATS: #{inspect(e)}")
 
         Logger.error(
@@ -595,7 +658,13 @@ defmodule BotArmyGtd.NATS.Consumer do
         {:noreply, state}
     catch
       :exit, reason ->
-        Logger.error("Exit while connecting to NATS: #{inspect(reason)}")
+        File.write(
+          "/tmp/gtd_consumer_init.log",
+          "#{DateTime.utc_now() |> inspect} - CATCH exit: #{inspect(reason)}\n",
+          [:append]
+        )
+
+        Logger.error("🔴 Exit while connecting to NATS: #{inspect(reason)}")
         Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
         {:noreply, state}
     end
