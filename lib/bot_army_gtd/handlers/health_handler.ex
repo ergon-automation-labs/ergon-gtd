@@ -62,7 +62,7 @@ defmodule BotArmyGtd.Handlers.HealthHandler do
     case Publisher.request("aggregator.health.query", request_body, timeout: 5000) do
       {:ok, response} ->
         case Jason.decode(response) do
-          {:ok, services} when is_list(services) and length(services) > 0 ->
+          {:ok, services} when is_list(services) and services != [] ->
             formatted =
               case type do
                 "full" ->
