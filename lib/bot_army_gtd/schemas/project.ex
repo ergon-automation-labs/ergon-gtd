@@ -16,10 +16,18 @@ defmodule BotArmyGtd.Schemas.Project do
     field(:area, :string)
     field(:labels, {:array, :string}, default: [])
     field(:metadata, :map, default: %{})
+    field(:parent_project_id, Ecto.UUID)
     field(:tenant_id, Ecto.UUID)
     field(:user_id, Ecto.UUID)
 
     has_many(:tasks, BotArmyGtd.Schemas.Task)
+    has_many(:subprojects, __MODULE__, foreign_key: :parent_project_id)
+
+    belongs_to(:parent_project, __MODULE__,
+      foreign_key: :parent_project_id,
+      type: Ecto.UUID,
+      define_field: false
+    )
 
     timestamps()
   end
@@ -27,7 +35,17 @@ defmodule BotArmyGtd.Schemas.Project do
   @doc false
   def changeset(project, attrs) do
     project
-    |> cast(attrs, [:name, :description, :status, :area, :labels, :metadata, :tenant_id, :user_id])
+    |> cast(attrs, [
+      :name,
+      :description,
+      :status,
+      :area,
+      :labels,
+      :metadata,
+      :parent_project_id,
+      :tenant_id,
+      :user_id
+    ])
     |> validate_required([:name])
     |> validate_inclusion(:status, ["active", "archived", "completed"])
   end
