@@ -1158,8 +1158,18 @@ defmodule BotArmyGtd.NATS.Consumer do
         process_task_create(decoded_message, reply_to, state)
 
       {:error, reason} ->
-        Logger.warning("Failed to decode task create message: #{inspect(reason)}")
-        error_response = Reply.error("Invalid message format", :decode_error)
+        error_msg = """
+        Invalid task.create message format. Expected NATS event envelope with:
+        - event_id: UUID
+        - event: "gtd.task.create"
+        - payload: {project_id, title, description, priority, status}
+        - timestamp: RFC3339
+
+        Use bridge.task.create for simple JSON, or wrap message in envelope. Error: #{inspect(reason)}
+        """
+
+        Logger.warning(error_msg)
+        error_response = Reply.error(error_msg, :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
@@ -1190,8 +1200,18 @@ defmodule BotArmyGtd.NATS.Consumer do
         end
 
       {:error, reason} ->
-        Logger.warning("Failed to decode task update message: #{inspect(reason)}")
-        error_response = Reply.error("Invalid message format", :decode_error)
+        error_msg = """
+        Invalid task.update message format. Expected NATS event envelope with:
+        - event_id: UUID
+        - event: "gtd.task.update"
+        - payload: {task_id, [updates...]}
+        - timestamp: RFC3339
+
+        Use bridge.task.update for simple JSON, or wrap message in envelope. Error: #{inspect(reason)}
+        """
+
+        Logger.warning(error_msg)
+        error_response = Reply.error(error_msg, :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
@@ -1243,8 +1263,18 @@ defmodule BotArmyGtd.NATS.Consumer do
         end
 
       {:error, reason} ->
-        Logger.warning("Failed to decode project create message: #{inspect(reason)}")
-        error_response = Reply.error("Invalid message format", :decode_error)
+        error_msg = """
+        Invalid project.create message format. Expected NATS event envelope with:
+        - event_id: UUID
+        - event: "gtd.project.create"
+        - payload: {name, description, area, labels}
+        - timestamp: RFC3339
+
+        Use bridge.project.create for simple JSON, or wrap message in envelope. Error: #{inspect(reason)}
+        """
+
+        Logger.warning(error_msg)
+        error_response = Reply.error(error_msg, :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
