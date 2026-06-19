@@ -48,7 +48,7 @@ config :bot_army_gtd, BotArmyGtd.Repo,
   password:
     System.get_env("BOT_ARMY_GTD_DB_PASSWORD") || System.get_env("DATABASE_PASSWORD") ||
       "postgres",
-  pool_size: 3,
+  pool_size: System.get_env("BOT_ARMY_GTD_POOL_SIZE", "15") |> String.to_integer(),
   ssl: false
 
 # Learning library configuration (uses same database as this bot)
@@ -68,5 +68,5 @@ config :bot_army_library_learning, BotArmyLearning.Repo,
   password:
     System.get_env("BOT_ARMY_GTD_DB_PASSWORD") || System.get_env("DATABASE_PASSWORD") ||
       "postgres",
-  pool_size: 3,
+  pool_size: System.get_env("BOT_ARMY_GTD_POOL_SIZE", "15") |> String.to_integer(),
   ssl: false
