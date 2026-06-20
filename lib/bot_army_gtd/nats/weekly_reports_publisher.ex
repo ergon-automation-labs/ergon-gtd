@@ -30,33 +30,44 @@ defmodule BotArmyGtd.NATS.WeeklyReportsPublisher do
   def handle_continue(:subscribe, state) do
     Logger.info("[WeeklyReportsPublisher] Subscribing to outcomes.report.weekly")
 
-    subscriptions =
-      try do
-        case Gnat.sub(:nats_connection, self(), "outcomes.report.weekly") do
-          {:ok, sub} ->
-            [{"outcomes.report.weekly", sub}]
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+      {:ok, conn} ->
+        subscriptions =
+          try do
+            case Gnat.sub(conn, self(), "outcomes.report.weekly") do
+              {:ok, sub} ->
+                [{"outcomes.report.weekly", sub}]
 
-          {:error, reason} ->
-            Logger.warning("[WeeklyReportsPublisher] Failed to subscribe: #{inspect(reason)}")
+              {:error, reason} ->
+                Logger.warning("[WeeklyReportsPublisher] Failed to subscribe: #{inspect(reason)}")
 
-            []
+                []
+            end
+          catch
+            :exit, reason ->
+              Logger.warning("[WeeklyReportsPublisher] NATS unavailable: #{inspect(reason)}")
+
+              []
+          end
+
+        if subscriptions == [] do
+          Logger.warning(
+            "[WeeklyReportsPublisher] No subscription active, retrying in #{@reconnect_delay_ms}ms"
+          )
+
+          Process.send_after(self(), :retry_subscribe, @reconnect_delay_ms)
         end
-      catch
-        :exit, reason ->
-          Logger.warning("[WeeklyReportsPublisher] NATS unavailable: #{inspect(reason)}")
 
-          []
-      end
+        {:noreply, %{state | subscriptions: subscriptions}}
 
-    if subscriptions == [] do
-      Logger.warning(
-        "[WeeklyReportsPublisher] No subscription active, retrying in #{@reconnect_delay_ms}ms"
-      )
+      _ ->
+        Logger.warning(
+          "[WeeklyReportsPublisher] NATS connection unavailable, retrying in #{@reconnect_delay_ms}ms"
+        )
 
-      Process.send_after(self(), :retry_subscribe, @reconnect_delay_ms)
+        Process.send_after(self(), :retry_subscribe, @reconnect_delay_ms)
+        {:noreply, state}
     end
-
-    {:noreply, %{state | subscriptions: subscriptions}}
   end
 
   @impl true
@@ -117,16 +128,22 @@ defmodule BotArmyGtd.NATS.WeeklyReportsPublisher do
       "upsert" => true
     }
 
-    case Gnat.pub(:nats_connection, "para.fs.write", Jason.encode!(payload)) do
-      :ok ->
-        Logger.debug("[WeeklyReportsPublisher] Published to para.fs.write",
-          path: payload["path"]
-        )
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+      {:ok, conn} ->
+        case Gnat.pub(conn, "para.fs.write", Jason.encode!(payload)) do
+          :ok ->
+            Logger.debug("[WeeklyReportsPublisher] Published to para.fs.write",
+              path: payload["path"]
+            )
 
-        :ok
+            :ok
 
-      {:error, reason} ->
-        {:error, reason}
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      _ ->
+        {:error, :nats_unavailable}
     end
   end
 

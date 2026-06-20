@@ -60,20 +60,26 @@ defmodule BotArmyGtd.BehavioralLearningIntegrator do
   end
 
   defp query_context_broker(task_data) do
-    case Gnat.request(:nats_connection, "context.state.query", request_payload(task_data),
-           receive_timeout: 2000
-         ) do
-      {:ok, %{body: body}} ->
-        case Jason.decode(body) do
-          {:ok, response} ->
-            {:ok, response}
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+      {:ok, conn} ->
+        case Gnat.request(conn, "context.state.query", request_payload(task_data),
+               receive_timeout: 2000
+             ) do
+          {:ok, %{body: body}} ->
+            case Jason.decode(body) do
+              {:ok, response} ->
+                {:ok, response}
+
+              {:error, reason} ->
+                {:error, reason}
+            end
 
           {:error, reason} ->
             {:error, reason}
         end
 
-      {:error, reason} ->
-        {:error, reason}
+      _ ->
+        {:error, "nats_connection_unavailable"}
     end
   catch
     :exit, reason ->

@@ -35,37 +35,50 @@ defmodule BotArmyGtd.NATS.OutcomesConsumer do
       "outcomes.context.>"
     ]
 
-    subscriptions =
-      Enum.flat_map(topics, fn topic ->
-        try do
-          case Gnat.sub(:nats_connection, self(), topic) do
-            {:ok, sub} ->
-              [{topic, sub}]
+    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+      {:ok, conn} ->
+        subscriptions =
+          Enum.flat_map(topics, fn topic ->
+            try do
+              case Gnat.sub(conn, self(), topic) do
+                {:ok, sub} ->
+                  [{topic, sub}]
 
-            {:error, reason} ->
-              Logger.warning(
-                "[OutcomesConsumer] Failed to subscribe to #{topic}: #{inspect(reason)}"
-              )
+                {:error, reason} ->
+                  Logger.warning(
+                    "[OutcomesConsumer] Failed to subscribe to #{topic}: #{inspect(reason)}"
+                  )
 
-              []
-          end
-        catch
-          :exit, reason ->
-            Logger.warning("[OutcomesConsumer] NATS unavailable for #{topic}: #{inspect(reason)}")
+                  []
+              end
+            catch
+              :exit, reason ->
+                Logger.warning(
+                  "[OutcomesConsumer] NATS unavailable for #{topic}: #{inspect(reason)}"
+                )
 
-            []
+                []
+            end
+          end)
+
+        if subscriptions == [] do
+          Logger.warning(
+            "[OutcomesConsumer] No subscriptions active, retrying in #{@reconnect_delay_ms}ms"
+          )
+
+          Process.send_after(self(), :retry_subscribe, @reconnect_delay_ms)
         end
-      end)
 
-    if subscriptions == [] do
-      Logger.warning(
-        "[OutcomesConsumer] No subscriptions active, retrying in #{@reconnect_delay_ms}ms"
-      )
+        {:noreply, %{state | subscriptions: subscriptions}}
 
-      Process.send_after(self(), :retry_subscribe, @reconnect_delay_ms)
+      _ ->
+        Logger.warning(
+          "[OutcomesConsumer] NATS connection unavailable, retrying in #{@reconnect_delay_ms}ms"
+        )
+
+        Process.send_after(self(), :retry_subscribe, @reconnect_delay_ms)
+        {:noreply, state}
     end
-
-    {:noreply, %{state | subscriptions: subscriptions}}
   end
 
   @impl true
