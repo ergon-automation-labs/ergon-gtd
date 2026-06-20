@@ -130,7 +130,7 @@ publish-release: release
 		$(MAKE) test-integration || { echo "❌ Integration tests failed. Publish blocked."; exit 1; }; \
 		echo "✅ Integration tests passed."; \
 	else \
-		[ "$(HAS_RESPONDER_CHANGES)" = "1" ] && echo "⚠️  Skipping integration gate (SKIP_INTEGRATION_GATE=1)"; \
+		[ "$(HAS_RESPONDER_CHANGES)" = "1" ] && echo "⚠️  Skipping integration gate (SKIP_INTEGRATION_GATE=1)" || true; \
 	fi
 	@$(MAKE) test-release-smoke
 	@echo "==============================================="
