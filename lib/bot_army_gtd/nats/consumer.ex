@@ -56,7 +56,6 @@ defmodule BotArmyGtd.NATS.Consumer do
   alias BotArmyRuntime.Registry
   alias BotArmyRuntime.Tracing
 
-  @reconnect_delay_ms 5000
   @version Mix.Project.config()[:version]
   @registry_heartbeat_ms 20_000
 
@@ -528,9 +527,15 @@ defmodule BotArmyGtd.NATS.Consumer do
             [:append]
           )
 
-          Logger.warning("🔴 NATS.Connection not available, will retry in 5s")
-          Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
-          {:noreply, state}
+          next_attempt = state.reconnect_attempt + 1
+          delay = BotArmyRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+
+          Logger.warning(
+            "🔴 NATS.Connection not available, will retry in #{delay}ms (attempt #{next_attempt})"
+          )
+
+          Process.send_after(self(), :connect_retry, delay)
+          {:noreply, %{state | reconnect_attempt: next_attempt}}
 
         _ ->
           File.write(
@@ -635,9 +640,17 @@ defmodule BotArmyGtd.NATS.Consumer do
                 :append
               ])
 
-              Logger.error("🔴 NATS connection error: #{inspect(reason)}, will retry")
-              Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
-              {:noreply, state}
+              next_attempt = state.reconnect_attempt + 1
+
+              delay =
+                BotArmyRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+
+              Logger.error(
+                "🔴 NATS connection error: #{inspect(reason)}, will retry in #{delay}ms (attempt #{next_attempt})"
+              )
+
+              Process.send_after(self(), :connect_retry, delay)
+              {:noreply, %{state | reconnect_attempt: next_attempt}}
           end
       end
     rescue
@@ -650,12 +663,15 @@ defmodule BotArmyGtd.NATS.Consumer do
 
         IO.puts(:stderr, "[Consumer] Rescue: Error connecting to NATS: #{inspect(e)}")
 
+        next_attempt = state.reconnect_attempt + 1
+        delay = BotArmyRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+
         Logger.error(
-          "🔴 Rescue: Error connecting to NATS: #{inspect(e)}, stacktrace: #{inspect(__STACKTRACE__)}"
+          "🔴 Rescue: Error connecting to NATS: #{inspect(e)}, will retry in #{delay}ms (attempt #{next_attempt}), stacktrace: #{inspect(__STACKTRACE__)}"
         )
 
-        Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
-        {:noreply, state}
+        Process.send_after(self(), :connect_retry, delay)
+        {:noreply, %{state | reconnect_attempt: next_attempt}}
     catch
       :exit, reason ->
         File.write(
@@ -664,9 +680,15 @@ defmodule BotArmyGtd.NATS.Consumer do
           [:append]
         )
 
-        Logger.error("🔴 Exit while connecting to NATS: #{inspect(reason)}")
-        Process.send_after(self(), :connect_retry, @reconnect_delay_ms)
-        {:noreply, state}
+        next_attempt = state.reconnect_attempt + 1
+        delay = BotArmyRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+
+        Logger.error(
+          "🔴 Exit while connecting to NATS: #{inspect(reason)}, will retry in #{delay}ms (attempt #{next_attempt})"
+        )
+
+        Process.send_after(self(), :connect_retry, delay)
+        {:noreply, %{state | reconnect_attempt: next_attempt}}
     end
   end
 
@@ -1492,15 +1514,21 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   @impl true
   def handle_info({:nats, :disconnected}, state) do
-    Logger.warning("Disconnected from NATS, will attempt to reconnect")
-    Process.send_after(self(), :reconnect, @reconnect_delay_ms)
-    {:noreply, %{state | subscriptions: [], conn: nil}}
+    next_attempt = state.reconnect_attempt + 1
+    delay = BotArmyRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+
+    Logger.warning(
+      "Disconnected from NATS, will attempt to reconnect in #{delay}ms (attempt #{next_attempt})"
+    )
+
+    Process.send_after(self(), :reconnect, delay)
+    {:noreply, %{state | subscriptions: [], conn: nil, reconnect_attempt: next_attempt}}
   end
 
   @impl true
   def handle_info({:nats, :connected}, state) do
     Logger.info("Connected to NATS, re-subscribing")
-    {:noreply, state, {:continue, :connect}}
+    {:noreply, %{state | reconnect_attempt: 0}, {:continue, :connect}}
   end
 
   @impl true
