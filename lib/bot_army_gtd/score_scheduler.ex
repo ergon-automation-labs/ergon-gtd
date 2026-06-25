@@ -5,6 +5,8 @@ defmodule BotArmyGtd.ScoreScheduler do
   Runs every 5 minutes by default to keep "what's next" rankings fresh.
   Works in tandem with event-driven scoring in handlers for immediate updates.
 
+  Defers initial load to allow Repo to initialize properly on boot.
+
   Configuration in config/config.exs:
     config :bot_army_gtd, BotArmyGtd.ScoreScheduler,
       enabled: true,
