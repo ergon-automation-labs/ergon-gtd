@@ -35,7 +35,7 @@ defmodule BotArmyGtd.ScoreScheduler do
     Logger.info("ScoreScheduler: enabled=#{enabled}, interval=#{interval}s")
 
     if enabled do
-      Process.send_after(self(), :recompute_scores, 0)
+      Process.send_after(self(), :recompute_scores, interval * 1000)
       {:ok, %{interval: interval * 1000}}
     else
       {:ok, %{interval: interval * 1000}}

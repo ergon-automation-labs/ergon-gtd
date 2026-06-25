@@ -154,6 +154,12 @@ defmodule BotArmyGtd.TaskStore do
   @impl true
   def init(_opts) do
     Logger.info("TaskStore started")
+    # Schedule load after Repo has time to initialize (100ms delay)
+    Process.send_after(self(), :load_tasks, 100)
+    {:ok, %{}}
+  end
+
+  def handle_info(:load_tasks, _state) do
     # Load active/inbox tasks from database into GenServer state
     # Only load actionable tasks to avoid memory bloat (7000+ tasks in DB)
     # Gracefully handle database unavailability (e.g., in tests)
@@ -179,7 +185,7 @@ defmodule BotArmyGtd.TaskStore do
           %{}
       end
 
-    {:ok, state}
+    {:noreply, state}
   end
 
   @impl true
