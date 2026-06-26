@@ -4,6 +4,7 @@
 /.cache/
 /doc/
 erl_crash.dump
+mix.lock
 .env
 .env.local
 .env.*.local
