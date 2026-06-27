@@ -41,7 +41,7 @@ config :bot_army_gtd, BotArmyGtd.Repo,
     System.get_env("BOT_ARMY_GTD_DB_HOST") || System.get_env("DATABASE_HOST") || "localhost",
   port:
     String.to_integer(
-      System.get_env("BOT_ARMY_GTD_DB_PORT") || System.get_env("DATABASE_PORT") || "30003"
+      System.get_env("BOT_ARMY_GTD_DB_PORT") || System.get_env("DATABASE_PORT") || "30006"
     ),
   username:
     System.get_env("BOT_ARMY_GTD_DB_USER") || System.get_env("DATABASE_USER") || "postgres",
@@ -61,7 +61,7 @@ config :bot_army_library_learning, BotArmyLearning.Repo,
     System.get_env("BOT_ARMY_GTD_DB_HOST") || System.get_env("DATABASE_HOST") || "localhost",
   port:
     String.to_integer(
-      System.get_env("BOT_ARMY_GTD_DB_PORT") || System.get_env("DATABASE_PORT") || "30003"
+      System.get_env("BOT_ARMY_GTD_DB_PORT") || System.get_env("DATABASE_PORT") || "30006"
     ),
   username:
     System.get_env("BOT_ARMY_GTD_DB_USER") || System.get_env("DATABASE_USER") || "postgres",
