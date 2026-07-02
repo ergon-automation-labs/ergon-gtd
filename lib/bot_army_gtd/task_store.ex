@@ -191,7 +191,7 @@ defmodule BotArmyGtd.TaskStore do
   @impl true
   def handle_call({:create, payload}, _from, state) do
     # Gate write operations: only leader can create tasks
-    if BotArmyGtd.LeaderMonitor.is_leader?() do
+    if BotArmyGtd.LeaderMonitor.leader?() do
       task_id = Ecto.UUID.generate()
 
       # Parse due_date if present
@@ -255,7 +255,7 @@ defmodule BotArmyGtd.TaskStore do
   @impl true
   def handle_call({:update, task_id, payload}, _from, state) do
     # Gate write operations: only leader can update tasks
-    if BotArmyGtd.LeaderMonitor.is_leader?() do
+    if BotArmyGtd.LeaderMonitor.leader?() do
       case Map.get(state, task_id) do
         nil ->
           {:reply, {:error, :not_found}, state}
@@ -298,7 +298,7 @@ defmodule BotArmyGtd.TaskStore do
   @impl true
   def handle_call({:complete, task_id}, _from, state) do
     # Gate write operations: only leader can complete tasks
-    if BotArmyGtd.LeaderMonitor.is_leader?() do
+    if BotArmyGtd.LeaderMonitor.leader?() do
       case Map.get(state, task_id) do
         nil ->
           {:reply, {:error, :not_found}, state}

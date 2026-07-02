@@ -23,28 +23,22 @@ defmodule BotArmyGtd.LeaderMonitor do
     GenServer.start_link(__MODULE__, {node_role, opts}, name: @server)
   end
 
-  def is_leader? do
-    try do
-      GenServer.call(@server, :is_leader?, 5_000)
-    rescue
-      _ -> false
-    end
+  def leader? do
+    GenServer.call(@server, :leader?, 5_000)
+  rescue
+    _ -> false
   end
 
   def get_role do
-    try do
-      GenServer.call(@server, :get_role, 5_000)
-    rescue
-      _ -> :unknown
-    end
+    GenServer.call(@server, :get_role, 5_000)
+  rescue
+    _ -> :unknown
   end
 
   def get_status do
-    try do
-      GenServer.call(@server, :get_status, 5_000)
-    rescue
-      _ -> %{role: :unknown, is_leader: false, last_heartbeat: nil}
-    end
+    GenServer.call(@server, :get_status, 5_000)
+  rescue
+    _ -> %{role: :unknown, is_leader: false, last_heartbeat: nil}
   end
 
   @impl true
@@ -76,7 +70,7 @@ defmodule BotArmyGtd.LeaderMonitor do
   end
 
   @impl true
-  def handle_call(:is_leader?, _from, state) do
+  def handle_call(:leader?, _from, state) do
     {:reply, state.is_leader, state}
   end
 

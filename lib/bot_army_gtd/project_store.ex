@@ -91,7 +91,7 @@ defmodule BotArmyGtd.ProjectStore do
   @impl true
   def handle_call({:create, payload}, _from, state) do
     # Gate write operations: only leader can create projects
-    if BotArmyGtd.LeaderMonitor.is_leader?() do
+    if BotArmyGtd.LeaderMonitor.leader?() do
       project_id = Ecto.UUID.generate()
 
       tenant_id = payload["tenant_id"]
@@ -132,7 +132,7 @@ defmodule BotArmyGtd.ProjectStore do
   @impl true
   def handle_call({:update, project_id, payload}, _from, state) do
     # Gate write operations: only leader can update projects
-    if BotArmyGtd.LeaderMonitor.is_leader?() do
+    if BotArmyGtd.LeaderMonitor.leader?() do
       case Map.get(state, project_id) do
         nil ->
           {:reply, {:error, :not_found}, state}
