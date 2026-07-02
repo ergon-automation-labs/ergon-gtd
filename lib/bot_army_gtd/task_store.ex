@@ -191,10 +191,7 @@ defmodule BotArmyGtd.TaskStore do
   @impl true
   def handle_call({:create, payload}, _from, state) do
     # Gate write operations: only leader can create tasks
-    unless BotArmyGtd.LeaderMonitor.is_leader?() do
-      Logger.warning("TaskStore: Write rejected (not leader)")
-      {:reply, {:error, :not_leader}, state}
-    else
+    if BotArmyGtd.LeaderMonitor.is_leader?() do
       task_id = Ecto.UUID.generate()
 
       # Parse due_date if present
@@ -249,16 +246,16 @@ defmodule BotArmyGtd.TaskStore do
           Logger.error("Failed to create task: #{inspect(changeset.errors)}")
           {:reply, {:error, changeset_error_reason(changeset)}, state}
       end
+    else
+      Logger.warning("TaskStore: Write rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
     end
   end
 
   @impl true
   def handle_call({:update, task_id, payload}, _from, state) do
     # Gate write operations: only leader can update tasks
-    unless BotArmyGtd.LeaderMonitor.is_leader?() do
-      Logger.warning("TaskStore: Write rejected (not leader)")
-      {:reply, {:error, :not_leader}, state}
-    else
+    if BotArmyGtd.LeaderMonitor.is_leader?() do
       case Map.get(state, task_id) do
         nil ->
           {:reply, {:error, :not_found}, state}
@@ -281,6 +278,9 @@ defmodule BotArmyGtd.TaskStore do
               {:reply, {:error, changeset_error_reason(changeset)}, state}
           end
       end
+    else
+      Logger.warning("TaskStore: Write rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
     end
   end
 
@@ -298,10 +298,7 @@ defmodule BotArmyGtd.TaskStore do
   @impl true
   def handle_call({:complete, task_id}, _from, state) do
     # Gate write operations: only leader can complete tasks
-    unless BotArmyGtd.LeaderMonitor.is_leader?() do
-      Logger.warning("TaskStore: Write rejected (not leader)")
-      {:reply, {:error, :not_leader}, state}
-    else
+    if BotArmyGtd.LeaderMonitor.is_leader?() do
       case Map.get(state, task_id) do
         nil ->
           {:reply, {:error, :not_found}, state}
@@ -325,6 +322,9 @@ defmodule BotArmyGtd.TaskStore do
               {:reply, {:error, :not_found}, state}
           end
       end
+    else
+      Logger.warning("TaskStore: Write rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
     end
   end
 

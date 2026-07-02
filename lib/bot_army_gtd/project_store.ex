@@ -91,10 +91,7 @@ defmodule BotArmyGtd.ProjectStore do
   @impl true
   def handle_call({:create, payload}, _from, state) do
     # Gate write operations: only leader can create projects
-    unless BotArmyGtd.LeaderMonitor.is_leader?() do
-      Logger.warning("ProjectStore: Write rejected (not leader)")
-      {:reply, {:error, :not_leader}, state}
-    else
+    if BotArmyGtd.LeaderMonitor.is_leader?() do
       project_id = Ecto.UUID.generate()
 
       tenant_id = payload["tenant_id"]
@@ -126,16 +123,16 @@ defmodule BotArmyGtd.ProjectStore do
           Logger.error("Failed to create project: #{inspect(changeset.errors)}")
           {:reply, {:error, :database_error}, state}
       end
+    else
+      Logger.warning("ProjectStore: Write rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
     end
   end
 
   @impl true
   def handle_call({:update, project_id, payload}, _from, state) do
     # Gate write operations: only leader can update projects
-    unless BotArmyGtd.LeaderMonitor.is_leader?() do
-      Logger.warning("ProjectStore: Write rejected (not leader)")
-      {:reply, {:error, :not_leader}, state}
-    else
+    if BotArmyGtd.LeaderMonitor.is_leader?() do
       case Map.get(state, project_id) do
         nil ->
           {:reply, {:error, :not_found}, state}
@@ -158,6 +155,9 @@ defmodule BotArmyGtd.ProjectStore do
               {:reply, {:error, :database_error}, state}
           end
       end
+    else
+      Logger.warning("ProjectStore: Write rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
     end
   end
 
