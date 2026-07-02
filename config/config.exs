@@ -32,6 +32,10 @@ config :bot_army_gtd, BotArmyGtd.ScoreScheduler,
 # Deployment status for registry reporting
 config :bot_army_gtd, :deployment_status, "deployed"
 
+# Leader election for distributed GTD (air=primary, mini=standby)
+# Defaults to primary; override in config/dev.exs, config/prod.exs, etc.
+config :bot_army_gtd, :node_role, :primary
+
 # Intent thresholds for autonomous heartbeat decisions
 config :bot_army_gtd, :intent_thresholds, %{
   stale_task_count: %{min: 3, weight: 0.6},

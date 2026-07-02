@@ -190,85 +190,97 @@ defmodule BotArmyGtd.TaskStore do
 
   @impl true
   def handle_call({:create, payload}, _from, state) do
-    task_id = Ecto.UUID.generate()
+    # Gate write operations: only leader can create tasks
+    unless BotArmyGtd.LeaderMonitor.is_leader?() do
+      Logger.warning("TaskStore: Write rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
+    else
+      task_id = Ecto.UUID.generate()
 
-    # Parse due_date if present
-    due_date =
-      case Map.get(payload, "due_date") do
-        nil ->
-          nil
+      # Parse due_date if present
+      due_date =
+        case Map.get(payload, "due_date") do
+          nil ->
+            nil
 
-        date_str when is_binary(date_str) ->
-          case Date.from_iso8601(date_str) do
-            {:ok, date} -> date
-            {:error, _} -> nil
-          end
+          date_str when is_binary(date_str) ->
+            case Date.from_iso8601(date_str) do
+              {:ok, date} -> date
+              {:error, _} -> nil
+            end
 
-        _ ->
-          nil
+          _ ->
+            nil
+        end
+
+      # Create database record
+      tenant_id = payload["tenant_id"]
+      user_id = Map.get(payload, "user_id")
+
+      changeset =
+        BotArmyGtd.Schemas.Task.changeset(
+          %BotArmyGtd.Schemas.Task{id: task_id},
+          %{
+            "tenant_id" => convert_to_uuid(tenant_id),
+            "user_id" => if(user_id, do: convert_to_uuid(user_id), else: nil),
+            "title" => payload["title"],
+            "project_id" => payload["project_id"],
+            "goal_id" => payload["goal_id"],
+            "description" => Map.get(payload, "description"),
+            "status" => Map.get(payload, "status", "active"),
+            "priority" => Map.get(payload, "priority", "normal"),
+            "context" => Map.get(payload, "context"),
+            "source" => Map.get(payload, "source", "user"),
+            "source_metadata" => Map.get(payload, "source_metadata"),
+            "due_date" => due_date,
+            "parent_task_id" => Map.get(payload, "parent_task_id"),
+            "labels" => Map.get(payload, "labels", [])
+          }
+        )
+
+      case BotArmyGtd.Repo.insert(changeset) do
+        {:ok, db_task} ->
+          task = schema_to_map(db_task)
+          new_state = Map.put(state, task_id, task)
+          Logger.info("Created task in database: #{task_id}")
+          {:reply, {:ok, task}, new_state}
+
+        {:error, changeset} ->
+          Logger.error("Failed to create task: #{inspect(changeset.errors)}")
+          {:reply, {:error, changeset_error_reason(changeset)}, state}
       end
-
-    # Create database record
-    tenant_id = payload["tenant_id"]
-    user_id = Map.get(payload, "user_id")
-
-    changeset =
-      BotArmyGtd.Schemas.Task.changeset(
-        %BotArmyGtd.Schemas.Task{id: task_id},
-        %{
-          "tenant_id" => convert_to_uuid(tenant_id),
-          "user_id" => if(user_id, do: convert_to_uuid(user_id), else: nil),
-          "title" => payload["title"],
-          "project_id" => payload["project_id"],
-          "goal_id" => payload["goal_id"],
-          "description" => Map.get(payload, "description"),
-          "status" => Map.get(payload, "status", "active"),
-          "priority" => Map.get(payload, "priority", "normal"),
-          "context" => Map.get(payload, "context"),
-          "source" => Map.get(payload, "source", "user"),
-          "source_metadata" => Map.get(payload, "source_metadata"),
-          "due_date" => due_date,
-          "parent_task_id" => Map.get(payload, "parent_task_id"),
-          "labels" => Map.get(payload, "labels", [])
-        }
-      )
-
-    case BotArmyGtd.Repo.insert(changeset) do
-      {:ok, db_task} ->
-        task = schema_to_map(db_task)
-        new_state = Map.put(state, task_id, task)
-        Logger.info("Created task in database: #{task_id}")
-        {:reply, {:ok, task}, new_state}
-
-      {:error, changeset} ->
-        Logger.error("Failed to create task: #{inspect(changeset.errors)}")
-        {:reply, {:error, changeset_error_reason(changeset)}, state}
     end
   end
 
   @impl true
   def handle_call({:update, task_id, payload}, _from, state) do
-    case Map.get(state, task_id) do
-      nil ->
-        {:reply, {:error, :not_found}, state}
+    # Gate write operations: only leader can update tasks
+    unless BotArmyGtd.LeaderMonitor.is_leader?() do
+      Logger.warning("TaskStore: Write rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
+    else
+      case Map.get(state, task_id) do
+        nil ->
+          {:reply, {:error, :not_found}, state}
 
-      _task ->
-        task_uuid = Ecto.UUID.cast!(task_id)
+        _task ->
+          task_uuid = Ecto.UUID.cast!(task_id)
 
-        case execute_update_transaction(task_uuid, payload) do
-          {:ok, updated_db_task} ->
-            updated_task = schema_to_map(updated_db_task)
-            new_state = Map.put(state, task_id, updated_task)
-            Logger.info("Updated task in database: #{task_id}")
-            {:reply, {:ok, updated_task}, new_state}
+          case execute_update_transaction(task_uuid, payload) do
+            {:ok, updated_db_task} ->
+              updated_task = schema_to_map(updated_db_task)
+              new_state = Map.put(state, task_id, updated_task)
+              Logger.info("Updated task in database: #{task_id}")
+              {:reply, {:ok, updated_task}, new_state}
 
-          {:error, :not_found} ->
-            {:reply, {:error, :not_found}, state}
+            {:error, :not_found} ->
+              {:reply, {:error, :not_found}, state}
 
-          {:error, changeset} ->
-            Logger.error("Failed to update task: #{inspect(changeset.errors)}")
-            {:reply, {:error, changeset_error_reason(changeset)}, state}
-        end
+            {:error, changeset} ->
+              Logger.error("Failed to update task: #{inspect(changeset.errors)}")
+              {:reply, {:error, changeset_error_reason(changeset)}, state}
+          end
+      end
     end
   end
 
@@ -285,28 +297,34 @@ defmodule BotArmyGtd.TaskStore do
 
   @impl true
   def handle_call({:complete, task_id}, _from, state) do
-    case Map.get(state, task_id) do
-      nil ->
-        {:reply, {:error, :not_found}, state}
+    # Gate write operations: only leader can complete tasks
+    unless BotArmyGtd.LeaderMonitor.is_leader?() do
+      Logger.warning("TaskStore: Write rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
+    else
+      case Map.get(state, task_id) do
+        nil ->
+          {:reply, {:error, :not_found}, state}
 
-      _task ->
-        task_uuid = Ecto.UUID.cast!(task_id)
-        completed_at = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+        _task ->
+          task_uuid = Ecto.UUID.cast!(task_id)
+          completed_at = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
 
-        case BotArmyGtd.Repo.update_all(
-               from(t in BotArmyGtd.Schemas.Task, where: t.id == ^task_uuid),
-               set: [status: "completed", completed_at: completed_at]
-             ) do
-          {1, _} ->
-            db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
-            completed_task = schema_to_map(db_task)
-            new_state = Map.put(state, task_id, completed_task)
-            Logger.info("Completed task in database: #{task_id}")
-            {:reply, {:ok, completed_task}, new_state}
+          case BotArmyGtd.Repo.update_all(
+                 from(t in BotArmyGtd.Schemas.Task, where: t.id == ^task_uuid),
+                 set: [status: "completed", completed_at: completed_at]
+               ) do
+            {1, _} ->
+              db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
+              completed_task = schema_to_map(db_task)
+              new_state = Map.put(state, task_id, completed_task)
+              Logger.info("Completed task in database: #{task_id}")
+              {:reply, {:ok, completed_task}, new_state}
 
-          {0, _} ->
-            {:reply, {:error, :not_found}, state}
-        end
+            {0, _} ->
+              {:reply, {:error, :not_found}, state}
+          end
+      end
     end
   end
 

@@ -90,62 +90,74 @@ defmodule BotArmyGtd.ProjectStore do
 
   @impl true
   def handle_call({:create, payload}, _from, state) do
-    project_id = Ecto.UUID.generate()
+    # Gate write operations: only leader can create projects
+    unless BotArmyGtd.LeaderMonitor.is_leader?() do
+      Logger.warning("ProjectStore: Write rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
+    else
+      project_id = Ecto.UUID.generate()
 
-    tenant_id = payload["tenant_id"]
-    user_id = Map.get(payload, "user_id")
+      tenant_id = payload["tenant_id"]
+      user_id = Map.get(payload, "user_id")
 
-    changeset =
-      Project.changeset(
-        %Project{id: project_id},
-        %{
-          "tenant_id" => convert_to_uuid(tenant_id),
-          "user_id" => if(user_id, do: convert_to_uuid(user_id), else: nil),
-          "name" => payload["name"],
-          "description" => Map.get(payload, "description"),
-          "status" => Map.get(payload, "status", "active"),
-          "area" => Map.get(payload, "area"),
-          "labels" => Map.get(payload, "labels", []),
-          "metadata" => Map.get(payload, "metadata", %{})
-        }
-      )
+      changeset =
+        Project.changeset(
+          %Project{id: project_id},
+          %{
+            "tenant_id" => convert_to_uuid(tenant_id),
+            "user_id" => if(user_id, do: convert_to_uuid(user_id), else: nil),
+            "name" => payload["name"],
+            "description" => Map.get(payload, "description"),
+            "status" => Map.get(payload, "status", "active"),
+            "area" => Map.get(payload, "area"),
+            "labels" => Map.get(payload, "labels", []),
+            "metadata" => Map.get(payload, "metadata", %{})
+          }
+        )
 
-    case Repo.insert(changeset) do
-      {:ok, db_project} ->
-        project = schema_to_map(db_project)
-        new_state = Map.put(state, project_id, project)
-        Logger.info("Created project in database: #{project_id}")
-        {:reply, {:ok, project}, new_state}
+      case Repo.insert(changeset) do
+        {:ok, db_project} ->
+          project = schema_to_map(db_project)
+          new_state = Map.put(state, project_id, project)
+          Logger.info("Created project in database: #{project_id}")
+          {:reply, {:ok, project}, new_state}
 
-      {:error, changeset} ->
-        Logger.error("Failed to create project: #{inspect(changeset.errors)}")
-        {:reply, {:error, :database_error}, state}
+        {:error, changeset} ->
+          Logger.error("Failed to create project: #{inspect(changeset.errors)}")
+          {:reply, {:error, :database_error}, state}
+      end
     end
   end
 
   @impl true
   def handle_call({:update, project_id, payload}, _from, state) do
-    case Map.get(state, project_id) do
-      nil ->
-        {:reply, {:error, :not_found}, state}
+    # Gate write operations: only leader can update projects
+    unless BotArmyGtd.LeaderMonitor.is_leader?() do
+      Logger.warning("ProjectStore: Write rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
+    else
+      case Map.get(state, project_id) do
+        nil ->
+          {:reply, {:error, :not_found}, state}
 
-      _project ->
-        project_uuid = Ecto.UUID.cast!(project_id)
+        _project ->
+          project_uuid = Ecto.UUID.cast!(project_id)
 
-        case execute_update_transaction(project_uuid, payload) do
-          {:ok, updated_db_project} ->
-            updated_project = schema_to_map(updated_db_project)
-            new_state = Map.put(state, project_id, updated_project)
-            Logger.info("Updated project in database: #{project_id}")
-            {:reply, {:ok, updated_project}, new_state}
+          case execute_update_transaction(project_uuid, payload) do
+            {:ok, updated_db_project} ->
+              updated_project = schema_to_map(updated_db_project)
+              new_state = Map.put(state, project_id, updated_project)
+              Logger.info("Updated project in database: #{project_id}")
+              {:reply, {:ok, updated_project}, new_state}
 
-          {:error, :not_found} ->
-            {:reply, {:error, :not_found}, state}
+            {:error, :not_found} ->
+              {:reply, {:error, :not_found}, state}
 
-          {:error, changeset} ->
-            Logger.error("Failed to update project: #{inspect(changeset.errors)}")
-            {:reply, {:error, :database_error}, state}
-        end
+            {:error, changeset} ->
+              Logger.error("Failed to update project: #{inspect(changeset.errors)}")
+              {:reply, {:error, :database_error}, state}
+          end
+      end
     end
   end
 

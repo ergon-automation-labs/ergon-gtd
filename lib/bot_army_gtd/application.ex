@@ -20,6 +20,7 @@ defmodule BotArmyGtd.Application do
     base_children =
       []
       |> maybe_add_repo()
+      |> maybe_add_leader_monitor()
       |> maybe_add_task_store()
       |> maybe_add_project_store()
       |> maybe_add_plan_store()
@@ -48,6 +49,10 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_repo(children) do
     if env() == :test, do: children, else: [BotArmyGtd.Repo | children]
+  end
+
+  defp maybe_add_leader_monitor(children) do
+    if env() == :test, do: children, else: [{BotArmyGtd.LeaderMonitor, []} | children]
   end
 
   defp maybe_add_task_store(children) do
