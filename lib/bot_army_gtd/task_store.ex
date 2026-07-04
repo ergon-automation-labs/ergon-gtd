@@ -231,7 +231,8 @@ defmodule BotArmyGtd.TaskStore do
             "source_metadata" => Map.get(payload, "source_metadata"),
             "due_date" => due_date,
             "parent_task_id" => Map.get(payload, "parent_task_id"),
-            "labels" => Map.get(payload, "labels", [])
+            "labels" => Map.get(payload, "labels", []),
+            "verification" => Map.get(payload, "verification")
           }
         )
 
@@ -727,6 +728,7 @@ defmodule BotArmyGtd.TaskStore do
       "completed_at" =>
         if(task.completed_at, do: task.completed_at |> NaiveDateTime.to_iso8601(), else: nil),
       "result" => task.result,
+      "verification" => task.verification,
       "created_at" => task.inserted_at |> NaiveDateTime.to_iso8601(),
       "updated_at" => task.updated_at |> NaiveDateTime.to_iso8601()
     }
@@ -783,7 +785,8 @@ defmodule BotArmyGtd.TaskStore do
           "project_id" => Map.get(payload, "project_id", db_task.project_id),
           "goal_id" => Map.get(payload, "goal_id", db_task.goal_id),
           "parent_task_id" => Map.get(payload, "parent_task_id", db_task.parent_task_id),
-          "labels" => Map.get(payload, "labels", db_task.labels)
+          "labels" => Map.get(payload, "labels", db_task.labels),
+          "verification" => Map.get(payload, "verification", db_task.verification)
         }
       )
 
