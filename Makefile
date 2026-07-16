@@ -1,7 +1,7 @@
 SCRIPTS_DIRECTORY ?= $(abspath $(CURDIR)/../scripts)
 MIX ?= /Users/abby/.local/share/mise/shims/mix
 
-.PHONY: setup help deps test test-handlers test-stores test-nats test-integration test-full credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db logs push-and-publish
+.PHONY: setup help deps test test-handlers test-stores test-nats test-integration test-full credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db logs push-and-publish sync-release-version
 
 help:
 	@echo "BotArmyGtd - GTD Bot"
@@ -123,6 +123,15 @@ test-release-smoke:
 # Detect if branch touches responder, NATS consumer, or bridge envelope code.
 # Used as a gate in publish-release to require integration tests.
 HAS_RESPONDER_CHANGES := $(shell git diff --name-only origin/main 2>/dev/null | grep -qE 'lib/.*/(responders|nats|consumers)/|lib/.*/bridge.*\.ex|lib/.*/event.*\.ex' && echo 1 || echo 0)
+
+sync-release-version:
+	@VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
+	if [ -z "$$VERSION" ]; then \
+		echo "❌ Failed to resolve version from mix.exs"; exit 1; \
+	fi; \
+	TIMESTAMP=$$(date -u +"%Y-%m-%dT%H:%M:%SZ"); \
+	echo "$$VERSION" > .release-published; \
+	echo "✅ Synced release version: v$$VERSION ($$TIMESTAMP)"
 
 publish-release: release
 	@if [ "$(HAS_RESPONDER_CHANGES)" = "1" ] && [ "$(SKIP_INTEGRATION_GATE)" != "1" ]; then \
