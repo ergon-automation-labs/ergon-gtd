@@ -180,7 +180,7 @@ publish-release:
 ## Tail production log with grc (paths: $(SCRIPTS_DIRECTORY)/tail_bot_log.sh)
 push-and-publish:
 	@BOT_NAME=gtd; \
-	LOG_FILE="/tmp/.push-and-publish-$$-$$(date +%s).log"; \
+	LOG_FILE="/tmp/.push-and-publish-$${BOT_NAME}-$$-$$(date +%s).log"; \
 	echo "📋 Logging to: $$LOG_FILE" && \
 	echo "=== PUSH AND PUBLISH PIPELINE ===" > "$$LOG_FILE" && \
 	echo "Timestamp: $$(date)" >> "$$LOG_FILE" && \
