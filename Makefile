@@ -179,7 +179,34 @@ publish-release:
 
 ## Tail production log with grc (paths: $(SCRIPTS_DIRECTORY)/tail_bot_log.sh)
 push-and-publish:
-	@git push && $(MAKE) publish-release
+	@BOT_NAME=gtd; \
+	LOG_FILE="/tmp/.push-and-publish-$$-$$(date +%s).log"; \
+	echo "📋 Logging to: $$LOG_FILE" && \
+	echo "=== PUSH AND PUBLISH PIPELINE ===" > "$$LOG_FILE" && \
+	echo "Timestamp: $$(date)" >> "$$LOG_FILE" && \
+	echo "Bot: $$BOT_NAME" >> "$$LOG_FILE" && \
+	echo "" >> "$$LOG_FILE" && \
+	echo "Step 1: git push (with pre-push validation)" >> "$$LOG_FILE" && \
+	if git push >> "$$LOG_FILE" 2>&1; then \
+		echo "✅ Push succeeded" && \
+		echo "Step 2: make publish-release" >> "$$LOG_FILE" && \
+		if $(MAKE) publish-release >> "$$LOG_FILE" 2>&1; then \
+			echo "✅ Publish succeeded" && \
+			echo "" >> "$$LOG_FILE" && \
+			echo "✅ PIPELINE COMPLETE" >> "$$LOG_FILE"; \
+		else \
+			echo "❌ Publish failed (see log)" && \
+			echo "❌ PIPELINE FAILED at publish-release" >> "$$LOG_FILE"; \
+			tail -30 "$$LOG_FILE"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "❌ Push failed (see log)" && \
+		echo "❌ PIPELINE FAILED at git push" >> "$$LOG_FILE"; \
+		tail -30 "$$LOG_FILE"; \
+		exit 1; \
+	fi && \
+	echo "📋 Full log: $$LOG_FILE"
 
 logs:
 	@$(SCRIPTS_DIRECTORY)/tail_bot_log.sh
