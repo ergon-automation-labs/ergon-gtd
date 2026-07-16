@@ -182,28 +182,28 @@ push-and-publish:
 	@BOT_NAME=gtd; \
 	LOG_FILE="/tmp/.push-and-publish-$${BOT_NAME}-$$-$$(date +%s).log"; \
 	echo "📋 Logging to: $$LOG_FILE" && \
-	echo "=== PUSH AND PUBLISH PIPELINE ===" > "$$LOG_FILE" && \
-	echo "Timestamp: $$(date)" >> "$$LOG_FILE" && \
-	echo "Bot: $$BOT_NAME" >> "$$LOG_FILE" && \
-	echo "" >> "$$LOG_FILE" && \
-	echo "Step 1: git push (with pre-push validation)" >> "$$LOG_FILE" && \
-	if git push >> "$$LOG_FILE" 2>&1; then \
+	echo "=== PUSH AND PUBLISH PIPELINE ===" > "$${LOG_FILE}" && \
+	echo "Timestamp: $$(date)" >> "$${LOG_FILE}" && \
+	echo "Bot: $${BOT_NAME}" >> "$${LOG_FILE}" && \
+	echo "" >> "$${LOG_FILE}" && \
+	echo "Step 1: git push (with pre-push validation)" >> "$${LOG_FILE}" && \
+	if git push >> "$${LOG_FILE}" 2>&1; then \
 		echo "✅ Push succeeded" && \
-		echo "Step 2: make publish-release" >> "$$LOG_FILE" && \
-		if $(MAKE) publish-release >> "$$LOG_FILE" 2>&1; then \
+		echo "Step 2: make publish-release" >> "$${LOG_FILE}" && \
+		if $(MAKE) publish-release >> "$${LOG_FILE}" 2>&1; then \
 			echo "✅ Publish succeeded" && \
-			echo "" >> "$$LOG_FILE" && \
-			echo "✅ PIPELINE COMPLETE" >> "$$LOG_FILE"; \
+			echo "" >> "$${LOG_FILE}" && \
+			echo "✅ PIPELINE COMPLETE" >> "$${LOG_FILE}"; \
 		else \
 			echo "❌ Publish failed (see log)" && \
-			echo "❌ PIPELINE FAILED at publish-release" >> "$$LOG_FILE"; \
-			tail -30 "$$LOG_FILE"; \
+			echo "❌ PIPELINE FAILED at publish-release" >> "$${LOG_FILE}"; \
+			tail -30 "$${LOG_FILE}"; \
 			exit 1; \
 		fi; \
 	else \
 		echo "❌ Push failed (see log)" && \
-		echo "❌ PIPELINE FAILED at git push" >> "$$LOG_FILE"; \
-		tail -30 "$$LOG_FILE"; \
+		echo "❌ PIPELINE FAILED at git push" >> "$${LOG_FILE}"; \
+		tail -30 "$${LOG_FILE}"; \
 		exit 1; \
 	fi && \
 	echo "📋 Full log: $$LOG_FILE"
@@ -247,10 +247,10 @@ deploy-bot:
 	}; \
 	BOT_NAME=$$(basename $$(pwd) | sed 's/bot_army_//'); \
 	echo "Deploying from: $$(pwd)"; \
-	echo "Bot name: $$BOT_NAME"; \
+	echo "Bot name: $${BOT_NAME}"; \
 	echo "Monorepo root: $$MONOREPO_ROOT"; \
 	echo ""; \
-	$(MAKE) -C "$$MONOREPO_ROOT" deploy-bot BOT=$$BOT_NAME
+	$(MAKE) -C "$$MONOREPO_ROOT" deploy-bot BOT=$${BOT_NAME}
 
 verify-bot:
 	@MONOREPO_ROOT=$$($(call _FIND_MONOREPO_ROOT)) || { \
@@ -258,7 +258,7 @@ verify-bot:
 		exit 1; \
 	}; \
 	BOT_NAME=$$(basename $$(pwd) | sed 's/bot_army_//'); \
-	$(MAKE) -C "$$MONOREPO_ROOT" verify-bot BOT=$$BOT_NAME
+	$(MAKE) -C "$$MONOREPO_ROOT" verify-bot BOT=$${BOT_NAME}
 
 verify-bot-nats:
 	@MONOREPO_ROOT=$$($(call _FIND_MONOREPO_ROOT)) || { \
@@ -266,4 +266,4 @@ verify-bot-nats:
 		exit 1; \
 	}; \
 	BOT_NAME=$$(basename $$(pwd) | sed 's/bot_army_//'); \
-	$(MAKE) -C "$$MONOREPO_ROOT" verify-bot-nats BOT=$$BOT_NAME
+	$(MAKE) -C "$$MONOREPO_ROOT" verify-bot-nats BOT=$${BOT_NAME}
