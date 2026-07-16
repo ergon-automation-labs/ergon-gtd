@@ -133,20 +133,7 @@ sync-release-version:
 	echo "$$VERSION" > .release-published; \
 	echo "✅ Synced release version: v$$VERSION ($$TIMESTAMP)"
 
-publish-release: release
-	@if [ "$(HAS_RESPONDER_CHANGES)" = "1" ] && [ "$(SKIP_INTEGRATION_GATE)" != "1" ]; then \
-		echo "🔒 Responder/NATS/bridge changes detected. Integration tests required before publish."; \
-		$(MAKE) test-integration || { echo "❌ Integration tests failed. Publish blocked."; exit 1; }; \
-		echo "✅ Integration tests passed."; \
-	else \
-		[ "$(HAS_RESPONDER_CHANGES)" = "1" ] && echo "⚠️  Skipping integration gate (SKIP_INTEGRATION_GATE=1)" || true; \
-	fi
-	@$(MAKE) test-release-smoke
-	@echo "==============================================="
-	@echo "Publishing release to GitHub"
-	@echo "==============================================="
-	@echo ""
-
+publish-release:
 	@set -e; \
 	VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
 	if [ -z "$$VERSION" ]; then \
@@ -155,9 +142,28 @@ publish-release: release
 	fi; \
 	TARBALL=gtd_bot-$$VERSION.tar.gz; \
 	echo "Version: $$VERSION"; \
-	echo "Creating release tarball..."; \
-	tar -czf "$$TARBALL" -C _build/prod/rel gtd_bot/; \
-	echo "✓ Tarball created: $$TARBALL"; \
+	echo ""; \
+	if [ -f "$$TARBALL" ]; then \
+		echo "✓ Tarball already exists locally: $$TARBALL (skipping rebuild)"; \
+	else \
+		echo "📦 Building release (tarball not found locally)..."; \
+		if [ "$(HAS_RESPONDER_CHANGES)" = "1" ] && [ "$(SKIP_INTEGRATION_GATE)" != "1" ]; then \
+			echo "🔒 Responder/NATS/bridge changes detected. Integration tests required before publish."; \
+			$(MAKE) test-integration || { echo "❌ Integration tests failed. Publish blocked."; exit 1; }; \
+			echo "✅ Integration tests passed."; \
+		else \
+			[ "$(HAS_RESPONDER_CHANGES)" = "1" ] && echo "⚠️  Skipping integration gate (SKIP_INTEGRATION_GATE=1)" || true; \
+		fi; \
+		$(MAKE) release; \
+		$(MAKE) test-release-smoke; \
+		echo "Creating release tarball..."; \
+		tar -czf "$$TARBALL" -C _build/prod/rel gtd_bot/; \
+		echo "✓ Tarball created: $$TARBALL"; \
+	fi; \
+	echo ""; \
+	echo "==============================================="; \
+	echo "Publishing release to GitHub"; \
+	echo "==============================================="; \
 	echo ""; \
 	echo "Creating GitHub release v$$VERSION..."; \
 	if gh release view "v$$VERSION" >/dev/null 2>&1; then \
@@ -165,15 +171,10 @@ publish-release: release
 	else \
 		gh release create "v$$VERSION" "$$TARBALL" \
 			--title "Release v$$VERSION" \
-			--notes "GTD Bot Elixir release v$$VERSION. Download and deploy with Jenkins." \
+			--notes "GTD Bot Elixir release v$$VERSION" \
 			--draft=false; \
 	fi; \
 	echo "✓ Release published to GitHub"; \
-	echo ""; \
-	echo "Next steps:"; \
-	echo "1. Jenkins will automatically detect the new release"; \
-	echo "2. Trigger deployment in Jenkins UI or wait for auto-deployment"; \
-	echo "3. Check deployment status: make jenkins-logs"; \
 	echo ""
 
 ## Tail production log with grc (paths: $(SCRIPTS_DIRECTORY)/tail_bot_log.sh)
