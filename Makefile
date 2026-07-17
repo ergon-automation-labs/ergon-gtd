@@ -175,6 +175,7 @@ publish-release:
 			--draft=false; \
 	fi; \
 	echo "✓ Release published to GitHub"; \
+	$(MAKE) sync-release-version; \
 	echo ""
 
 ## Tail production log with grc (paths: $(SCRIPTS_DIRECTORY)/tail_bot_log.sh)
