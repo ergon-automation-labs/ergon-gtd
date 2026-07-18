@@ -102,14 +102,7 @@ defmodule BotArmyGtd.ParaExporter do
     ]
 
     Enum.each(files, fn {filename, content} ->
-      payload = %{
-        "schema_version" => "1.0",
-        "relative_path" => "projects/#{slug}/#{filename}",
-        "content" => content,
-        "mode" => "write"
-      }
-
-      do_publish("para.fs.write", payload)
+      publish_to_para_fs("projects/#{slug}/#{filename}", content, "write")
     end)
 
     Logger.info("[ParaExporter] Scaffolded PARA project: #{slug} (project_id=#{project_id})")
@@ -142,14 +135,8 @@ defmodule BotArmyGtd.ParaExporter do
 
     # If active, also update NEXT_ACTION
     if status == "active" do
-      next_action = %{
-        "schema_version" => "1.0",
-        "relative_path" => "projects/#{slug}/NEXT_ACTION.md",
-        "content" => "# Next action\n\n**#{title}**\n\n_Synced from GTD on #{today}_\n",
-        "mode" => "write"
-      }
-
-      do_publish("para.fs.write", next_action)
+      content = "# Next action\n\n**#{title}**\n\n_Synced from GTD on #{today}_\n"
+      publish_to_para_fs("projects/#{slug}/NEXT_ACTION.md", content, "write")
     end
 
     :ok
@@ -560,5 +547,45 @@ defmodule BotArmyGtd.ParaExporter do
         Logger.warning("[ParaExporter] Failed to publish to #{subject}: #{inspect(reason)}")
         :ok
     end
+  end
+
+  defp publish_to_para_fs(relative_path, content, mode \\ "write") do
+    with {:ok, token} <- fetch_para_write_token() do
+      payload = %{
+        "schema_version" => "1.0",
+        "relative_path" => relative_path,
+        "content" => content,
+        "mode" => mode,
+        "auth_token" => token
+      }
+
+      do_publish("para.fs.write", payload)
+    else
+      {:error, reason} ->
+        Logger.warning("[ParaExporter] Failed to get PARA token: #{inspect(reason)}")
+        :ok
+    end
+  end
+
+  defp fetch_para_write_token do
+    case Publisher.request("para.auth.get_write_token", %{}, 5_000) do
+      {:ok, response} ->
+        if response["ok"] do
+          token = get_in(response, ["data", "write_token"])
+
+          if token do
+            {:ok, token}
+          else
+            {:error, "No write_token in response"}
+          end
+        else
+          {:error, response["error"] || "Failed to get write token"}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  rescue
+    e -> {:error, e}
   end
 end
