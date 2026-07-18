@@ -1,7 +1,7 @@
 SCRIPTS_DIRECTORY ?= $(abspath $(CURDIR)/../scripts)
 MIX ?= /Users/abby/.local/share/mise/shims/mix
 
-.PHONY: setup help deps test test-handlers test-stores test-nats test-integration test-full credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db logs git-push push-and-publish sync-release-version pre-push-cleanup
+.PHONY: setup help deps compile test test-handlers test-stores test-nats test-integration test-full credo dialyzer coverage check format clean release publish-release setup-hooks setup-db reset-db logs git-push push-and-publish sync-release-version pre-push-cleanup
 
 help:
 	@echo "BotArmyGtd - GTD Bot"
@@ -64,6 +64,12 @@ init:
 
 deps:
 	$(MIX) deps.get
+
+compile:
+	@LOG_FILE="/tmp/compile-gtd-$$(date +%s).log"; \
+	echo "Compiling GTD and logging to $$LOG_FILE..."; \
+	$(MIX) compile 2>&1 | tee "$$LOG_FILE"; \
+	echo "✓ Compilation log: $$LOG_FILE"
 
 test:
 	$(MIX) test
