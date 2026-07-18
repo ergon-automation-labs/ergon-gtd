@@ -33,7 +33,7 @@ defmodule BotArmyGtd.Handlers.LogEnrichmentHandler do
 
       {entry_id, entry_body} when is_binary(entry_id) and is_binary(entry_body) ->
         event_data = build_llm_request(entry_id, entry_body)
-        BotArmyRuntime.NATS.Publisher.publish("llm.response.parse", event_data)
+        BotArmyLibraryRuntime.NATS.Publisher.publish("llm.response.parse", event_data)
         :ok
 
       _ ->

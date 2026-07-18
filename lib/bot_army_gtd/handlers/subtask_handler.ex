@@ -23,9 +23,9 @@ defmodule BotArmyGtd.Handlers.SubtaskHandler do
   """
 
   require Logger
-  alias BotArmyCore.Tenant
+  alias BotArmyLibraryCore.Tenant
   alias BotArmyGtd.{EventBuilder, TaskStore}
-  alias BotArmyRuntime.NATS.Publisher
+  alias BotArmyLibraryRuntime.NATS.Publisher
 
   defp task_store do
     Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)

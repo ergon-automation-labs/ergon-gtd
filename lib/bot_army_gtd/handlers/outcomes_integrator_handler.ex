@@ -12,7 +12,7 @@ defmodule BotArmyGtd.Handlers.OutcomesIntegratorHandler do
   """
 
   require Logger
-  alias BotArmyCore.Tenant
+  alias BotArmyLibraryCore.Tenant
 
   @doc """
   Handle task completion metrics from outcomes events.

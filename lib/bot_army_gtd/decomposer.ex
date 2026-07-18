@@ -45,7 +45,7 @@ defmodule BotArmyGtd.Decomposer do
 
   require Logger
   alias BotArmyGtd.Decomposers.DeterministicDecomposer
-  alias BotArmyRuntime.NATS.Publisher
+  alias BotArmyLibraryRuntime.NATS.Publisher
 
   alias BotArmyGtd.Decomposers.DeterministicDecomposer
 

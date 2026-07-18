@@ -185,7 +185,7 @@ defmodule BotArmyGtd.Adapters.PlanAdapter do
       timeout_ms: @default_timeout_ms
     )
 
-    case BotArmyRuntime.NATS.Publisher.request(
+    case BotArmyLibraryRuntime.NATS.Publisher.request(
            "bot_army_llm.converse",
            payload,
            timeout_ms: @default_timeout_ms

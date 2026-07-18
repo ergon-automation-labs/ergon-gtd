@@ -26,11 +26,11 @@ defmodule BotArmyGtd.IntentEvaluator do
 
   require Logger
 
-  alias BotArmyRuntime.Intent.AccumulatedContext
-  alias BotArmyRuntime.Intent.ActionHandler
-  alias BotArmyRuntime.Intent.DeferHandler
-  alias BotArmyRuntime.Intent.Publisher
-  alias BotArmyRuntime.Intent.ThresholdModel
+  alias BotArmyLibraryRuntime.Intent.AccumulatedContext
+  alias BotArmyLibraryRuntime.Intent.ActionHandler
+  alias BotArmyLibraryRuntime.Intent.DeferHandler
+  alias BotArmyLibraryRuntime.Intent.Publisher
+  alias BotArmyLibraryRuntime.Intent.ThresholdModel
 
   @bot_name "gtd"
   @evaluate_interval_ms 5 * 60 * 1000
@@ -273,7 +273,7 @@ defmodule BotArmyGtd.IntentEvaluator do
 
   @doc false
   def handle_nudge_action(bot_name, action, _intent_id, details, _endorsements) do
-    BotArmyCore.IntegrationGates.notification_publish("notification.route.request", %{
+    BotArmyLibraryCore.IntegrationGates.notification_publish("notification.route.request", %{
       "event_id" => UUID.uuid4(),
       "triggered_by" => bot_name,
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -286,7 +286,7 @@ defmodule BotArmyGtd.IntentEvaluator do
 
   @doc false
   def handle_remind_action(bot_name, action, _intent_id, details, _endorsements) do
-    BotArmyCore.IntegrationGates.notification_publish("notification.route.request", %{
+    BotArmyLibraryCore.IntegrationGates.notification_publish("notification.route.request", %{
       "event_id" => UUID.uuid4(),
       "triggered_by" => bot_name,
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -309,7 +309,7 @@ defmodule BotArmyGtd.IntentEvaluator do
         "schema_version" => "1.0",
         "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
         "source" => "bot_army_gtd",
-        "tenant_id" => BotArmyRuntime.Tenant.default_tenant_id(),
+        "tenant_id" => BotArmyLibraryRuntime.Tenant.default_tenant_id(),
         "conversation_id" => UUID.uuid4(),
         "payload" => %{
           "from_bot" => bot_name,
@@ -321,7 +321,7 @@ defmodule BotArmyGtd.IntentEvaluator do
         }
       }
 
-      BotArmyRuntime.NATS.Publisher.publish("gossip.social.invite", message)
+      BotArmyLibraryRuntime.NATS.Publisher.publish("gossip.social.invite", message)
       Logger.info("[GTD.Intent] Proposed social check-in to fitness_bot (stale=#{stale})")
     end
   end
@@ -402,7 +402,7 @@ defmodule BotArmyGtd.IntentEvaluator do
       end
 
     if message do
-      BotArmyCore.IntegrationGates.notification_publish("notification.route.request", %{
+      BotArmyLibraryCore.IntegrationGates.notification_publish("notification.route.request", %{
         "event_id" => UUID.uuid4(),
         "triggered_by" => bot_name,
         "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -502,15 +502,15 @@ defmodule BotArmyGtd.IntentEvaluator do
     }
 
     Task.start(fn ->
-      BotArmyRuntime.NATS.Publisher.publish("events.bot_army.intent.aborted", event)
+      BotArmyLibraryRuntime.NATS.Publisher.publish("events.bot_army.intent.aborted", event)
     end)
   end
 
   defp get_thresholds do
     base = Application.get_env(:bot_army_gtd, :intent_thresholds, @default_thresholds)
 
-    nudge_factor = BotArmyLearning.ThresholdAdapter.adjustment("gtd.nudge")
-    remind_factor = BotArmyLearning.ThresholdAdapter.adjustment("gtd.remind")
+    nudge_factor = BotArmyLibraryLearning.ThresholdAdapter.adjustment("gtd.nudge")
+    remind_factor = BotArmyLibraryLearning.ThresholdAdapter.adjustment("gtd.remind")
 
     %{
       base
@@ -523,7 +523,7 @@ defmodule BotArmyGtd.IntentEvaluator do
           weight: base.idle_minutes.weight
         },
         random_threshold:
-          BotArmyLearning.ThresholdAdapter.apply_adjustment(
+          BotArmyLibraryLearning.ThresholdAdapter.apply_adjustment(
             base.random_threshold,
             nudge_factor
           )

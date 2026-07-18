@@ -17,7 +17,7 @@ defmodule BotArmyGtd.Handlers.NotificationHandler do
   """
 
   require Logger
-  alias BotArmyCore.Tenant
+  alias BotArmyLibraryCore.Tenant
   alias BotArmyGtd.{EventBuilder, NATS.Publisher}
 
   defp plan_store do

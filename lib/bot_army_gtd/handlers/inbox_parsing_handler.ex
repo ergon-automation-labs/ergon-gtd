@@ -16,7 +16,7 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
   """
 
   require Logger
-  alias BotArmyCore.Tenant
+  alias BotArmyLibraryCore.Tenant
   alias BotArmyGtd.{EventBuilder, NATS.Publisher}
 
   defp task_store do

@@ -30,7 +30,7 @@ defmodule BotArmyGtd.NATS.WeeklyReportsPublisher do
   def handle_continue(:subscribe, state) do
     Logger.info("[WeeklyReportsPublisher] Subscribing to outcomes.report.weekly")
 
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         subscriptions =
           try do
@@ -128,7 +128,7 @@ defmodule BotArmyGtd.NATS.WeeklyReportsPublisher do
       "upsert" => true
     }
 
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         case Gnat.pub(conn, "para.fs.write", Jason.encode!(payload)) do
           :ok ->

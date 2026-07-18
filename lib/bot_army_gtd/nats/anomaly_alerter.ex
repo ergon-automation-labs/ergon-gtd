@@ -41,7 +41,7 @@ defmodule BotArmyGtd.NATS.AnomalyAlerter do
       "system.health.>"
     ]
 
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         subscriptions =
           Enum.flat_map(topics, fn topic ->
@@ -183,7 +183,7 @@ defmodule BotArmyGtd.NATS.AnomalyAlerter do
       "auto_generated" => true
     }
 
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         case Gnat.pub(conn, "bridge.notification.anomaly", Jason.encode!(alert_payload)) do
           :ok ->

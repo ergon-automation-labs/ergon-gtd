@@ -1,7 +1,7 @@
 defmodule BotArmyGtd.VetoRules do
   @moduledoc false
 
-  alias BotArmyRuntime.Intent.AccumulatedContext
+  alias BotArmyLibraryRuntime.Intent.AccumulatedContext
 
   @doc """
   Veto fitness suggest_workout intents when the user has many stale tasks.

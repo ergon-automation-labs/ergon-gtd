@@ -9,7 +9,7 @@ defmodule BotArmyGtd.Gossip do
   require Logger
 
   alias BotArmyGtd.Handlers.PollVoteHandler
-  alias BotArmyRuntime.NATS.Publisher
+  alias BotArmyLibraryRuntime.NATS.Publisher
 
   @table :gtd_gossip_poll_state
 
@@ -122,7 +122,7 @@ defmodule BotArmyGtd.Gossip do
     poll_id = Map.get(payload, "poll_id")
     choices = Map.get(payload, "choices", %{})
     budget = Map.get(payload, "vote_budget_per_bot", 3)
-    tenant_id = Map.get(payload, "tenant_id", BotArmyRuntime.Tenant.default_tenant_id())
+    tenant_id = Map.get(payload, "tenant_id", BotArmyLibraryRuntime.Tenant.default_tenant_id())
 
     if is_binary(poll_id) and poll_id != "" do
       :ets.insert(
@@ -154,7 +154,7 @@ defmodule BotArmyGtd.Gossip do
     voted_key = {:gtd_poll_voted, poll_id}
 
     if :ets.lookup(@table, voted_key) == [] do
-      allocations = BotArmyRuntime.GtdPollAllocator.allocate(choices, :gtd, budget)
+      allocations = BotArmyLibraryRuntime.GtdPollAllocator.allocate(choices, :gtd, budget)
 
       Logger.info(
         "[GTD Gossip] voting on GTD poll poll_id=#{poll_id} allocations=#{inspect(allocations)}"
@@ -224,7 +224,7 @@ defmodule BotArmyGtd.Gossip do
 
   defp active_task_count do
     task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
-    tenant_id = BotArmyRuntime.Tenant.default_tenant_id()
+    tenant_id = BotArmyLibraryRuntime.Tenant.default_tenant_id()
 
     case task_store.list_prioritized(tenant_id, %{"status" => "active"}) do
       {:ok, tasks} when is_list(tasks) -> length(tasks)
@@ -234,7 +234,7 @@ defmodule BotArmyGtd.Gossip do
 
   defp top_task_ids(limit) do
     task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
-    tenant_id = BotArmyRuntime.Tenant.default_tenant_id()
+    tenant_id = BotArmyLibraryRuntime.Tenant.default_tenant_id()
 
     case task_store.list_prioritized(tenant_id, %{"status" => "active"}) do
       {:ok, tasks} ->
@@ -263,7 +263,7 @@ defmodule BotArmyGtd.Gossip do
       "schema_version" => "1.0",
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "source" => "bot_army_gtd",
-      "tenant_id" => BotArmyRuntime.Tenant.default_tenant_id(),
+      "tenant_id" => BotArmyLibraryRuntime.Tenant.default_tenant_id(),
       "conversation_id" => poll_id,
       "payload" => %{
         "poll_id" => poll_id,
@@ -337,7 +337,7 @@ defmodule BotArmyGtd.Gossip do
   end
 
   defp call_llm_fast(prompt, timeout_ms) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         request_body =
           Jason.encode!(%{

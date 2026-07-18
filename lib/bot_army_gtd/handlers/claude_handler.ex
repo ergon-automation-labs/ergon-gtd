@@ -18,7 +18,7 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
   """
 
   require Logger
-  alias BotArmyCore.Tenant
+  alias BotArmyLibraryCore.Tenant
   alias BotArmyGtd.{EventBuilder, NATS.Publisher, TaskStore}
 
   defp task_store do

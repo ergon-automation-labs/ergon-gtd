@@ -51,9 +51,9 @@ defmodule BotArmyGtd.PulsePublisher do
   def handle_info(:publish_health, state) do
     tenant_id =
       Application.get_env(:bot_army_gtd, :default_tenant_id) ||
-        BotArmyRuntime.Tenant.default_tenant_id()
+        BotArmyLibraryRuntime.Tenant.default_tenant_id()
 
-    BotArmyRuntime.SynapseHealth.publish(
+    BotArmyLibraryRuntime.SynapseHealth.publish(
       source: @source,
       service: "gtd",
       status: "healthy",
@@ -279,7 +279,7 @@ defmodule BotArmyGtd.PulsePublisher do
 
     Logger.debug("[PulsePublisher] Getting NATS connection...")
 
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         Logger.debug("[PulsePublisher] Got NATS connection, encoding pulse...")
         json = Jason.encode!(pulse)

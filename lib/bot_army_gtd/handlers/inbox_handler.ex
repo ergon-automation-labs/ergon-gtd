@@ -32,7 +32,7 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
   def handle_add(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyLibraryCore.Tenant.extract_context(message)
 
     case validate_add_payload(payload) do
       :ok ->
@@ -151,7 +151,7 @@ defmodule BotArmyGtd.Handlers.InboxHandler do
         user_id: user_id
       )
 
-    case BotArmyRuntime.NATS.Publisher.publish("llm.response.parse", event_data) do
+    case BotArmyLibraryRuntime.NATS.Publisher.publish("llm.response.parse", event_data) do
       {:ok, _subject} -> Logger.debug("Published parse request to LLM bot")
       {:error, reason} -> Logger.error("Failed to publish parse request: #{inspect(reason)}")
     end

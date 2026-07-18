@@ -24,7 +24,7 @@ defmodule BotArmyGtd.Handlers.SearchHandler do
   def handle_search(message) do
     event_id = message["event_id"]
     payload = message["payload"]
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyCore.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyLibraryCore.Tenant.extract_context(message)
 
     case validate_search_payload(payload) do
       :ok ->

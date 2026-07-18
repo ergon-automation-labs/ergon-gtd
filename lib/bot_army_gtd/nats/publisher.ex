@@ -20,7 +20,7 @@ defmodule BotArmyGtd.NATS.Publisher do
 
   require Logger
   alias BotArmyGtd.TaskIntakeGuard
-  alias BotArmyRuntime.NATS.Publisher
+  alias BotArmyLibraryRuntime.NATS.Publisher
 
   @doc """
   Publish an event to NATS.

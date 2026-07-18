@@ -265,3 +265,19 @@ verify-bot-nats:
 	}; \
 	BOT_NAME=$$(basename $$(pwd) | sed 's/bot_army_//'); \
 	$(MAKE) -C "$$MONOREPO_ROOT" verify-bot-nats BOT=$${BOT_NAME}
+
+
+
+
+
+
+
+
+.PHONY: bump-version
+
+bump-version:
+	@if [ -z "$(BUMP)" ]; then \
+		echo "Usage: make bump-version BUMP=major|minor|patch"; \
+		exit 1; \
+	fi
+	@$(MAKE) -C .. bump-version BOT=gtd BUMP=$(BUMP)

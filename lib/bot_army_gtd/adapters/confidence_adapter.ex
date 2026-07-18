@@ -16,7 +16,7 @@ defmodule BotArmyGtd.Adapters.ConfidenceAdapter do
   """
 
   require Logger
-  alias BotArmyRuntime.NATS.Publisher
+  alias BotArmyLibraryRuntime.NATS.Publisher
 
   @high_confidence 0.7
   @low_confidence 0.3

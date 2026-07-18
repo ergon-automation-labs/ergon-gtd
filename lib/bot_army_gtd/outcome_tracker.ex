@@ -1,6 +1,6 @@
 defmodule BotArmyGtd.OutcomeTracker do
   @moduledoc """
-  Delegates to BotArmyLearning.OutcomeTracker with GTD-specific name.
+  Delegates to BotArmyLibraryLearning.OutcomeTracker with GTD-specific name.
   """
 
   def record(id, category, decision, actual_result) do

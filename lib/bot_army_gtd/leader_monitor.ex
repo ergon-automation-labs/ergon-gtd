@@ -12,7 +12,7 @@ defmodule BotArmyGtd.LeaderMonitor do
   use GenServer
   require Logger
 
-  alias BotArmyRuntime.NATS
+  alias BotArmyLibraryRuntime.NATS
 
   @server __MODULE__
   @heartbeat_timeout_ms 90_000

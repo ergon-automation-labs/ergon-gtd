@@ -35,7 +35,7 @@ defmodule BotArmyGtd.NATS.OutcomesConsumer do
       "outcomes.context.>"
     ]
 
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         subscriptions =
           Enum.flat_map(topics, fn topic ->

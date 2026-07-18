@@ -11,7 +11,7 @@ defmodule BotArmyGtd.ArmyContextConsumer do
   """
 
   use GenServer
-  alias BotArmyRuntime.NATS.Connection
+  alias BotArmyLibraryRuntime.NATS.Connection
   require Logger
 
   @reconnect_delay_ms 5_000
@@ -48,7 +48,7 @@ defmodule BotArmyGtd.ArmyContextConsumer do
 
   @impl true
   def handle_continue(:connect, state) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         Connection.subscribe_to_status()
         subscribe_to_topics(conn, state)

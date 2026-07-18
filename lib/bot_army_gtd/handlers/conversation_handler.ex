@@ -18,7 +18,7 @@ defmodule BotArmyGtd.Handlers.ConversationHandler do
   require Logger
 
   alias BotArmyGtd.{ProjectStore, TaskStore}
-  alias BotArmyRuntime.NATS.Conversation.Manager
+  alias BotArmyLibraryRuntime.NATS.Conversation.Manager
 
   @doc """
   Handle an incoming conversation request directed at the GTD bot.

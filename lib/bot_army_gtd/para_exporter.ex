@@ -29,7 +29,7 @@ defmodule BotArmyGtd.ParaExporter do
 
   require Logger
   alias BotArmyGtd.{ProjectStore, TaskStore}
-  alias BotArmyRuntime.NATS.Publisher
+  alias BotArmyLibraryRuntime.NATS.Publisher
 
   @para_refs_marker "## PARA refs"
   @project_path_regex ~r{docs/personal_os/projects/([^/]+)/}

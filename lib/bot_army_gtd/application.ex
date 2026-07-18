@@ -95,7 +95,7 @@ defmodule BotArmyGtd.Application do
     if env() == :test or Application.get_env(:bot_army_library_runtime, :pack_mode, false),
       do: children,
       else: [
-        {BotArmyRuntime.Health.Responder,
+        {BotArmyLibraryRuntime.Health.Responder,
          [bot_name: :gtd, repo: BotArmyGtd.Repo, version: @version]}
       ]
   end
@@ -145,7 +145,7 @@ defmodule BotArmyGtd.Application do
         ]
       ]
 
-      child = {BotArmyRuntime.Intent.VetoListener, rules: veto_rules, bot_name: "gtd"}
+      child = {BotArmyLibraryRuntime.Intent.VetoListener, rules: veto_rules, bot_name: "gtd"}
       [child | children]
     end
   end
@@ -154,7 +154,8 @@ defmodule BotArmyGtd.Application do
     if env() == :test,
       do: children,
       else: [
-        {BotArmyLearning.OutcomeTracker, [name: :gtd_outcome_tracker, repo: BotArmyGtd.Repo]}
+        {BotArmyLibraryLearning.OutcomeTracker,
+         [name: :gtd_outcome_tracker, repo: BotArmyGtd.Repo]}
         | children
       ]
   end

@@ -60,7 +60,7 @@ defmodule BotArmyGtd.BehavioralLearningIntegrator do
   end
 
   defp query_context_broker(task_data) do
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         case Gnat.request(conn, "context.state.query", request_payload(task_data),
                receive_timeout: 2000

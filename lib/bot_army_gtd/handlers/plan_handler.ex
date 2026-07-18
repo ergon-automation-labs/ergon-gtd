@@ -15,12 +15,12 @@ defmodule BotArmyGtd.Handlers.PlanHandler do
 
   - `BotArmyGtd.PlanStore` - Persistent plan storage
   - `BotArmyGtd.NATS.Publisher` - Event publishing
-  - `BotArmyRuntime.NATS.Publisher` - NATS request/reply for LLM calls
+  - `BotArmyLibraryRuntime.NATS.Publisher` - NATS request/reply for LLM calls
   """
 
   require Logger
 
-  alias BotArmyCore.Tenant
+  alias BotArmyLibraryCore.Tenant
   alias BotArmyGtd.{EventBuilder, NATS.Publisher, PlanStore, TaskStore}
 
   defp plan_store do

@@ -9,7 +9,7 @@ defmodule BotArmyGtd.Formatter do
   """
 
   require Logger
-  alias BotArmyRuntime.Personality.Formatter
+  alias BotArmyLibraryRuntime.Personality.Formatter
 
   @doc """
   Format inbox cleared notification.

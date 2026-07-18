@@ -21,7 +21,7 @@ defmodule BotArmyGtd.ReviewScheduler do
 
   use GenServer
   require Logger
-  alias BotArmyCore.Tenant
+  alias BotArmyLibraryCore.Tenant
   alias BotArmyGtd.{DecompositionStore, NATS.Publisher}
 
   # 5 minutes

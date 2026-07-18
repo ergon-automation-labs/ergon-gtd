@@ -18,7 +18,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
   require Logger
 
-  alias BotArmyCore.{Tenant, OutcomesEmitter}
+  alias BotArmyLibraryCore.{Tenant, OutcomesEmitter}
 
   alias BotArmyGtd.{
     Adapters.ConfidenceAdapter,
@@ -161,7 +161,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
 
             if task["status"] == "active" and is_binary(task_context) and task_context != "" do
               try do
-                BotArmyCore.IntegrationGates.context_publish("context.signal.gtd", %{
+                BotArmyLibraryCore.IntegrationGates.context_publish("context.signal.gtd", %{
                   "task" => task["title"],
                   "context" => task_context
                 })
@@ -631,7 +631,7 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
           user_id: user_id
         )
 
-      case BotArmyRuntime.NATS.Publisher.publish("gtd.task.decompose", decompose_event) do
+      case BotArmyLibraryRuntime.NATS.Publisher.publish("gtd.task.decompose", decompose_event) do
         {:ok, _} ->
           Logger.info("Triggered decomposition for task_id=#{task["id"]}")
 

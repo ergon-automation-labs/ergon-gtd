@@ -18,7 +18,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   """
 
   require Logger
-  alias BotArmyCore.{NATS, Tenant}
+  alias BotArmyLibraryCore.{NATS, Tenant}
   alias BotArmyGtd.{DecompositionStore, EventBuilder, Handlers.TaskHandler}
 
   defp task_store do
@@ -1056,7 +1056,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
         "triggered_by_event_id" => event_id
       })
 
-    case BotArmyRuntime.NATS.Publisher.publish("llm.inference.chain", event_data) do
+    case BotArmyLibraryRuntime.NATS.Publisher.publish("llm.inference.chain", event_data) do
       {:ok, _subject} -> Logger.debug("Published decomposition chain request to LLM bot")
       {:error, reason} -> Logger.error("Failed to publish chain request: #{inspect(reason)}")
     end
@@ -1199,7 +1199,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandler do
   defp get_registry_snapshot(task_title, description) do
     query_text = "#{task_title} #{description}" |> String.downcase()
 
-    case GenServer.call(BotArmyRuntime.NATS.Connection, :get_connection, 5_000) do
+    case GenServer.call(BotArmyLibraryRuntime.NATS.Connection, :get_connection, 5_000) do
       {:ok, conn} ->
         request_body = Jason.encode!(%{"include_subjects" => true})
 

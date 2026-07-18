@@ -16,7 +16,7 @@ defmodule BotArmyGtd.Handlers.ProjectHandler do
   """
 
   require Logger
-  alias BotArmyCore.Tenant
+  alias BotArmyLibraryCore.Tenant
   alias BotArmyGtd.{EventBuilder, NATS.Publisher, ProjectStore}
 
   defp project_store do

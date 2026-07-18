@@ -9,7 +9,7 @@ defmodule BotArmyGtd.ReviewEngine do
 
   require Logger
   alias BotArmyGtd.{InboxItemStore, ProjectStore, TaskStore}
-  alias BotArmyRuntime.NATS.Publisher
+  alias BotArmyLibraryRuntime.NATS.Publisher
 
   @inbox_stale_hours 48
   @active_stale_days 7
