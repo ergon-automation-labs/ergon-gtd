@@ -1,40 +1,5 @@
 #!/bin/bash
-# Post-push hook: Auto-publish release after successful git push
-# Completes the automation chain: git push → make publish-release → NATS deploy
-# Triggered automatically after 'git push' completes successfully
+# Post-push hook: automatically publish release after successful push
+# Runs make publish-release to create GitHub release and trigger deployment pipeline
 
-set -e
-
-# Capture git branch info
-current_branch=$(git rev-parse --abbrev-ref HEAD)
-remote=$(git config --get branch."$current_branch".remote || echo "origin")
-
-# Only auto-publish on main/master branch
-if [[ ! "$current_branch" =~ ^(main|master)$ ]]; then
-    exit 0
-fi
-
-# Only auto-publish if the push was to origin/main (not a PR branch or other tracking)
-pushed_to=$(git rev-parse --abbrev-ref "@{push}" 2>/dev/null || echo "$remote/$current_branch")
-if [[ ! "$pushed_to" =~ (origin/(main|master)|$remote/(main|master))$ ]]; then
-    exit 0
-fi
-
-echo ""
-echo "🚀 Post-push: Auto-publishing release..."
-echo ""
-
-# Run publish-release in the background so the user gets the shell prompt back quickly
-# Use unique log file per bot/run to support concurrent deployments
-BOT_NAME=$(basename "$(pwd)" | sed 's/bot_army_//')
-PUBLISH_LOG="/tmp/.publish-release-${BOT_NAME}-$$.log"
-
-if make publish-release > "$PUBLISH_LOG" 2>&1; then
-    echo "✅ Release published successfully"
-    echo "   Next: deploy_pipeline_bot will pick up deploy.release.requested from NATS"
-    echo "   Log: $PUBLISH_LOG"
-else
-    echo "⚠️  Release publish failed — check output:"
-    tail -30 "$PUBLISH_LOG"
-    exit 1
-fi
+make publish-release
