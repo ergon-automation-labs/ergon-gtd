@@ -1,5 +1,52 @@
 #!/bin/bash
-# Post-push hook: automatically publish release after successful push
-# Runs make publish-release to create GitHub release and trigger deployment pipeline
+# Post-push hook: run full validation then publish release
+# Runs in background so it doesn't block the push
 
-make publish-release
+set -e
+
+MIX_BIN="/Users/abby/.local/share/mise/shims/mix"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+export HEX_HOME="$REPO_ROOT/.cache/hex"
+export MIX_HOME="$REPO_ROOT/.cache/mix"
+
+BOT_NAME="gtd"
+LOG_FILE="/tmp/post-push-validation-${BOT_NAME}-$(date +%s).log"
+
+{
+  echo "🔄 Post-push: Starting background validation..."
+  echo ""
+
+  # Run validations sequentially to avoid resource exhaustion during fleet pushes
+  echo "🔨 Compiling..."
+  COMPILE_LOG="/tmp/.post-push-compile-$$.log"
+  if ! "$MIX_BIN" compile >"$COMPILE_LOG" 2>&1; then
+    echo "❌ Compile failed"
+    cat "$COMPILE_LOG" >> "$LOG_FILE"
+    exit 1
+  fi
+
+  echo "📝 Running credo..."
+  CREDO_LOG="/tmp/.post-push-credo-$$.log"
+  if ! "$MIX_BIN" credo --strict >"$CREDO_LOG" 2>&1; then
+    echo "❌ Credo failed"
+    cat "$CREDO_LOG" >> "$LOG_FILE"
+    exit 1
+  fi
+
+  echo "🧪 Running tests..."
+  TEST_LOG="/tmp/.post-push-test-$$.log"
+  if ! "$MIX_BIN" test >"$TEST_LOG" 2>&1; then
+    echo "❌ Tests failed"
+    cat "$TEST_LOG" >> "$LOG_FILE"
+    exit 1
+  fi
+
+  echo ""
+  echo "✅ All validations passed"
+  echo ""
+  echo "📢 Running make publish-release..."
+  make publish-release
+} 2>&1 | tee "$LOG_FILE" &
+
+echo "✓ Post-push validation running in background"
+echo "  Log: $LOG_FILE"
