@@ -203,6 +203,12 @@ pre-push-cleanup:
 	fi
 	@echo "✓ Ready to push"
 
+push: test compile credo pre-push-cleanup
+	@echo "✅ All validations passed"
+	@echo "$$(date +%s)" > .push-validated
+	@echo "✓ Proof-of-validation created"
+	@$(MAKE) git-push
+
 git-push: pre-push-cleanup
 	@BOT_NAME=gtd; \
 	LOG_FILE="/tmp/git-push-$${BOT_NAME}-$$(date +%s).log"; \
