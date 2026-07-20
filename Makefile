@@ -148,7 +148,11 @@ sync-release-version:
 	echo "✅ Synced release version: v$$VERSION ($$TIMESTAMP)"
 
 publish-release:
-	@set -e; \
+	@BOT_NAME=gtd; \
+	LOG_FILE="/tmp/publish-release-$${BOT_NAME}-$$(date +%s).log"; \
+	echo "Publishing release and logging to $$LOG_FILE..."; \
+	{ \
+	set -e; \
 	VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
 	if [ -z "$$VERSION" ]; then \
 		echo "Failed to resolve version from mix.exs"; \
@@ -190,7 +194,9 @@ publish-release:
 	fi; \
 	echo "✓ Release published to GitHub"; \
 	$(MAKE) sync-release-version; \
-	echo ""
+	echo ""; \
+	} 2>&1 | tee "$$LOG_FILE"; \
+	echo "✓ Publish-release log: $$LOG_FILE"
 
 ## Tail production log with grc (paths: $(SCRIPTS_DIRECTORY)/tail_bot_log.sh)
 pre-push-cleanup:
