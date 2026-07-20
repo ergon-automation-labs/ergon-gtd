@@ -16,7 +16,7 @@ defmodule BotArmyGtd.AutonomousDecompositionE2eTest do
   import Mox
 
   alias BotArmyGtd.Handlers.{DecompositionHandler, SubtaskHandler}
-  alias BotArmyCore.Tenant
+  alias BotArmyLibraryCore.Tenant
 
   setup :verify_on_exit!
 
