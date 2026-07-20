@@ -3,7 +3,7 @@ defmodule BotArmyGtd.IntentEvaluatorTest do
   @moduletag :core
 
   alias BotArmyGtd.IntentEvaluator
-  alias BotArmyRuntime.Intent.Schema
+  alias BotArmyLibraryRuntime.Intent.Schema
 
   describe "extract_observations/1" do
     test "extracts stale task count from pulse data" do

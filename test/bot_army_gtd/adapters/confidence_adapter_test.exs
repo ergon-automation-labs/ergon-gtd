@@ -120,7 +120,7 @@ defmodule BotArmyGtd.Adapters.ConfidenceAdapterTest do
 
   describe "get_dispatcher_confidence/1" do
     setup do
-      # Mock BotArmyRuntime.NATS.Publisher.request/3
+      # Mock BotArmyLibraryRuntime.NATS.Publisher.request/3
       {:ok, _} =
         start_supervised(
           {Agent,
