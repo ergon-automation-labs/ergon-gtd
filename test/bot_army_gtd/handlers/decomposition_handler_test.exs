@@ -9,7 +9,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles valid decomposition request" do
       task_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.TaskStoreMock, :get, fn ^default_tenant_id, ^task_id ->
         {:ok,
@@ -38,7 +38,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
 
     test "handles missing task_id" do
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       message = %{
         "event" => "gtd.task.decompose",
@@ -58,7 +58,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles task not found" do
       task_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.TaskStoreMock, :get, fn ^default_tenant_id, ^task_id ->
         {:error, :not_found}
@@ -98,7 +98,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       task_id = UUID.uuid4()
       chain_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :create, fn payload when is_map(payload) ->
         {:ok,
@@ -176,7 +176,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles chain completion with missing steps" do
       chain_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       message = %{
         "event" => "llm.chain.completed",
@@ -195,7 +195,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
 
     test "handles missing chain_id" do
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       message = %{
         "event" => "llm.chain.completed",
@@ -215,7 +215,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       task_id = UUID.uuid4()
       chain_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :create, fn payload when is_map(payload) ->
         {:ok,
@@ -250,7 +250,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
 
     test "handles invalid payload" do
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       message = %{
         "event" => "llm.chain.completed",
@@ -270,7 +270,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       decomposition_id = UUID.uuid4()
       task_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       subtask_list = [
         %{"title" => "Subtask 1", "description" => "First subtask", "estimated_hours" => 2},
@@ -332,7 +332,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
       task_id = UUID.uuid4()
       event_id = UUID.uuid4()
 
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok,
@@ -381,7 +381,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles decomposition not found" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:error, :not_found}
@@ -403,7 +403,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
 
     test "handles missing decomposition_id" do
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       message = %{
         "event" => "gtd.decomposition.approve",
@@ -422,7 +422,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "updates decomposition with last_grade=0 and reviewed status" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok,
@@ -456,7 +456,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles decomposition not found" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:error, :not_found}
@@ -478,7 +478,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
 
     test "handles invalid payload" do
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       message = %{
         "event" => "gtd.decomposition.reject",
@@ -497,7 +497,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "fsrs_grade=0 when rating < 3" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok,
@@ -536,7 +536,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "fsrs_grade=0 when delta > 0.3 (predicted=10, actual=3)" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok,
@@ -575,7 +575,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "fsrs_grade=3 (easy) for rating=5 and delta=0.0 (predicted=actual=3)" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok,
@@ -614,7 +614,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "fsrs_grade=2 (neutral) when predicted=nil" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:ok,
@@ -653,7 +653,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "stores user_feedback when provided" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
       feedback = "Good breakdown but missed some edge cases"
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
@@ -694,7 +694,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles missing rating" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       message = %{
         "event" => "gtd.decomposition.review",
@@ -713,7 +713,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles invalid rating (6, out of 1-5)" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       message = %{
         "event" => "gtd.decomposition.review",
@@ -733,7 +733,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles decomposition not found" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:error, :not_found}
@@ -759,7 +759,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles decomposition ready for review" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
       now = DateTime.utc_now()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
@@ -791,7 +791,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles decomposition not due yet" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
       now = DateTime.utc_now()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
@@ -821,7 +821,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles decomposition with wrong status" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
       now = DateTime.utc_now()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
@@ -851,7 +851,7 @@ defmodule BotArmyGtd.Handlers.DecompositionHandlerTest do
     test "handles decomposition not found" do
       decomposition_id = UUID.uuid4()
       event_id = UUID.uuid4()
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       expect(BotArmyGtd.DecompositionStoreMock, :get, fn ^default_tenant_id, ^decomposition_id ->
         {:error, :not_found}

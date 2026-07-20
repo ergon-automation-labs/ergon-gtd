@@ -23,7 +23,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
   describe "complete decomposition lifecycle" do
     test "full cycle: create → approve → discover → request_review → review" do
       # ===== STEP 1: Create Decomposition =====
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
       decomposition_id = UUID.uuid4()
       parent_task_id = UUID.uuid4()
       event_id = UUID.uuid4()
@@ -246,7 +246,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
     end
 
     test "decomposition ready for review must be due" do
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
       decomposition_id = UUID.uuid4()
       request_event_id = UUID.uuid4()
       now = DateTime.utc_now()
@@ -278,7 +278,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
     end
 
     test "approval grade reflects prediction accuracy" do
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
       decomposition_id = UUID.uuid4()
       _parent_task_id = UUID.uuid4()
       approve_event_id = UUID.uuid4()
@@ -358,7 +358,7 @@ defmodule BotArmyGtd.DecompositionLifecycleTest do
     end
 
     test "review with high accuracy increases stability" do
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
       decomposition_id = UUID.uuid4()
       _now = DateTime.utc_now()
       review_event_id = UUID.uuid4()

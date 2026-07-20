@@ -7,7 +7,7 @@ defmodule BotArmyGtd.Handlers.ClaudeHandlerTest do
 
   describe "handle_task_create/1" do
     test "creates a new Claude task when no matching auto task exists" do
-      tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
       event_id = UUID.uuid4()
 
       expect(BotArmyGtd.TaskStoreMock, :list, fn ^tenant_id, _filters ->
@@ -36,7 +36,7 @@ defmodule BotArmyGtd.Handlers.ClaudeHandlerTest do
     end
 
     test "reuses existing auto-generated Claude task instead of creating duplicate" do
-      tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
       event_id = UUID.uuid4()
       existing_id = UUID.uuid4()
 

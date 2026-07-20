@@ -16,7 +16,7 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
 
   describe "get_due/0" do
     test "returns empty list when no decompositions" do
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:ok, []}
@@ -43,7 +43,7 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
         }
       ]
 
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:ok, decompositions}
@@ -72,7 +72,7 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
         }
       ]
 
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:ok, decompositions}
@@ -101,7 +101,7 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
         }
       ]
 
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:ok, decompositions}
@@ -115,7 +115,7 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
     end
 
     test "returns error when store fails" do
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:error, :database_error}
@@ -150,7 +150,7 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
         }
       ]
 
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:ok, decompositions}
@@ -181,7 +181,7 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
         }
       ]
 
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:ok, decompositions}
@@ -210,7 +210,7 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
         }
       ]
 
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:ok, decompositions}
@@ -232,7 +232,7 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
         }
       ]
 
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:ok, decompositions}
@@ -255,7 +255,7 @@ defmodule BotArmyGtd.ReviewSchedulerTest do
         }
       ]
 
-      default_tenant_id = BotArmyCore.Tenant.default_tenant_id()
+      default_tenant_id = BotArmyLibraryCore.Tenant.default_tenant_id()
 
       Mox.expect(BotArmyGtd.DecompositionStoreMock, :list, fn ^default_tenant_id ->
         {:ok, decompositions}

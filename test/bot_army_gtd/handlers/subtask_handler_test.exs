@@ -4,7 +4,7 @@ defmodule BotArmyGtd.Handlers.SubtaskHandlerTest do
   import Mox
 
   alias BotArmyGtd.Handlers.SubtaskHandler
-  alias BotArmyCore.Tenant
+  alias BotArmyLibraryCore.Tenant
 
   setup :verify_on_exit!
 
