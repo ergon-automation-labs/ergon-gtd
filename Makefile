@@ -148,10 +148,7 @@ sync-release-version:
 	echo "✅ Synced release version: v$$VERSION ($$TIMESTAMP)"
 
 publish-release:
-	@BOT_NAME=gtd; \
-	LOG_FILE="/tmp/publish-release-$${BOT_NAME}-$$(date +%s).log"; \
-	echo "Publishing release and logging to $$LOG_FILE..."; \
-	{ \
+	@BOT_NAME=gtd; LOG_FILE="/tmp/publish-release-$${BOT_NAME}-$$(date +%s).log"; { \
 	set -e; \
 	VERSION=$$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\([^"]*\)".*/\1/p' mix.exs | head -n 1); \
 	if [ -z "$$VERSION" ]; then \
@@ -195,8 +192,8 @@ publish-release:
 	echo "✓ Release published to GitHub"; \
 	$(MAKE) sync-release-version; \
 	echo ""; \
-	} 2>&1 | tee "$$LOG_FILE"; \
-	echo "✓ Publish-release log: $$LOG_FILE"
+	echo "✓ Publish-release log: $$LOG_FILE"; \
+	} 2>&1 | tee "$$LOG_FILE"
 
 ## Tail production log with grc (paths: $(SCRIPTS_DIRECTORY)/tail_bot_log.sh)
 pre-push-cleanup:
