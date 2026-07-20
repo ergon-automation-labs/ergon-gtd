@@ -72,7 +72,11 @@ compile:
 	echo "✓ Compilation log: $$LOG_FILE"
 
 test:
-	$(MIX) test
+	@BOT_NAME=gtd; \
+	LOG_FILE="/tmp/test-$${BOT_NAME}-$$(date +%s).log"; \
+	echo "Running tests and logging to $$LOG_FILE..."; \
+	$(MIX) test 2>&1 | tee "$$LOG_FILE"; \
+	echo "✓ Test log: $$LOG_FILE"
 
 test-handlers:
 	MIX_ENV=test $(MIX) test --only handlers --trace
@@ -90,7 +94,11 @@ test-full:
 	$(MIX) test --include integration --include nats_live --trace
 
 credo:
-	$(MIX) credo --only warning
+	@BOT_NAME=gtd; \
+	LOG_FILE="/tmp/credo-$${BOT_NAME}-$$(date +%s).log"; \
+	echo "Running credo and logging to $$LOG_FILE..."; \
+	$(MIX) credo 2>&1 | tee "$$LOG_FILE"; \
+	echo "✓ Credo log: $$LOG_FILE" --only warning
 
 dialyzer: deps
 	$(MIX) dialyzer
