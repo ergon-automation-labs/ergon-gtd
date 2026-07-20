@@ -192,6 +192,13 @@ publish-release:
 	echo "✓ Release published to GitHub"; \
 	$(MAKE) sync-release-version; \
 	echo ""; \
+	echo "Publishing deploy.release.requested to NATS..."; \
+	BOT_NAME=$$(basename $$(pwd) | sed 's/bot_army_//'); \
+	REPO_SLUG=$$(git config --get remote.origin.url | sed 's/.*\///; s/\.git$$//'); \
+	NATS_SERVERS=$${NATS_SERVERS:-nats://localhost:4222}; \
+	nats --server "$$NATS_SERVERS" pub deploy.release.requested "$$(jq -n --arg bot "$${BOT_NAME}" --arg repo "$$REPO_SLUG" --arg version "$$VERSION" --arg tag "v$$VERSION" '{bot: $$bot, repo: $$repo, version: $$version, release_tag: $$tag}')" || { echo "⚠️  NATS publish failed (is NATS running?)"; }; \
+	echo "✓ Deploy event published (deploy_pipeline_bot will pick it up)"; \
+	echo ""; \
 	echo "✓ Publish-release log: $$LOG_FILE"; \
 	} 2>&1 | tee "$$LOG_FILE"
 
