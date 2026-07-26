@@ -7,6 +7,13 @@ import Config
 # This is needed when starting the application manually (not via supervisor)
 config :bot_army_library_runtime, :auto_start_services, true
 
+# Enable debug-level logging for Ecto SQL queries when DEBUG_SQL=true
+if System.get_env("DEBUG_SQL") == "true" do
+  config :logger, :console,
+    format: "[$level] $message\n",
+    level: :debug
+end
+
 # Keep test traffic isolated from shared dev/prod NATS.
 nats_host = System.get_env("NATS_HOST", "localhost")
 
@@ -48,6 +55,8 @@ config :bot_army_gtd, BotArmyGtd.Repo,
   password:
     System.get_env("BOT_ARMY_GTD_DB_PASSWORD") || System.get_env("DATABASE_PASSWORD") ||
       "postgres",
+  # Enable SQL query logging for debugging (set DEBUG_SQL=true in environment)
+  log: if(System.get_env("DEBUG_SQL") == "true", do: :debug, else: false),
   pool_size: System.get_env("BOT_POOL_SIZE", "20") |> String.to_integer(),
   ssl: false
 
@@ -68,5 +77,5 @@ config :bot_army_library_learning, BotArmyLearning.Repo,
   password:
     System.get_env("BOT_ARMY_GTD_DB_PASSWORD") || System.get_env("DATABASE_PASSWORD") ||
       "postgres",
-  pool_size: System.get_env("BOT_POOL_SIZE", "20") |> String.to_integer(),
+  pool_size: System.get_env("BOT_POOL_SIZE", "5") |> String.to_integer(),
   ssl: false
