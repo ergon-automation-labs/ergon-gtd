@@ -239,6 +239,16 @@ push-and-publish: git-push publish-release
 logs:
 	@$(SCRIPTS_DIRECTORY)/tail_bot_log.sh
 
+## Debug GTD on mini with SQL query logging enabled
+debug-sql-mini:
+	@echo "Restarting GTD on mini with SQL query logging enabled..."
+	@sudo /opt/salt/salt mini cmd.run "launchctl unload /Library/LaunchDaemons/com.botarmy.gtd_bot.plist 2>/dev/null; sleep 2" 2>&1 | tail -3
+	@sudo /opt/salt/salt mini cmd.run "DEBUG_SQL=true launchctl bootstrap system /Library/LaunchDaemons/com.botarmy.gtd_bot.plist 2>/dev/null || DEBUG_SQL=true launchctl load /Library/LaunchDaemons/com.botarmy.gtd_bot.plist" 2>&1 | tail -3
+	@sleep 5
+	@echo "GTD restarted with DEBUG_SQL=true. Tailing logs..."
+	@echo "Press Ctrl+C to stop. SQL queries will appear in logs."
+	@ssh mini-1 "tail -f /var/log/bot_army/gtd_bot.log" 2>&1
+
 # Deployment targets that delegate to monorepo
 .PHONY: deploy-bot verify-bot verify-bot-nats
 
