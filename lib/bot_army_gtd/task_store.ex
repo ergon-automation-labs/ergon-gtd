@@ -459,10 +459,18 @@ defmodule BotArmyGtd.TaskStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          tasks =
+          result =
             BotArmyGtd.Schemas.Task
             |> where([t], t.status in ["active", "inbox"])
             |> BotArmyGtd.Repo.all()
+
+          # Unwrap CircuitBreakerRepo tuple
+          tasks =
+            case result do
+              {:ok, t} when is_list(t) -> t
+              {:error, _} -> []
+              _ -> []
+            end
 
           Logger.info("TaskStore recovered #{length(tasks)} active/inbox tasks from database")
 
@@ -498,10 +506,18 @@ defmodule BotArmyGtd.TaskStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          tasks =
+          result =
             BotArmyGtd.Schemas.Task
             |> where([t], t.status in ["active", "inbox"])
             |> BotArmyGtd.Repo.all()
+
+          # Unwrap CircuitBreakerRepo tuple
+          tasks =
+            case result do
+              {:ok, t} when is_list(t) -> t
+              {:error, _} -> []
+              _ -> []
+            end
 
           Logger.info("TaskStore recovered #{length(tasks)} active/inbox tasks from database")
 
