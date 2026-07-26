@@ -14,6 +14,9 @@ if System.get_env("DEBUG_SQL") == "true" do
     level: :debug
 end
 
+# Default tenant ID for GTD (must match database tenant IDs)
+config :bot_army_gtd, :default_tenant_id, "00000000-0000-0000-0000-000000000001"
+
 # Keep test traffic isolated from shared dev/prod NATS.
 nats_host = System.get_env("NATS_HOST", "localhost")
 
