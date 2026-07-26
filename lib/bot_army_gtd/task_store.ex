@@ -154,38 +154,138 @@ defmodule BotArmyGtd.TaskStore do
   @impl true
   def init(_opts) do
     Logger.info("TaskStore started")
-    # Schedule load after Repo has time to initialize (100ms delay)
-    Process.send_after(self(), :load_tasks, 100)
+    # Schedule load with aggressive retry strategy (start at 500ms, backoff on failure)
+    Process.send_after(self(), {:load_tasks, 0}, 500)
     {:ok, %{}}
   end
 
-  def handle_info(:load_tasks, _state) do
+  @max_load_retries 8
+
+  def handle_info({:load_tasks, retry_count}, _state) do
     # Load active/inbox tasks from database into GenServer state
-    # Only load actionable tasks to avoid memory bloat (7000+ tasks in DB)
-    # Gracefully handle database unavailability (e.g., in tests)
-    state =
-      try do
-        tasks =
-          BotArmyGtd.Schemas.Task
-          |> where([t], t.status in ["active", "inbox"])
-          |> BotArmyGtd.Repo.all()
-
-        count = length(tasks)
+    # Retries with exponential backoff if initial load is insufficient
+    case attempt_load_tasks() do
+      {:ok, task_map, count} ->
         Logger.info("TaskStore loaded #{count} active/inbox tasks from database")
+        {:noreply, task_map}
 
-        Enum.reduce(tasks, %{}, fn task, acc ->
-          Map.put(acc, task.id |> to_string(), schema_to_map(task))
-        end)
-      rescue
-        e ->
+      {:insufficient, count, next_delay} ->
+        # Not enough tasks loaded (database might still be initializing)
+        if retry_count >= @max_load_retries do
+          # Give up after max retries, accept whatever we got
           Logger.warning(
-            "Could not load tasks from database: #{inspect(e)}. Starting with empty state."
+            "TaskStore load gave up after #{@max_load_retries} retries with only #{count} tasks. Proceeding anyway."
           )
 
-          %{}
-      end
+          task_map =
+            try do
+              case get_loaded_tasks() do
+                tasks when is_list(tasks) ->
+                  Enum.reduce(tasks, %{}, fn task, acc ->
+                    Map.put(acc, task.id |> to_string(), schema_to_map(task))
+                  end)
 
-    {:noreply, state}
+                _ ->
+                  %{}
+              end
+            rescue
+              _e ->
+                %{}
+            end
+
+          {:noreply, task_map}
+        else
+          # Retry with backoff
+          next_retry = retry_count + 1
+
+          Logger.warning(
+            "TaskStore loaded only #{count} tasks (expected > 10), retrying in #{next_delay}ms (attempt #{next_retry}/#{@max_load_retries})"
+          )
+
+          Process.send_after(self(), {:load_tasks, next_retry}, next_delay)
+          {:noreply, %{}}
+        end
+
+      {:error, reason} ->
+        if retry_count >= @max_load_retries do
+          Logger.error(
+            "TaskStore load failed after #{@max_load_retries} retries: #{inspect(reason)}. Starting with empty state."
+          )
+
+          {:noreply, %{}}
+        else
+          next_retry = retry_count + 1
+          delay = min(2000, 500 * 2 ** min(retry_count, 3))
+
+          Logger.warning(
+            "Database error on attempt #{next_retry}: #{inspect(reason)}. Retrying in #{delay}ms."
+          )
+
+          Process.send_after(self(), {:load_tasks, next_retry}, delay)
+          {:noreply, %{}}
+        end
+    end
+  end
+
+  defp attempt_load_tasks do
+    try do
+      tasks = get_loaded_tasks()
+
+      # Defensive check: ensure tasks is a list
+      tasks = if is_list(tasks), do: tasks, else: []
+      count = length(tasks)
+
+      # If we got insufficient tasks, schedule retry with backoff
+      if count < 10 and count > 0 do
+        # Likely a partial load due to race condition
+        next_delay = min(2000, 500 + count * 100)
+        {:insufficient, count, next_delay}
+      else
+        task_map =
+          Enum.reduce(tasks, %{}, fn task, acc ->
+            Map.put(acc, task.id |> to_string(), schema_to_map(task))
+          end)
+
+        {:ok, task_map, count}
+      end
+    rescue
+      e ->
+        {:error, e}
+    end
+  end
+
+  defp get_loaded_tasks do
+    try do
+      result =
+        BotArmyGtd.Schemas.Task
+        |> where([t], t.status in ["active", "inbox"])
+        |> BotArmyGtd.Repo.all()
+
+      # CircuitBreakerRepo wraps results in {:ok, list} or {:error, reason}
+      case result do
+        {:ok, tasks} when is_list(tasks) ->
+          Logger.info("TaskStore loaded #{length(tasks)} tasks from database")
+          tasks
+
+        {:error, {:circuit_open, retry_after}} ->
+          Logger.warning("Database circuit breaker is open, will retry in #{retry_after}ms")
+
+          []
+
+        {:error, e} ->
+          Logger.warning("TaskStore database query failed: #{inspect(e)}")
+          []
+
+        _ ->
+          Logger.warning("TaskStore received unexpected result: #{inspect(result, limit: 200)}")
+
+          []
+      end
+    rescue
+      e ->
+        Logger.error("get_loaded_tasks exception: #{inspect(e)}")
+        []
+    end
   end
 
   @impl true
