@@ -239,9 +239,8 @@ defmodule BotArmyGtd.TaskStore do
       case BotArmyGtd.Repo.insert(changeset) do
         {:ok, db_task} ->
           task = schema_to_map(db_task)
-          new_state = Map.put(state, task_id, task)
           Logger.info("Created task in database: #{task_id}")
-          {:reply, {:ok, task}, new_state}
+          {:reply, {:ok, task}, %{}}
 
         {:error, changeset} ->
           Logger.error("Failed to create task: #{inspect(changeset.errors)}")
@@ -267,9 +266,8 @@ defmodule BotArmyGtd.TaskStore do
           case execute_update_transaction(task_uuid, payload) do
             {:ok, updated_db_task} ->
               updated_task = schema_to_map(updated_db_task)
-              new_state = Map.put(state, task_id, updated_task)
               Logger.info("Updated task in database: #{task_id}")
-              {:reply, {:ok, updated_task}, new_state}
+              {:reply, {:ok, updated_task}, %{}}
 
             {:error, :not_found} ->
               {:reply, {:error, :not_found}, state}
@@ -315,9 +313,8 @@ defmodule BotArmyGtd.TaskStore do
             {1, _} ->
               db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
               completed_task = schema_to_map(db_task)
-              new_state = Map.put(state, task_id, completed_task)
               Logger.info("Completed task in database: #{task_id}")
-              {:reply, {:ok, completed_task}, new_state}
+              {:reply, {:ok, completed_task}, %{}}
 
             {0, _} ->
               {:reply, {:error, :not_found}, state}
@@ -677,9 +674,8 @@ defmodule BotArmyGtd.TaskStore do
       case execute_update_scoped_transaction(task_id, tenant_id, task_uuid, payload) do
         {:ok, updated_db_task} ->
           updated_task = schema_to_map(updated_db_task)
-          new_state = Map.put(state, task_id, updated_task)
           Logger.info("Updated task in database (tenant scoped): #{task_id}")
-          {:reply, {:ok, updated_task}, new_state}
+          {:reply, {:ok, updated_task}, %{}}
 
         {:error, :not_found} ->
           {:reply, {:error, :not_found}, state}
@@ -757,9 +753,8 @@ defmodule BotArmyGtd.TaskStore do
       {1, _} ->
         db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
         completed_task = schema_to_map(db_task)
-        new_state = Map.put(state, task_id, completed_task)
         Logger.info("Completed task in database (tenant scoped): #{task_id}")
-        {:ok, completed_task, new_state}
+        {:ok, completed_task, %{}}
 
       {0, _} ->
         {:error, :not_found}
