@@ -722,12 +722,17 @@ defmodule BotArmyGtd.NATS.Consumer do
       task_store = Application.get_env(:bot_army_gtd, :task_store, BotArmyGtd.TaskStore)
 
       {tenant_id, limit, offset, filters} = parse_task_list_params(body)
-      # Attempt task expiration; gracefully handle if store is unavailable (test mode)
-      try do
-        TaskHandler.expire_active_tasks(tenant_id, nil)
-      rescue
-        _ -> :ok
-      end
+
+      # Schedule task expiration asynchronously (don't block on response)
+      # Fire-and-forget: expiration happens in background, doesn't delay the response
+      spawn_link(fn ->
+        try do
+          TaskHandler.expire_active_tasks(tenant_id, nil)
+        rescue
+          e ->
+            Logger.debug("Background task expiration failed: #{inspect(e)}")
+        end
+      end)
 
       response = fetch_task_list_response(task_store, tenant_id, filters, limit, offset)
       reply_traced(state.conn, reply_to, response)
