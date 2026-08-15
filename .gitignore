@@ -25,3 +25,6 @@ mix.lock
 *.tar.xz
 _build_cursor_test/
 .push-validated
+
+# Local build-state marker written by `make publish-release` — not authored content
+.release-published
