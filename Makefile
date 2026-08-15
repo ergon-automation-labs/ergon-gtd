@@ -65,7 +65,7 @@ init:
 deps:
 	$(MIX) deps.get
 
-compile:
+_compile-impl:
 	@LOG_FILE="/tmp/compile-gtd-$$(date +%s).log"; \
 	echo "Compiling GTD and logging to $$LOG_FILE..."; \
 	$(MIX) compile 2>&1 | tee "$$LOG_FILE"; \
@@ -321,3 +321,12 @@ bump-version:
 		exit 1; \
 	fi
 	@$(MAKE) -C .. bump-version BOT=gtd BUMP=$(BUMP)
+
+# Shared targets (push, credo, pre-push-cleanup, bump-version, git-push).
+# Defined once in bot_army_infra so they cannot drift per repo.
+BOT_ARMY_COMMON_MK := $(abspath $(CURDIR)/../bot_army_infra/make/common.mk)
+ifeq ($(wildcard $(BOT_ARMY_COMMON_MK)),)
+$(warning bot_army_infra not found at $(BOT_ARMY_COMMON_MK) - shared targets unavailable)
+else
+include $(BOT_ARMY_COMMON_MK)
+endif
