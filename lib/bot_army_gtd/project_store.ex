@@ -190,8 +190,11 @@ defmodule BotArmyGtd.ProjectStore do
             Map.put(acc, project.id |> to_string(), schema_to_map(project))
           end)
         rescue
-          _ ->
-            Logger.warning("ProjectStore recovery from database failed, using empty state")
+          e ->
+            Logger.warning(
+              "ProjectStore recovery from database failed, using empty state: #{inspect(e)}"
+            )
+
             state
         end
       else
