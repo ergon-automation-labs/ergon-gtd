@@ -60,11 +60,14 @@ defmodule BotArmyGtd.ScoreScheduler do
 
   defp recompute_all_scores do
     # Find all tasks that have signals
-    task_ids =
+    result =
       ItemSignal
       |> select([s], {s.tenant_id, s.item_type, s.item_id})
       |> distinct(true)
       |> Repo.all()
+
+    # Unwrap CircuitBreakerRepo tuple response
+    task_ids = CircuitBreakerHelper.unwrap_list(result)
 
     Logger.debug("ScoreScheduler: recomputing #{length(task_ids)} items")
 
