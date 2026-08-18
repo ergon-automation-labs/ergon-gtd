@@ -36,6 +36,9 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_pulse_publisher()
       |> maybe_add_intent_evaluator()
       |> maybe_add_veto_listener()
+      # Each maybe_add_* prepends, so the pipeline builds the list back-to-front.
+      # Reverse it so children start in the order written above: Repo first.
+      |> Enum.reverse()
 
     children =
       base_children ++
