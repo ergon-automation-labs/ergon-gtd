@@ -77,9 +77,9 @@ defmodule BotArmyGtd.ProjectStore do
           Map.put(acc, project.id |> to_string(), schema_to_map(project))
         end)
       rescue
-        _ ->
-          Logger.warning(
-            "Could not load projects from database (database unavailable). Starting with empty state."
+        e ->
+          Logger.error(
+            "ProjectStore init failed to load projects from database: #{inspect(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
           )
 
           %{}
