@@ -18,7 +18,7 @@ defmodule BotArmyGtd.ScoreScheduler do
   import Ecto.Query
 
   alias BotArmyGtd.{Repo, ScoreEngine}
-  alias BotArmyGtd.Schemas.{ItemSignal, ItemScore}
+  alias BotArmyGtd.Schemas.ItemSignal
 
   @default_interval_seconds 300
 
@@ -66,19 +66,17 @@ defmodule BotArmyGtd.ScoreScheduler do
       |> distinct(true)
       |> Repo.all()
 
-    # Unwrap CircuitBreakerRepo tuple response
-    task_ids = CircuitBreakerHelper.unwrap_list(result)
+    # Repo.all() now returns raw lists (not tuples) from CircuitBreakerRepo
+    Logger.debug("ScoreScheduler: recomputing #{length(result)} items")
 
-    Logger.debug("ScoreScheduler: recomputing #{length(task_ids)} items")
-
-    Enum.each(task_ids, fn {tenant_id, item_type, item_id} ->
+    Enum.each(result, fn {tenant_id, item_type, item_id} ->
       ScoreEngine.recompute_item(tenant_id, item_type, item_id)
     end)
 
     # Also ensure all tasks without scores get initialized
     initialize_missing_scores()
 
-    Logger.info("ScoreScheduler: recompute complete (#{length(task_ids)} items)")
+    Logger.info("ScoreScheduler: recompute complete (#{length(result)} items)")
   end
 
   defp initialize_missing_scores do

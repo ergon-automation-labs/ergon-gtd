@@ -183,15 +183,8 @@ defmodule BotArmyGtd.ProjectStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          result = Repo.all(Project)
-
-          # Unwrap CircuitBreakerRepo tuple (like TaskStore does)
-          projects =
-            case result do
-              {:ok, p} when is_list(p) -> p
-              {:error, _reason} -> []
-              _ -> []
-            end
+          # Repo.all() now returns raw lists (not tuples) from CircuitBreakerRepo
+          projects = Repo.all(Project)
 
           Logger.info("ProjectStore recovered #{length(projects)} projects from database")
 

@@ -256,34 +256,18 @@ defmodule BotArmyGtd.TaskStore do
 
   defp get_loaded_tasks do
     try do
-      result =
+      tasks =
         BotArmyGtd.Schemas.Task
         |> where([t], t.status in ["active", "inbox"])
         |> BotArmyGtd.Repo.all()
 
-      # CircuitBreakerRepo wraps results in {:ok, list} or {:error, reason}
-      case result do
-        {:ok, tasks} when is_list(tasks) ->
-          Logger.info("TaskStore loaded #{length(tasks)} tasks from database")
-          tasks
-
-        {:error, {:circuit_open, retry_after}} ->
-          Logger.warning("Database circuit breaker is open, will retry in #{retry_after}ms")
-
-          []
-
-        {:error, e} ->
-          Logger.warning("TaskStore database query failed: #{inspect(e)}")
-          []
-
-        _ ->
-          Logger.warning("TaskStore received unexpected result: #{inspect(result, limit: 200)}")
-
-          []
-      end
+      # Repo.all() now returns raw lists (not tuples) from CircuitBreakerRepo
+      # If circuit breaker trips, it raises an exception (caught by rescue below)
+      Logger.info("TaskStore loaded #{length(tasks)} tasks from database")
+      tasks
     rescue
       e ->
-        Logger.error("get_loaded_tasks exception: #{inspect(e)}")
+        Logger.warning("TaskStore database error (circuit breaker or connection): #{inspect(e)}")
         []
     end
   end
@@ -464,17 +448,10 @@ defmodule BotArmyGtd.TaskStore do
             |> where([t], t.status in ["active", "inbox"])
             |> BotArmyGtd.Repo.all()
 
-          # Unwrap CircuitBreakerRepo tuple
-          tasks =
-            case result do
-              {:ok, t} when is_list(t) -> t
-              {:error, _} -> []
-              _ -> []
-            end
+          # Repo.all() now returns raw lists (not tuples) from CircuitBreakerRepo
+          Logger.info("TaskStore recovered #{length(result)} active/inbox tasks from database")
 
-          Logger.info("TaskStore recovered #{length(tasks)} active/inbox tasks from database")
-
-          Enum.reduce(tasks, %{}, fn task, acc ->
+          Enum.reduce(result, %{}, fn task, acc ->
             Map.put(acc, task.id |> to_string(), schema_to_map(task))
           end)
         rescue
@@ -511,17 +488,10 @@ defmodule BotArmyGtd.TaskStore do
             |> where([t], t.status in ["active", "inbox"])
             |> BotArmyGtd.Repo.all()
 
-          # Unwrap CircuitBreakerRepo tuple
-          tasks =
-            case result do
-              {:ok, t} when is_list(t) -> t
-              {:error, _} -> []
-              _ -> []
-            end
+          # Repo.all() now returns raw lists (not tuples) from CircuitBreakerRepo
+          Logger.info("TaskStore recovered #{length(result)} active/inbox tasks from database")
 
-          Logger.info("TaskStore recovered #{length(tasks)} active/inbox tasks from database")
-
-          Enum.reduce(tasks, %{}, fn task, acc ->
+          Enum.reduce(result, %{}, fn task, acc ->
             Map.put(acc, task.id |> to_string(), schema_to_map(task))
           end)
         rescue
@@ -559,16 +529,16 @@ defmodule BotArmyGtd.TaskStore do
     state_to_use =
       if map_size(state) == 0 do
         try do
-          tasks =
+          result =
             BotArmyGtd.Schemas.Task
             |> where([t], t.status in ["active", "inbox"])
             |> BotArmyGtd.Repo.all()
 
           Logger.info(
-            "TaskStore recovered #{length(tasks)} active/inbox tasks from database for search"
+            "TaskStore recovered #{length(result)} active/inbox tasks from database for search"
           )
 
-          Enum.reduce(tasks, %{}, fn task, acc ->
+          Enum.reduce(result, %{}, fn task, acc ->
             Map.put(acc, task.id |> to_string(), schema_to_map(task))
           end)
         rescue
