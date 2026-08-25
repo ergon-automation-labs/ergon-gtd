@@ -324,7 +324,9 @@ defmodule BotArmyGtd.TaskStore do
         {:ok, db_task} ->
           task = schema_to_map(db_task)
           Logger.info("Created task in database: #{task_id}")
-          {:reply, {:ok, task}, %{}}
+          # Add task to state so it can be found immediately
+          new_state = Map.put(state, task_id, task)
+          {:reply, {:ok, task}, new_state}
 
         {:error, changeset} ->
           Logger.error("Failed to create task: #{inspect(changeset.errors)}")
@@ -398,7 +400,9 @@ defmodule BotArmyGtd.TaskStore do
               db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
               completed_task = schema_to_map(db_task)
               Logger.info("Completed task in database: #{task_id}")
-              {:reply, {:ok, completed_task}, %{}}
+              # Update task in state instead of clearing
+              new_state = Map.put(state, task_id, completed_task)
+              {:reply, {:ok, completed_task}, new_state}
 
             {0, _} ->
               {:reply, {:error, :not_found}, state}
