@@ -387,7 +387,32 @@ defmodule BotArmyGtd.TaskStore do
     if BotArmyGtd.LeaderMonitor.leader?() do
       case Map.get(state, task_id) do
         nil ->
-          {:reply, {:error, :not_found}, state}
+          # Task not in state — check database as fallback
+          task_uuid = Ecto.UUID.cast!(task_id)
+
+          case BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid) do
+            nil ->
+              {:reply, {:error, :not_found}, state}
+
+            _db_task ->
+              # Found in database — complete it inline
+              completed_at = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+              case BotArmyGtd.Repo.update_all(
+                     from(t in BotArmyGtd.Schemas.Task, where: t.id == ^task_uuid),
+                     set: [status: "completed", completed_at: completed_at]
+                   ) do
+                {1, _} ->
+                  db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
+                  completed_task = schema_to_map(db_task)
+                  Logger.info("Completed task in database: #{task_id}")
+                  new_state = Map.put(state, task_id, completed_task)
+                  {:reply, {:ok, completed_task}, new_state}
+
+                {0, _} ->
+                  {:reply, {:error, :not_found}, state}
+              end
+          end
 
         _task ->
           task_uuid = Ecto.UUID.cast!(task_id)
@@ -419,7 +444,36 @@ defmodule BotArmyGtd.TaskStore do
   def handle_call({:complete_scoped, tenant_id, task_id}, _from, state) do
     case Map.get(state, task_id) do
       nil ->
-        {:reply, {:error, :not_found}, state}
+        # Task not in state — check database as fallback
+        task_uuid = Ecto.UUID.cast!(task_id)
+
+        case BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid) do
+          nil ->
+            {:reply, {:error, :not_found}, state}
+
+          db_task ->
+            # Found in database — check tenant_id and complete
+            if db_task.tenant_id == tenant_id do
+              completed_at = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+              query = from(t in BotArmyGtd.Schemas.Task, where: t.id == ^task_uuid)
+
+              case BotArmyGtd.Repo.update_all(query,
+                     set: [status: "completed", completed_at: completed_at]
+                   ) do
+                {1, _} ->
+                  db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
+                  completed_task = schema_to_map(db_task)
+                  Logger.info("Completed task in database (tenant scoped): #{task_id}")
+                  new_state = Map.put(state, task_id, completed_task)
+                  {:reply, {:ok, completed_task}, new_state}
+
+                {0, _} ->
+                  {:reply, {:error, :not_found}, state}
+              end
+            else
+              {:reply, {:error, :not_found}, state}
+            end
+        end
 
       task ->
         do_complete_scoped_task(task, task_id, tenant_id, state)
