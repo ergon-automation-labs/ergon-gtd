@@ -55,7 +55,25 @@ defmodule BotArmyGtd.Application do
   end
 
   defp maybe_add_leader_monitor(children) do
-    if env() == :test, do: children, else: [{BotArmyGtd.LeaderMonitor, []} | children]
+    if env() == :test do
+      children
+    else
+      default_role =
+        case System.get_env("GTD_NODE_ROLE") do
+          "standby" -> :standby
+          "primary" -> :primary
+          _ -> Application.get_env(:bot_army_gtd, :node_role, :primary)
+        end
+
+      [
+        {BotArmyLibraryRuntime.LeaderElection,
+         service: "gtd",
+         node_name: System.get_env("NODE_NAME", "unknown"),
+         default_role: default_role,
+         on_role_change: {BotArmyGtd.LeaderMonitor, :role_changed, []}}
+        | children
+      ]
+    end
   end
 
   defp maybe_add_task_store(children) do
