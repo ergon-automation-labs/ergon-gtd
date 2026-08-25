@@ -353,7 +353,8 @@ defmodule BotArmyGtd.TaskStore do
             {:ok, updated_db_task} ->
               updated_task = schema_to_map(updated_db_task)
               Logger.info("Updated task in database: #{task_id}")
-              {:reply, {:ok, updated_task}, %{}}
+              new_state = Map.put(state, task_id, updated_task)
+              {:reply, {:ok, updated_task}, new_state}
 
             {:error, :not_found} ->
               {:reply, {:error, :not_found}, state}
@@ -765,7 +766,8 @@ defmodule BotArmyGtd.TaskStore do
         {:ok, updated_db_task} ->
           updated_task = schema_to_map(updated_db_task)
           Logger.info("Updated task in database (tenant scoped): #{task_id}")
-          {:reply, {:ok, updated_task}, %{}}
+          new_state = Map.put(state, task_id, updated_task)
+          {:reply, {:ok, updated_task}, new_state}
 
         {:error, :not_found} ->
           {:reply, {:error, :not_found}, state}
