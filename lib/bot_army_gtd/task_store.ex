@@ -846,7 +846,8 @@ defmodule BotArmyGtd.TaskStore do
         db_task = BotArmyGtd.Repo.get(BotArmyGtd.Schemas.Task, task_uuid)
         completed_task = schema_to_map(db_task)
         Logger.info("Completed task in database (tenant scoped): #{task_id}")
-        {:ok, completed_task, %{}}
+        new_state = Map.put(state, task_id, completed_task)
+        {:ok, completed_task, new_state}
 
       {0, _} ->
         {:error, :not_found}
