@@ -24,7 +24,7 @@ nats_port =
   if config_env() == :test do
     4223
   else
-    String.to_integer(System.get_env("NATS_PORT", "4223"))
+    String.to_integer(System.get_env("NATS_PORT", "4222"))
   end
 
 config :bot_army_library_runtime, :nats,
