@@ -225,7 +225,7 @@ defmodule BotArmyGtd.Handlers.HealthHandler do
         user_id: user_id
       )
 
-    case Publisher.publish(event_data) do
+    case BotArmyGtd.NATS.Publisher.publish(event_data) do
       {:ok, _subject} ->
         Logger.debug("[HealthHandler] Published health report")
 
@@ -249,6 +249,6 @@ defmodule BotArmyGtd.Handlers.HealthHandler do
         user_id: user_id
       )
 
-    Publisher.publish(event_data)
+    BotArmyGtd.NATS.Publisher.publish(event_data)
   end
 end
