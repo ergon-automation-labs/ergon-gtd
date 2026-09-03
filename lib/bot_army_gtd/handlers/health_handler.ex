@@ -21,7 +21,7 @@ defmodule BotArmyGtd.Handlers.HealthHandler do
   def handle_health_check(message) do
     event_id = message["event_id"]
     payload = message["payload"] || %{}
-    %{tenant_id: tenant_id, user_id: user_id} = BotArmyGtd.Tenant.extract_context(message)
+    %{tenant_id: tenant_id, user_id: user_id} = BotArmyLibraryCore.Tenant.extract_context(message)
 
     case query_service_health(payload) do
       {:ok, health_data} ->
