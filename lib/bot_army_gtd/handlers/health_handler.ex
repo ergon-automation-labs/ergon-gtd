@@ -57,7 +57,10 @@ defmodule BotArmyGtd.Handlers.HealthHandler do
     type = payload["type"] || "summary"
     days = payload["days"] || 7
 
-    case Publisher.request("aggregator.health.query", %{"days" => days}, timeout_ms: 5000) do
+    # 1500ms: the aggregator is optional enrichment — a 5s stall pushed
+    # every health reply past 5s, right at the edge of probe windows
+    # (doctor defaults 5s, contract gate 6s). Fail fast to local health.
+    case Publisher.request("aggregator.health.query", %{"days" => days}, timeout_ms: 1500) do
       {:ok, services} when is_list(services) and services != [] ->
         formatted =
           case type do
