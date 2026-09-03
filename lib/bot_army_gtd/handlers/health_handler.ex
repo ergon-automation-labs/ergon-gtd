@@ -7,7 +7,7 @@ defmodule BotArmyGtd.Handlers.HealthHandler do
   """
 
   require Logger
-  alias BotArmyGtd.Publisher
+  alias BotArmyLibraryRuntime.NATS.Publisher
 
   @doc """
   Handle health check request.
@@ -57,43 +57,25 @@ defmodule BotArmyGtd.Handlers.HealthHandler do
     type = payload["type"] || "summary"
     days = payload["days"] || 7
 
-    request_body = Jason.encode!(%{"days" => days})
+    case Publisher.request("aggregator.health.query", %{"days" => days}, timeout_ms: 5000) do
+      {:ok, services} when is_list(services) and services != [] ->
+        formatted =
+          case type do
+            "full" -> format_full_health(services, days)
+            _ -> format_summary_health(services, days)
+          end
 
-    case Publisher.request("aggregator.health.query", request_body, timeout: 5000) do
-      {:ok, response} ->
-        case Jason.decode(response) do
-          {:ok, services} when is_list(services) and services != [] ->
-            formatted =
-              case type do
-                "full" ->
-                  format_full_health(services, days)
+        {:ok, formatted}
 
-                "summary" ->
-                  format_summary_health(services, days)
-
-                _ ->
-                  format_summary_health(services, days)
-              end
-
-            {:ok, formatted}
-
-          {:ok, _} ->
-            {:ok,
-             %{
-               "status" => "initializing",
-               "summary" => "No service data yet. Aggregator starting up.",
-               "services" => [],
-               "period_days" => days,
-               "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-             }}
-
-          {:error, reason} ->
-            Logger.warning(
-              "Aggregator health response undecodable (#{inspect(reason)}) — reporting local health"
-            )
-
-            {:ok, local_service_health(type, :aggregator_bad_response)}
-        end
+      {:ok, _} ->
+        {:ok,
+         %{
+           "status" => "initializing",
+           "summary" => "No service data yet. Aggregator starting up.",
+           "services" => [],
+           "period_days" => days,
+           "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+         }}
 
       {:error, reason} ->
         # A dependency outage (no responder, timeout, publisher error) must
