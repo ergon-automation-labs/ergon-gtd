@@ -87,27 +87,63 @@ defmodule BotArmyGtd.Handlers.HealthHandler do
                "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
              }}
 
-          {:error, _} ->
-            {:error, :aggregator_unavailable}
+          {:error, reason} ->
+            Logger.warning(
+              "Aggregator health response undecodable (#{inspect(reason)}) — reporting local health"
+            )
+
+            {:ok, local_service_health(type, :aggregator_bad_response)}
         end
 
-      {:error, :no_responder} ->
-        {:ok,
-         %{
-           "status" => "unavailable",
-           "summary" => "Aggregator not available. Check if bot is running.",
-           "services" => [],
-           "period_days" => days,
-           "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
-         }}
-
-      {:error, :timeout} ->
-        {:error, :aggregator_timeout}
-
       {:error, reason} ->
-        Logger.warning("Health check NATS request failed: #{inspect(reason)}")
-        {:error, :aggregator_unavailable}
+        # A dependency outage (no responder, timeout, publisher error) must
+        # never fail OUR health contract. The contract answers "is gtd alive
+        # and answering" — the aggregator's service-metrics view is optional
+        # data. Report honest local health so deploys gate on gtd itself.
+        Logger.warning(
+          "Aggregator health query failed (#{inspect(reason)}) — reporting local health"
+        )
+
+        {:ok, local_service_health(type, reason)}
     end
+  end
+
+  # Local, dependency-free health report. Used when the aggregator's
+  # service-metrics view is unreachable. Honest by construction: the mere
+  # fact we are executing means the process is up and NATS is connected;
+  # the DB circuit breaker state is read without touching the database.
+  defp local_service_health(type, reason) do
+    breaker =
+      try do
+        BotArmyLibraryRuntime.Ecto.CircuitBreaker.get_state()
+      rescue
+        _ -> nil
+      end
+
+    db_status =
+      case breaker do
+        %{state: :closed} -> "responsive"
+        %{state: state} when state in [:open, :half_open] -> "circuit_#{state}"
+        _ -> "unknown"
+      end
+
+    status = if db_status == "responsive", do: "healthy", else: "degraded"
+    uptime_seconds = :erlang.statistics(:wall_clock) |> elem(0) |> div(1000)
+
+    %{
+      "status" => status,
+      "summary" =>
+        "Local health (aggregator view unavailable: #{inspect(reason)}); " <>
+          "process up #{uptime_seconds}s, db: #{db_status}",
+      "source" => "local",
+      "type" => type,
+      "database" => db_status,
+      "nats" => "connected",
+      "uptime_seconds" => uptime_seconds,
+      "services" => [],
+      "period_days" => 0,
+      "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
   end
 
   defp format_full_health(services, days) do
