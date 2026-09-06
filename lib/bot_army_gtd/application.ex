@@ -180,8 +180,14 @@ defmodule BotArmyGtd.Application do
     if env() == :test,
       do: children,
       else: [
+        # P10 (2026-09-06, Docker fleet test): IntentEvaluator →
+        # ThresholdAdapter.adjustment → library OutcomeTracker.stats/1 calls the
+        # tracker under its DEFAULT (module) name; registering ours as
+        # :gtd_outcome_tracker left that call dead ("no process") and crashed
+        # the IntentEvaluator. One bot per BEAM in Docker — honor the library's
+        # default-name contract.
         {BotArmyLibraryLearning.OutcomeTracker,
-         [name: :gtd_outcome_tracker, repo: BotArmyGtd.Repo]}
+         [repo: BotArmyGtd.Repo]}
         | children
       ]
   end
