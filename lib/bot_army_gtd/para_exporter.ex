@@ -551,13 +551,14 @@ defmodule BotArmyGtd.ParaExporter do
 
   defp publish_to_para_fs(relative_path, content, mode \\ "write") do
     with {:ok, token} <- fetch_para_write_token() do
-      payload = %{
-        "schema_version" => "1.0",
-        "relative_path" => relative_path,
-        "content" => content,
-        "mode" => mode,
-        "auth_token" => token
-      }
+      payload =
+        %{
+          "schema_version" => "1.0",
+          "relative_path" => relative_path,
+          "content" => content,
+          "mode" => mode
+        }
+        |> maybe_put_auth_token(token)
 
       do_publish("para.fs.write", payload)
     else
@@ -571,12 +572,15 @@ defmodule BotArmyGtd.ParaExporter do
     case Publisher.request("para.auth.get_write_token", %{}, 5_000) do
       {:ok, response} ->
         if response["ok"] do
-          token = get_in(response, ["data", "write_token"])
+          case get_in(response, ["data", "write_token"]) do
+            token when is_binary(token) and byte_size(token) > 0 ->
+              {:ok, token}
 
-          if token do
-            {:ok, token}
-          else
-            {:error, "No write_token in response"}
+            _ ->
+              # Server answered auth_required: false / write_token: null —
+              # auth is not in effect. Proceed WITHOUT a token instead of
+              # skipping the write (para serves writes publicly then).
+              {:ok, nil}
           end
         else
           {:error, response["error"] || "Failed to get write token"}
@@ -588,4 +592,7 @@ defmodule BotArmyGtd.ParaExporter do
   rescue
     e -> {:error, e}
   end
+
+  defp maybe_put_auth_token(payload, nil), do: payload
+  defp maybe_put_auth_token(payload, token), do: Map.put(payload, "auth_token", token)
 end
