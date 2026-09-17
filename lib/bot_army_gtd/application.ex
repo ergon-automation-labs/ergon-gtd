@@ -176,19 +176,34 @@ defmodule BotArmyGtd.Application do
     end
   end
 
+  @doc false
+  # Exposed for tests. The test environment skips this child (see
+  # maybe_add_outcome_tracker/1), which is exactly why a wrong registration
+  # name survived review and only surfaced in a Docker fleet boot.
+  def outcome_tracker_spec do
+    # P10 (2026-09-06, Docker fleet test): IntentEvaluator →
+    # ThresholdAdapter.adjustment → library OutcomeTracker.stats/1 calls the
+    # tracker under its DEFAULT (module) name; registering ours as
+    # :gtd_outcome_tracker left that call dead ("no process") and crashed the
+    # IntentEvaluator. One bot per BEAM in Docker — honor the library's
+    # default-name contract.
+    #
+    # 2026-09-16: passing :repo alone does NOT satisfy that contract.
+    # start_link/1 checks opts[:name] first and otherwise DERIVES
+    # :"#{repo}_outcome_tracker" from opts[:repo], so dropping the explicit
+    # name merely swapped one wrong registration for another
+    # (:"Elixir.BotArmyGtd.Repo_outcome_tracker") and the 5-minute
+    # IntentEvaluator crash continued in prod (v0.7.230, which registered
+    # :gtd_outcome_tracker) and on main. :name must be explicit; :repo is still
+    # required so outcomes persist to gtd's database.
+    {BotArmyLibraryLearning.OutcomeTracker,
+     [name: BotArmyLibraryLearning.OutcomeTracker, repo: BotArmyGtd.Repo]}
+  end
+
   defp maybe_add_outcome_tracker(children) do
     if env() == :test,
       do: children,
-      else: [
-        # P10 (2026-09-06, Docker fleet test): IntentEvaluator →
-        # ThresholdAdapter.adjustment → library OutcomeTracker.stats/1 calls the
-        # tracker under its DEFAULT (module) name; registering ours as
-        # :gtd_outcome_tracker left that call dead ("no process") and crashed
-        # the IntentEvaluator. One bot per BEAM in Docker — honor the library's
-        # default-name contract.
-        {BotArmyLibraryLearning.OutcomeTracker,
-         [repo: BotArmyGtd.Repo]}
-        | children
-      ]
+      else: [outcome_tracker_spec() | children]
   end
+
 end
