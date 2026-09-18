@@ -27,14 +27,17 @@ defmodule BotArmyGtd.ApplicationTest do
     assert is_number(ThresholdAdapter.adjustment("gtd.nudge"))
   end
 
-  # Positive control for the trap above: with :repo but no :name the library derives a
-  # different name, which is what left the default-name call dead. If this test ever
-  # fails, the library changed and the trap no longer exists.
-  test "passing :repo without :name registers a DIFFERENT name (the trap)" do
-    start_supervised!({OutcomeTracker, [repo: BotArmyGtd.Repo]})
+  # Positive control for the trap above: `:repo` alone used to derive a different
+  # registered name (:"...Repo_outcome_tracker"), which left default-name callers dead.
+  # bot_army_library_learning >= 0.1.45 closed that: `:repo` never affects the name.
+  # This asserts the closure, so it fails if the trap ever comes back.
+  test "passing :repo without :name still targets the callers' name (trap closed)" do
     derived = :"#{BotArmyGtd.Repo}_outcome_tracker"
+    assert Process.whereis(derived) == nil, "the derived trap name is registered again"
 
-    assert Process.whereis(derived), "the derived name is what actually gets registered"
-    assert Process.whereis(derived) != Process.whereis(OutcomeTracker)
+    # No :name given, so this must collide with the tracker the app already runs under
+    # the callers' name -- proof that :repo did not move the registration anywhere.
+    assert {:error, {:already_started, pid}} = OutcomeTracker.start_link(repo: BotArmyGtd.Repo)
+    assert pid == Process.whereis(OutcomeTracker)
   end
 end
