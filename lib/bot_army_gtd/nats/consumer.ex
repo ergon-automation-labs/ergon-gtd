@@ -516,7 +516,9 @@ defmodule BotArmyGtd.NATS.Consumer do
         [:append]
       )
 
-      Logger.info("🟢 [Consumer] Checking GenServer.whereis(BotArmyLibraryRuntime.NATS.Connection)")
+      Logger.info(
+        "🟢 [Consumer] Checking GenServer.whereis(BotArmyLibraryRuntime.NATS.Connection)"
+      )
 
       # Check if NATS.Connection is running before calling it
       case GenServer.whereis(BotArmyLibraryRuntime.NATS.Connection) do
@@ -528,7 +530,9 @@ defmodule BotArmyGtd.NATS.Consumer do
           )
 
           next_attempt = state.reconnect_attempt + 1
-          delay = BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+
+          delay =
+            BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
 
           Logger.warning(
             "🔴 NATS.Connection not available, will retry in #{delay}ms (attempt #{next_attempt})"
@@ -643,7 +647,10 @@ defmodule BotArmyGtd.NATS.Consumer do
               next_attempt = state.reconnect_attempt + 1
 
               delay =
-                BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+                BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(
+                  state.reconnect_attempt,
+                  1000
+                )
 
               Logger.error(
                 "🔴 NATS connection error: #{inspect(reason)}, will retry in #{delay}ms (attempt #{next_attempt})"
@@ -664,7 +671,9 @@ defmodule BotArmyGtd.NATS.Consumer do
         IO.puts(:stderr, "[Consumer] Rescue: Error connecting to NATS: #{inspect(e)}")
 
         next_attempt = state.reconnect_attempt + 1
-        delay = BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+
+        delay =
+          BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
 
         Logger.error(
           "🔴 Rescue: Error connecting to NATS: #{inspect(e)}, will retry in #{delay}ms (attempt #{next_attempt}), stacktrace: #{inspect(__STACKTRACE__)}"
@@ -681,7 +690,9 @@ defmodule BotArmyGtd.NATS.Consumer do
         )
 
         next_attempt = state.reconnect_attempt + 1
-        delay = BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
+
+        delay =
+          BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)
 
         Logger.error(
           "🔴 Exit while connecting to NATS: #{inspect(reason)}, will retry in #{delay}ms (attempt #{next_attempt})"
@@ -1180,7 +1191,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   end
 
   defp handle_task_create_request(msg, reply_to, state) do
-    case Decoder.decode(msg.body) do
+    case RequestBody.decode(msg.body) do
       {:ok, decoded_message} ->
         process_task_create(decoded_message, reply_to, state)
 
