@@ -1191,7 +1191,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   end
 
   defp handle_task_create_request(msg, reply_to, state) do
-    case RequestBody.decode(msg.body) do
+    case BotArmyGtd.NATS.RequestBody.decode(msg.body) do
       {:ok, decoded_message} ->
         process_task_create(decoded_message, reply_to, state)
 

@@ -48,6 +48,38 @@ defmodule BotArmyGtd.NATS.RequestBodyTest do
     end
   end
 
+  describe "consumer wiring" do
+    # `handle_task_create_request` lives in BotArmyGtd.NATS.Consumer, which does
+    # not alias this module. An unqualified `RequestBody.decode/1` there compiles
+    # with only a warning, resolves to a top-level RequestBody that does not
+    # exist, and takes the whole consumer down at runtime — which is exactly
+    # what shipped in 0.7.233. Assert on the COMPILED atom table, not on source
+    # text: it survives reformatting and it proves the call resolves.
+    test "the consumer references RequestBody fully qualified" do
+      Code.ensure_loaded!(BotArmyGtd.NATS.Consumer)
+      beam = :code.which(BotArmyGtd.NATS.Consumer)
+      assert {:ok, {_file, [atoms: raw]}} = :beam_lib.chunks(beam, [:atoms])
+
+      # The chunk holds plain atoms, but tolerate {index, atom} entries too.
+      atoms =
+        Enum.flat_map(raw, fn
+          {_i, a} when is_atom(a) -> [a]
+          a when is_atom(a) -> [a]
+          _ -> []
+        end)
+
+      assert BotArmyGtd.NATS.RequestBody in atoms,
+             "consumer does not reference BotArmyGtd.NATS.RequestBody"
+
+      refute :"Elixir.RequestBody" in atoms,
+             "consumer calls a bare RequestBody, which does not exist at runtime"
+
+      # Control: the same mechanism must see the module the consumer has always
+      # called, or this test would pass no matter what the consumer referenced.
+      assert BotArmyLibraryCore.NATS.Decoder in atoms
+    end
+  end
+
   describe "junk" do
     test "non-JSON and non-objects are errors, not crashes" do
       assert {:error, _} = RequestBody.decode("not json")
