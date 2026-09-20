@@ -195,9 +195,14 @@ publish-release:
 			--arg node "$$(hostname -s)" \
 			--arg payload "$$(jq -n --arg bot "$${BOT_NAME}" --arg repo "$$REPO_SLUG" --arg version "$$VERSION" --arg tag "v$$VERSION" --arg target "$${DEPLOY_TARGET}" --arg rid "$$REQUEST_ID" '{bot: $$bot, repo: $$repo, version: $$version, tag: $$tag, release_tag: $$tag, target: $$target, request_id: $$rid}')" \
 			'{event_id: $$eid, event: "deploy.release.requested", schema_version: "1.0", timestamp: $$ts, source: "publish_release", source_node: $$node, triggered_by: "user", payload: ($$payload | fromjson)}'); \
-		RESP=$$(nats --server "$$NATS_SERVERS" request "deploy.release.requested.$${DEPLOY_TARGET}" "$$ENVELOPE" --timeout 15s 2>/dev/null) \
-			&& echo "✓ Deploy requested via pipeline (ack: $${RESP:0:160})" \
-			|| echo "⚠️  Deploy request unanswered (pipeline down?) - deploy manually: cd ../bot_army_infra && make salt-apply-bot BOT=$${BOT_NAME}"; \
+		RESP=$$(nats --server "$$NATS_SERVERS" request "deploy.release.requested.$${DEPLOY_TARGET}" "$$ENVELOPE" --timeout 15s 2>/dev/null); \
+		if printf '%s' "$$RESP" | grep -q '"accepted"'; then \
+			echo "✓ Deploy requested via pipeline (ack: $${RESP:0:160})"; \
+		else \
+			echo "⚠️  Deploy request was not accepted (ack: $${RESP:-<none>})"; \
+			echo "   Deploy manually: cd ../bot_army_infra && make salt-apply-bot BOT=$${BOT_NAME}"; \
+			if [ "$${FAIL_ON_NO_ACK:-1}" = "1" ]; then exit 1; fi; \
+		fi; \
 	fi; \
 	echo ""; \
 	echo "✓ Publish-release log: $$LOG_FILE"; \
@@ -226,16 +231,16 @@ _FIND_MONOREPO_ROOT = \
 		echo "$(MONOREPO_ROOT)"; \
 		exit 0; \
 	fi; \
-	if [ -d "../../../elixir_bots" ] && [ -f "../../../elixir_bots/Makefile" ]; then \
-		if grep -q "verify-bot-nats:" "../../../elixir_bots/Makefile"; then \
-			echo "$$(cd ../../../elixir_bots && pwd)"; \
+	for CAND in ../../elixir_bots ../../../elixir_bots ../../../../elixir_bots; do \
+		if [ -d "$$CAND/bot_army_infra" ] && grep -q "verify-bot-nats:" "$$CAND/Makefile" "$$CAND/make/deploy.mk" 2>/dev/null; then \
+			echo "$$(cd "$$CAND" && pwd)"; \
 			exit 0; \
 		fi; \
-	fi; \
+	done; \
 	CURRENT_DIR=$$(pwd); \
 	while [ "$$CURRENT_DIR" != "/" ]; do \
-		if [ -f "$$CURRENT_DIR/Makefile" ] && grep -q "verify-bot-nats:" "$$CURRENT_DIR/Makefile"; then \
-			if [ -d "$$CURRENT_DIR/bots" ] || [ -d "$$CURRENT_DIR/bot_army_infra" ]; then \
+		if [ -d "$$CURRENT_DIR/bots" ] || [ -d "$$CURRENT_DIR/bot_army_infra" ]; then \
+			if grep -q "verify-bot-nats:" "$$CURRENT_DIR/Makefile" "$$CURRENT_DIR/make/deploy.mk" 2>/dev/null; then \
 				echo "$$CURRENT_DIR"; \
 				exit 0; \
 			fi; \
