@@ -50,6 +50,7 @@ defmodule BotArmyGtd.Application do
       |> maybe_add_pulse_publisher()
       |> maybe_add_intent_evaluator()
       |> maybe_add_veto_listener()
+      |> maybe_add_fleet_state_publisher()
       # Each maybe_add_* prepends, so the pipeline builds the list back-to-front.
       # Reverse it so children start in the order written above: Repo first.
       |> Enum.reverse()
@@ -223,4 +224,9 @@ defmodule BotArmyGtd.Application do
       else: [outcome_tracker_spec() | children]
   end
 
+  defp maybe_add_fleet_state_publisher(children) do
+    if env() == :test,
+      do: children,
+      else: [{BotArmyLibraryRuntime.FleetStatePublisher, [app_name: :gtd_bot]} | children]
+  end
 end
