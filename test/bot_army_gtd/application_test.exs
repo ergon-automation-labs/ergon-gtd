@@ -14,12 +14,16 @@ defmodule BotArmyGtd.ApplicationTest do
   #   v0.7.230 (prod)  [name: :gtd_outcome_tracker, repo: ...]  -> call dead
   #   main (0.7.231)   [repo: ...]  -> start_link derives :"...Repo_outcome_tracker"
   #
-  # env/0 defaults to :prod when MIX_ENV is unset, so the app tree (and this
-  # tracker) really does start during `mix test` — which is what lets this test
-  # observe the registration.
+  # This test starts the spec itself rather than relying on the application tree.
+  # It used to rely on it, because env/0 read the OS MIX_ENV variable, which is
+  # stale ("dev") inside the test VM -- so the production tree, Repo against a real
+  # database and the live-subscribing NATS consumer included, booted during
+  # `mix test`. env/0 now reads application config (config/test.exs sets :test).
   test "the tracker registers under the name its callers use, so the nudge path works" do
     assert {OutcomeTracker, opts} = BotArmyGtd.Application.outcome_tracker_spec()
     assert Keyword.fetch!(opts, :name) == OutcomeTracker
+
+    start_supervised!({OutcomeTracker, opts})
 
     assert Process.whereis(OutcomeTracker), "no tracker is registered under the callers' name"
 
@@ -35,9 +39,31 @@ defmodule BotArmyGtd.ApplicationTest do
     derived = :"#{BotArmyGtd.Repo}_outcome_tracker"
     assert Process.whereis(derived) == nil, "the derived trap name is registered again"
 
-    # No :name given, so this must collide with the tracker the app already runs under
-    # the callers' name -- proof that :repo did not move the registration anywhere.
+    # Start a tracker with :repo only, so the next start collides with it. No :name
+    # given, so this must land under the callers' name -- proof that :repo did not
+    # move the registration anywhere.
+    start_supervised!({OutcomeTracker, [repo: BotArmyGtd.Repo]})
+    assert Process.whereis(OutcomeTracker)
+
     assert {:error, {:already_started, pid}} = OutcomeTracker.start_link(repo: BotArmyGtd.Repo)
     assert pid == Process.whereis(OutcomeTracker)
+  end
+
+  # Regression guard for the environment landmine described above: if env/0 ever
+  # reads the OS variable again, the whole production tree returns to every test
+  # run (real database, ~46 live NATS subscriptions) and these fail.
+  test "env/0 reads application config, not the stale OS MIX_ENV variable" do
+    assert Application.get_env(:bot_army_gtd, :env) == :test
+    assert BotArmyGtd.Application.env() == :test
+  end
+
+  test "the production children do not boot under test" do
+    refute Process.whereis(BotArmyGtd.Repo),
+           "BotArmyGtd.Repo booted in tests: every test run would hit a real database"
+
+    refute Process.whereis(BotArmyGtd.TaskStore), "BotArmyGtd.TaskStore booted in tests"
+
+    refute Process.whereis(BotArmyGtd.NATS.Consumer),
+           "the NATS consumer booted in tests: it would subscribe to the live broker"
   end
 end

@@ -13,7 +13,16 @@ defmodule BotArmyGtd.Application do
   # Derive version from mix.exs at compile time (available in releases via @attrs)
   @version Mix.Project.config()[:version]
 
-  defp env, do: String.to_atom(System.get_env("MIX_ENV") || "prod")
+  @doc false
+  # Application config, NOT the OS variable. Under `mix test` the BEAM's cached
+  # environment still says "dev" (mix sets Mix.env/1 while loading config but never
+  # rewrites System.get_env("MIX_ENV")), so `String.to_atom(System.get_env("MIX_ENV") || "prod")`
+  # resolved to :dev inside every test run and booted the production supervision
+  # tree — Repo against a real database (`ergon_gtd_dev`), every store, and the NATS
+  # consumer subscribing to ~46 live subjects. `config/test.exs` now sets
+  # `config :bot_army_gtd, env: :test`; the :prod default keeps `mix run`/releases
+  # unchanged. Same pattern as bot_army_rpg.
+  def env, do: Application.get_env(:bot_army_gtd, :env, :prod)
 
   @impl true
   def start(_type, _args) do
@@ -69,12 +78,20 @@ defmodule BotArmyGtd.Application do
       [
         {BotArmyLibraryRuntime.LeaderElection,
          service: "gtd",
-         node_name: BotArmyLibraryRuntime.ConfigLoader.get("NODE_NAME", "unknown"),
+         node_name: leader_node_name(),
          default_role: default_role,
          on_role_change: {BotArmyGtd.LeaderMonitor, :role_changed, []}}
         | children
       ]
     end
+  end
+
+  # The salted env files carry LEADER_NODE_NAME ("air" / "mini"); nothing sets
+  # NODE_NAME, so every node reported itself as "unknown" on the leader heartbeat
+  # and `LeaderElection.force/2` could not name a node to hand the lease to.
+  defp leader_node_name do
+    BotArmyLibraryRuntime.ConfigLoader.get("NODE_NAME") ||
+      BotArmyLibraryRuntime.ConfigLoader.get("LEADER_NODE_NAME", "unknown")
   end
 
   defp parse_role("standby"), do: :standby

@@ -248,6 +248,106 @@ defmodule BotArmyGtd.NATS.Consumer do
     }
   ]
 
+  # ── Who serves these subjects ──────────────────────────────────────────────
+  #
+  # GTD runs on two hosts (air primary, mini standby) against one shared NATS
+  # broker, and both instances used to subscribe to every subject below. A
+  # request-reply is then delivered to BOTH, and the FIRST reply wins: the
+  # standby's instant refusal beat the leader's database write, so a caller was
+  # told the write had failed after it had landed (and would retry it). Mini's
+  # database is also its own, so its reads answered from an empty world.
+  #
+  # Silence, not honesty, is the fix: a standby cannot answer what it must not
+  # serve, so there is no race to lose. `role_changed/1` (called by
+  # BotArmyGtd.LeaderMonitor from the leader election callback) subscribes on
+  # promotion and unsubscribes on demotion.
+  #
+  # See docs/LEADER_ELECTION.md and monorepo
+  # docs/runbooks/KNOWN_ISSUE_STANDBY_BOT_LIES_ABOUT_WRITES.md.
+  @gtd_subjects [
+    "gtd.inbox.add",
+    "gtd.task.create",
+    "gtd.task.update",
+    "gtd.task.complete",
+    "gtd.task.command.defer",
+    "gtd.task.command.delete",
+    "gtd.task.decompose",
+    "gtd.decomposition.approve",
+    "gtd.decomposition.reject",
+    "gtd.decomposition.review",
+    "gtd.decomposition.request_review",
+    "gtd.project.create",
+    "gtd.project.update",
+    "gtd.project.list",
+    "gtd.log.create",
+    "events.llm.response.parsed",
+    "events.llm.chain.completed",
+    "gtd.task.list",
+    "gtd.task.get",
+    "gtd.task.search",
+    "gtd.task.checkout",
+    "gtd.task.checkin",
+    "gtd.task.checkout.query",
+    "gtd.decomposition.list_due",
+    "gtd.health",
+    "claude.task.create",
+    "claude.operation.success",
+    "conv.request.gtd.>",
+    "conv.mailbox.gtd",
+    "conv.followup.>",
+    "ops.deploy.>",
+    "gossip.intent.proposed",
+    "gossip.social.invite",
+    "gossip.poll.broadcast",
+    "gtd.whats_next",
+    "synapse.army_general.poll.broadcast",
+    "gtd.army.opinion.vote",
+    "gtd.para.backfill",
+    "gtd.para.cleanup",
+    "gtd.review.weekly",
+    "gtd.review.inbox_aging",
+    "gtd.review.coherence",
+    "gtd.goal.plan",
+    "gtd.goal.status",
+    "gtd.goal.list",
+    "gtd.goal.cancel"
+  ]
+
+  @standby_subjects []
+
+  @doc """
+  Subjects this node subscribes to, given whether it holds the gtd leader lease.
+
+  A standby serves none of them: every subject in `@gtd_subjects` either writes
+  to gtd's database or answers a read from it, and the standby's database is not
+  the leader's.
+  """
+  def served_subjects(true), do: @gtd_subjects
+  def served_subjects(false), do: @standby_subjects
+
+  @doc "Subjects to subscribe on promotion: served now minus what we already hold."
+  def subjects_to_subscribe(is_leader?, already_subscribed) do
+    served_subjects(is_leader?) -- already_subscribed
+  end
+
+  @doc "Subscriptions to drop on demotion: all of them; nothing on promotion."
+  def subjects_to_unsubscribe(true, _subscribed), do: []
+  def subjects_to_unsubscribe(false, subscribed), do: subscribed
+
+  @doc """
+  Called by `BotArmyGtd.LeaderMonitor.role_changed/1` on every role transition.
+
+  No-op when the consumer is not running (leader election starts before it).
+  """
+  def role_changed(role) do
+    case Process.whereis(__MODULE__) do
+      nil -> :ok
+      pid -> send(pid, {:role_changed, role})
+    end
+
+    :ok
+  end
+
   # API
 
   def start_link(opts) do
@@ -562,67 +662,19 @@ defmodule BotArmyGtd.NATS.Consumer do
               Connection.subscribe_to_status()
               Logger.info("🟢 [Consumer] Connected to NATS, subscribing to GTD topics")
 
-              subscriptions =
-                [
-                  "gtd.inbox.add",
-                  "gtd.task.create",
-                  "gtd.task.update",
-                  "gtd.task.complete",
-                  "gtd.task.command.defer",
-                  "gtd.task.command.delete",
-                  "gtd.task.decompose",
-                  "gtd.decomposition.approve",
-                  "gtd.decomposition.reject",
-                  "gtd.decomposition.review",
-                  "gtd.decomposition.request_review",
-                  "gtd.project.create",
-                  "gtd.project.update",
-                  "gtd.project.list",
-                  "gtd.log.create",
-                  "events.llm.response.parsed",
-                  "events.llm.chain.completed",
-                  "gtd.task.list",
-                  "gtd.task.get",
-                  "gtd.task.search",
-                  "gtd.task.checkout",
-                  "gtd.task.checkin",
-                  "gtd.task.checkout.query",
-                  "gtd.decomposition.list_due",
-                  "gtd.health",
-                  "claude.task.create",
-                  "claude.operation.success",
-                  "conv.request.gtd.>",
-                  "conv.mailbox.gtd",
-                  "conv.followup.>",
-                  "ops.deploy.>",
-                  "gossip.intent.proposed",
-                  "gossip.social.invite",
-                  "gossip.poll.broadcast",
-                  "gtd.whats_next",
-                  "synapse.army_general.poll.broadcast",
-                  "gtd.army.opinion.vote",
-                  "gtd.para.backfill",
-                  "gtd.para.cleanup",
-                  "gtd.review.weekly",
-                  "gtd.review.inbox_aging",
-                  "gtd.review.coherence",
-                  "gtd.goal.plan",
-                  "gtd.goal.status",
-                  "gtd.goal.list",
-                  "gtd.goal.cancel"
-                ]
-                |> Enum.map(fn subject ->
-                  case Gnat.sub(conn, self(), subject) do
-                    {:ok, sub} ->
-                      Logger.info("GTD consumer subscribed to #{subject}")
-                      sub
+              is_leader? = BotArmyGtd.LeaderMonitor.leader?()
 
-                    {:error, reason} ->
-                      Logger.error("Failed to subscribe to #{subject}: #{inspect(reason)}")
-                      nil
-                  end
-                end)
-                |> Enum.filter(&(not is_nil(&1)))
+              if is_leader? do
+                Logger.info(
+                  "GTD consumer is the leader: subscribing to #{length(@gtd_subjects)} subjects"
+                )
+              else
+                Logger.warning(
+                  "GTD consumer is a STANDBY: subscribing to no GTD subjects (the leader answers them)"
+                )
+              end
+
+              subscriptions = subscribe_all(conn, served_subjects(is_leader?), "connect")
 
               deployment_status =
                 Application.get_env(:bot_army_gtd, :deployment_status, "deployed")
@@ -1511,6 +1563,41 @@ defmodule BotArmyGtd.NATS.Consumer do
     Application.get_env(:bot_army_gtd, :default_tenant_id, "default")
   end
 
+  defp subscribe_all(_conn, [], _why), do: []
+
+  defp subscribe_all(conn, subjects, why) do
+    subjects
+    |> Enum.map(fn subject ->
+      case Gnat.sub(conn, self(), subject) do
+        {:ok, sid} ->
+          Logger.info("GTD consumer subscribed to #{subject} (#{why})")
+          %{subject: subject, sid: sid}
+
+        {:error, reason} ->
+          Logger.error("Failed to subscribe to #{subject}: #{inspect(reason)}")
+          nil
+      end
+    end)
+    |> Enum.filter(&(not is_nil(&1)))
+  end
+
+  defp unsubscribe_all(_conn, []), do: :ok
+
+  defp unsubscribe_all(conn, subscriptions) do
+    Enum.each(subscriptions, fn %{subject: subject, sid: sid} ->
+      Logger.warning("GTD consumer unsubscribed from #{subject} (no longer leader)")
+
+      try do
+        Gnat.unsub(conn, sid)
+      catch
+        kind, reason ->
+          Logger.error(
+            "Failed to unsubscribe from #{subject}: #{inspect(kind)} #{inspect(reason)}"
+          )
+      end
+    end)
+  end
+
   defp reply_traced(conn, reply_to, body) do
     if conn do
       headers = Tracing.inject_trace_context([])
@@ -1529,6 +1616,31 @@ defmodule BotArmyGtd.NATS.Consumer do
   defp decode_body(_), do: %{}
 
   @impl true
+  # Leader election promoted or demoted this node: subscribe/unsubscribe to match.
+  # A standby must not be a responder for any GTD subject (see @gtd_subjects).
+  def handle_info({:role_changed, role}, state) do
+    is_leader? = role == :primary
+
+    case state.conn do
+      nil ->
+        # Not connected yet — handle_continue(:connect, ...) reads the role itself.
+        {:noreply, state}
+
+      conn ->
+        Logger.warning("[Consumer] GTD role is now #{role}; reconciling subscriptions")
+
+        removed = subjects_to_unsubscribe(is_leader?, state.subscriptions)
+        unsubscribe_all(conn, removed)
+
+        kept = Enum.reject(state.subscriptions, &(&1 in removed))
+        already = Enum.map(state.subscriptions, & &1.subject)
+
+        added = subscribe_all(conn, subjects_to_subscribe(is_leader?, already), role)
+
+        {:noreply, %{state | subscriptions: kept ++ added}}
+    end
+  end
+
   def handle_info({:nats, :disconnected}, state) do
     next_attempt = state.reconnect_attempt + 1
     delay = BotArmyLibraryRuntime.NATS.Connection.calculate_backoff(state.reconnect_attempt, 1000)

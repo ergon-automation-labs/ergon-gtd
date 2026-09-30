@@ -1,5 +1,11 @@
 import Config
 
+# The app environment. NOT read from the OS `MIX_ENV` variable: inside `mix test`
+# that variable is stale ("dev") and the production supervision tree booted —
+# Repo on a real database, stores, and the NATS consumer subscribing to ~46 live
+# subjects. See BotArmyGtd.Application.env/0.
+config :bot_army_gtd, env: :test
+
 # Test configuration uses mocks instead of real database stores
 config :bot_army_gtd, :task_store, BotArmyGtd.TaskStoreMock
 config :bot_army_gtd, :project_store, BotArmyGtd.ProjectStoreMock

@@ -5,7 +5,7 @@
 The GTD bot runs on two nodes (air and mini) with automatic leader election. This provides high availability: if the primary (air) becomes inaccessible, the standby (mini) automatically takes over without manual intervention.
 
 **Primary**: Air GTD (always active, publishes heartbeats)  
-**Standby**: Mini GTD (read-only, monitors heartbeats, promotes if needed)
+**Standby**: Mini GTD (serves no GTD subjects at all — see "The standby is not a responder" below; promotes if needed)
 
 ## Architecture
 
@@ -21,7 +21,7 @@ The GTD bot runs on two nodes (air and mini) with automatic leader election. Thi
     ┌────▼───────┐      ┌───▼──────────┐
     │  AIR GTD   │      │  MINI GTD    │
     │ PRIMARY    │      │  STANDBY     │
-    │ (Leader)   │      │ (Read-only)  │
+    │ (Leader)   │      │ (Silent)     │
     │            │      │              │
     │ Publishes  │      │ Monitors     │
     │ heartbeat  │      │ heartbeat    │
@@ -32,8 +32,43 @@ The GTD bot runs on two nodes (air and mini) with automatic leader election. Thi
     └────┬───────┘      └──────┬───────┘
          │                     │
          └─────────────────────┘
-           PostgreSQL (shared)
+           PostgreSQL (per host — NOT shared)
 ```
+
+## The standby is not a responder
+
+A standby node subscribes to **no GTD subjects at all**: `BotArmyGtd.NATS.Consumer.served_subjects(false) == []`.
+
+That is a correctness requirement, not an optimization. Both nodes used to subscribe to
+every subject, and a NATS request-reply is delivered to **all** subscribers — the first
+reply wins. A standby answers from its **own** in-memory snapshot and its **own**
+PostgreSQL, and its answer is immediate, so it consistently beat the leader's database
+write. Callers were told a write had failed (`update_failed: :not_found`) after the
+leader had landed it — and would retry it — while reads were answered from a divergent,
+empty world. The two hosts' databases are separate (see the diagram): "standby" is not
+"replica".
+
+Rules that follow from this:
+
+1. **The leader owns the command surface.** A standby publishes only its own health
+   (`system.health.gtd`) and its leader-election traffic, so it stays visible without
+   becoming a responder.
+2. **The store refuses before it looks.** `BotArmyGtd.TaskStore`'s scoped paths
+   (`{:get, …}`, `{:update_scoped, …}`) return `{:error, :not_leader}` while this node
+   does not hold the lease — **never** `:not_found`, which would be a factual claim
+   about a task the node cannot see. `{:create, …}`, `{:update, …}` and `{:complete, …}`
+   were already gated this way; the scoped pair was the gap.
+3. **Promotion and demotion are events.** `LeaderElection`'s `on_role_change` callback
+   calls `BotArmyGtd.LeaderMonitor.role_changed/1`, which logs the transition and
+   forwards it to the consumer. The consumer subscribes to everything on promotion and
+   unsubscribes (`Gnat.unsub/2`) on demotion, using the subscriptions it recorded while
+   connecting.
+
+Verified live 2026-09-30: air held the lease (`acquired lease (fencing rev 319541)` →
+`transitioning to primary`) while mini logged `transitioning to standby` — so making the
+standby silent cannot silence the fleet.
+
+Monorepo: `docs/runbooks/KNOWN_ISSUE_STANDBY_BOT_LIES_ABOUT_WRITES.md`.
 
 ## How It Works
 

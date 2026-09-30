@@ -372,12 +372,22 @@ defmodule BotArmyGtd.TaskStore do
 
   @impl true
   def handle_call({:update_scoped, tenant_id, task_id, payload}, _from, state) do
-    case Map.get(state, task_id) do
-      nil ->
-        {:reply, {:error, :not_found}, state}
+    # Leader gate, like {:update, ...} above. Without it a standby answered from
+    # its OWN (empty) in-memory snapshot with :not_found, while the leader landed
+    # the write, so callers were told a landed write had failed. Never report
+    # :not_found for "I am not allowed to serve this" — the two answers are not
+    # the same fact and must not share a word.
+    if BotArmyGtd.LeaderMonitor.leader?() do
+      case Map.get(state, task_id) do
+        nil ->
+          {:reply, {:error, :not_found}, state}
 
-      task ->
-        do_update_scoped_task(task, task_id, tenant_id, payload, state)
+        task ->
+          do_update_scoped_task(task, task_id, tenant_id, payload, state)
+      end
+    else
+      Logger.warning("TaskStore: Scoped update rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
     end
   end
 
@@ -482,17 +492,24 @@ defmodule BotArmyGtd.TaskStore do
 
   @impl true
   def handle_call({:get, tenant_id, task_id}, _from, state) do
-    case Map.get(state, task_id) do
-      nil ->
-        {:reply, {:error, :not_found}, state}
-
-      task ->
-        # Verify tenant_id matches
-        if task["tenant_id"] == tenant_id do
-          {:reply, {:ok, task}, state}
-        else
+    # Same gate as the scoped write: a standby's snapshot is not the leader's
+    # database, so an empty lookup is not evidence the task does not exist.
+    if BotArmyGtd.LeaderMonitor.leader?() do
+      case Map.get(state, task_id) do
+        nil ->
           {:reply, {:error, :not_found}, state}
-        end
+
+        task ->
+          # Verify tenant_id matches
+          if task["tenant_id"] == tenant_id do
+            {:reply, {:ok, task}, state}
+          else
+            {:reply, {:error, :not_found}, state}
+          end
+      end
+    else
+      Logger.warning("TaskStore: Scoped read rejected (not leader)")
+      {:reply, {:error, :not_leader}, state}
     end
   end
 

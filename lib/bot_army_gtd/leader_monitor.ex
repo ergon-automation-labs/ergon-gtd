@@ -22,8 +22,15 @@ defmodule BotArmyGtd.LeaderMonitor do
 
   def get_status, do: BotArmyLibraryRuntime.LeaderElection.get_status(@service)
 
-  @doc "Called by LeaderElection's on_role_change callback."
+  @doc """
+  Called by LeaderElection's on_role_change callback.
+
+  Tells the NATS consumer, which subscribes only while this node holds the
+  leader lease — a standby must not answer GTD requests it cannot serve (its
+  database is not the leader's). See `docs/LEADER_ELECTION.md`.
+  """
   def role_changed(role) do
     Logger.warning("[LeaderMonitor] GTD role changed to #{role}")
+    BotArmyGtd.NATS.Consumer.role_changed(role)
   end
 end
