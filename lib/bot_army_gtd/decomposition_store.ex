@@ -303,8 +303,8 @@ defmodule BotArmyGtd.DecompositionStore do
       "confidence_grade" => decomposition.confidence_grade,
       "source_domain" => decomposition.source_domain,
       "source_complexity_estimate" => decomposition.source_complexity_estimate,
-      "created_at" => decomposition.inserted_at |> NaiveDateTime.to_iso8601(),
-      "updated_at" => decomposition.updated_at |> NaiveDateTime.to_iso8601()
+      "created_at" => decomposition.inserted_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601(),
+      "updated_at" => decomposition.updated_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601()
     }
   end
 

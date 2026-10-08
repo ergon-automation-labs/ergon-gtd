@@ -288,12 +288,12 @@ defmodule BotArmyGtd.InboxItemStore do
       "raw_text" => item.raw_text,
       "source" => item.source,
       "source_metadata" => item.source_metadata,
-      "received_at" => item.received_at |> NaiveDateTime.to_iso8601(),
+      "received_at" => item.received_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601(),
       "processed_at" =>
-        if(item.processed_at, do: item.processed_at |> NaiveDateTime.to_iso8601(), else: nil),
+        if(item.processed_at, do: item.processed_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601(), else: nil),
       "status" => item.status,
-      "created_at" => item.inserted_at |> NaiveDateTime.to_iso8601(),
-      "updated_at" => item.updated_at |> NaiveDateTime.to_iso8601()
+      "created_at" => item.inserted_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601(),
+      "updated_at" => item.updated_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601()
     }
   end
 

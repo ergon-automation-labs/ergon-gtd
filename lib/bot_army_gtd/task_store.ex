@@ -885,11 +885,11 @@ defmodule BotArmyGtd.TaskStore do
       "labels" => task.labels,
       "due_date" => if(task.due_date, do: task.due_date |> to_string(), else: nil),
       "completed_at" =>
-        if(task.completed_at, do: task.completed_at |> NaiveDateTime.to_iso8601(), else: nil),
+        if(task.completed_at, do: task.completed_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601(), else: nil),
       "result" => task.result,
       "verification" => task.verification,
-      "created_at" => task.inserted_at |> NaiveDateTime.to_iso8601(),
-      "updated_at" => task.updated_at |> NaiveDateTime.to_iso8601()
+      "created_at" => task.inserted_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601(),
+      "updated_at" => task.updated_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601()
     }
   end
 

@@ -229,7 +229,7 @@ defmodule BotArmyGtd.LogEntryStore do
       "tenant_id" => entry.tenant_id |> to_string(),
       "user_id" => if(entry.user_id, do: entry.user_id |> to_string(), else: nil),
       "body" => entry.body,
-      "occurred_at" => entry.occurred_at |> NaiveDateTime.to_iso8601(),
+      "occurred_at" => entry.occurred_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601(),
       "category" => entry.category,
       "tags" => entry.tags,
       "task_id" => entry.task_id,
@@ -238,10 +238,10 @@ defmodule BotArmyGtd.LogEntryStore do
       "file_written" => entry.file_written,
       "enriched" => entry.enriched,
       "enriched_at" =>
-        if(entry.enriched_at, do: entry.enriched_at |> NaiveDateTime.to_iso8601(), else: nil),
+        if(entry.enriched_at, do: entry.enriched_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601(), else: nil),
       "structured_data" => entry.structured_data,
-      "created_at" => entry.inserted_at |> NaiveDateTime.to_iso8601(),
-      "updated_at" => entry.updated_at |> NaiveDateTime.to_iso8601()
+      "created_at" => entry.inserted_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601(),
+      "updated_at" => entry.updated_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601()
     }
   end
 

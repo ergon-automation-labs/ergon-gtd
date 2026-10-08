@@ -219,8 +219,8 @@ defmodule BotArmyGtd.ProjectStore do
       "area" => project.area,
       "labels" => project.labels,
       "metadata" => project.metadata || %{},
-      "created_at" => project.inserted_at |> NaiveDateTime.to_iso8601(),
-      "updated_at" => project.updated_at |> NaiveDateTime.to_iso8601()
+      "created_at" => project.inserted_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601(),
+      "updated_at" => project.updated_at |> BotArmyLibraryRuntime.Timestamp.utc_iso8601()
     }
   end
 
