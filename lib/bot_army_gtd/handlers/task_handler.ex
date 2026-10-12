@@ -550,29 +550,16 @@ defmodule BotArmyGtd.Handlers.TaskHandler do
   end
 
   defp publish_event(event_type, _payload, task, event_id, _original_message, tenant_id, user_id) do
-    payload = %{
-      "task" => task,
-      "triggered_by_event_id" => event_id
-    }
-
+    # Task lifecycle events carry task_id/task_title/priority on the root for
+    # cross-bot consumers (RPG progression, quest auto-create) — see EventBuilder.
     event_data =
-      EventBuilder.build_event(
+      EventBuilder.build_task_event(
         event_type,
-        payload,
+        task,
+        %{"triggered_by_event_id" => event_id},
         tenant_id: tenant_id,
         user_id: user_id
       )
-
-    # Flatten task metadata to top level for cross-bot consumers (RPG progression, quest auto-create)
-    event_data =
-      if event_type in ["gtd.task.completed", "gtd.task.created"] do
-        event_data
-        |> Map.put("priority", Map.get(task, "priority", "normal"))
-        |> Map.put("task_id", Map.get(task, "id"))
-        |> Map.put("task_title", Map.get(task, "title", ""))
-      else
-        event_data
-      end
 
     case Publisher.publish(event_data) do
       {:ok, _subject} -> Logger.debug("Published event: #{event_type}")

@@ -45,4 +45,39 @@ defmodule BotArmyGtd.EventBuilder do
 
     build_event("gtd.error", payload, opts)
   end
+
+  # Cross-bot consumers read a task's identity off the ENVELOPE ROOT, not out of
+  # `payload["task"]`. `BotArmyRpg.ProgressionSubscriber` links an RPG quest to a
+  # GTD task by root `task_id`, names the quest from root `task_title`, and sizes
+  # the XP from root `priority`.
+  @task_lifecycle_events ~w(gtd.task.created gtd.task.completed)
+
+  @doc """
+  Build the envelope for a task lifecycle event — the one true way.
+
+  The payload is `%{"task" => task}` merged with `extra_payload` (so handlers can
+  add their own context), and the task's identity is flattened onto the root for
+  the events cross-bot consumers subscribe to.
+
+  **Use this for `gtd.task.created` / `gtd.task.completed`; never `build_event/3`.**
+  An envelope that only nests the task under `payload["task"]` looks correct in the
+  store and reads correctly from inside GTD, while the consumer sees nothing: the
+  quest linked to that task is never completed, and a newly created task never
+  spawns a quest at all. That failure is silent on both sides — the producer thinks
+  it published, the consumer thinks there was nothing to do.
+  """
+  def build_task_event(event_name, task, extra_payload \\ %{}, opts \\ []) do
+    build_event(event_name, Map.merge(%{"task" => task}, extra_payload), opts)
+    |> with_task_identity(task)
+  end
+
+  defp with_task_identity(%{"event" => event} = event_data, task)
+       when event in @task_lifecycle_events do
+    event_data
+    |> Map.put("priority", Map.get(task, "priority", "normal"))
+    |> Map.put("task_id", Map.get(task, "id"))
+    |> Map.put("task_title", Map.get(task, "title", ""))
+  end
+
+  defp with_task_identity(event_data, _task), do: event_data
 end

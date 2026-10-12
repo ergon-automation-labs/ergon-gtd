@@ -146,13 +146,12 @@ defmodule BotArmyGtd.Handlers.InboxParsingHandler do
   # Private publishing
 
   defp publish_task_created(task, event_id, tenant_id, user_id) do
+    # Root task_id/task_title/priority are what let the RPG auto-create a quest
     event_data =
-      EventBuilder.build_event(
+      EventBuilder.build_task_event(
         "gtd.task.created",
-        %{
-          "task" => task,
-          "triggered_by_event_id" => event_id
-        },
+        task,
+        %{"triggered_by_event_id" => event_id},
         tenant_id: tenant_id,
         user_id: user_id
       )

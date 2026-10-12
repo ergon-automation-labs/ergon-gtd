@@ -207,15 +207,13 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
           "Claude operation completed: task_id=#{task_id}, operation=#{operation}, event_id=#{event_id}"
         )
 
-        # Publish completion event
+        # Publish completion event (task identity flattened to the root for RPG
+        # progression: root task_id is what completes the linked quest)
         event_data =
-          EventBuilder.build_event(
+          EventBuilder.build_task_event(
             "gtd.task.completed",
-            %{
-              "task" => task,
-              "triggered_by_event_id" => event_id,
-              "auto_completed" => true
-            },
+            task,
+            %{"triggered_by_event_id" => event_id, "auto_completed" => true},
             tenant_id: tenant_id,
             user_id: user_id,
             triggered_by: "claude"
@@ -242,13 +240,10 @@ defmodule BotArmyGtd.Handlers.ClaudeHandler do
 
   defp publish_event(event_type, task, event_id, tenant_id, user_id) do
     event_data =
-      EventBuilder.build_event(
+      EventBuilder.build_task_event(
         event_type,
-        %{
-          "task" => task,
-          "triggered_by_event_id" => event_id,
-          "auto_generated" => true
-        },
+        task,
+        %{"triggered_by_event_id" => event_id, "auto_generated" => true},
         tenant_id: tenant_id,
         user_id: user_id,
         triggered_by: "claude"
