@@ -179,14 +179,14 @@ defmodule BotArmyGtd.IntentEvaluator do
 
       {:ok, :defer, details} ->
         Logger.debug(
-          "[IntentEvaluator] Deferring #{action} (score=#{details.score}, reason=#{details.reason})"
+          "[IntentEvaluator] Deferring #{action} (score=#{details.score}, reason=#{format_reason(details.reason)})"
         )
 
         [{:deferred, action, details, context}]
 
       {:ok, :abort, details} ->
         Logger.debug(
-          "[IntentEvaluator] Aborting #{action} (score=#{details.score}, reason=#{details.reason})"
+          "[IntentEvaluator] Aborting #{action} (score=#{details.score}, reason=#{format_reason(details.reason)})"
         )
 
         publish_aborted_event(@bot_name, action, details)
@@ -371,7 +371,7 @@ defmodule BotArmyGtd.IntentEvaluator do
       "intent" => "classify",
       "text" =>
         "The user has #{stale_count} stale tasks but conditions don't warrant a full #{action} " <>
-          "(score #{Float.round(details.score, 2)}, reason: #{details.reason}). " <>
+          "(score #{Float.round(details.score, 2)}, reason: #{format_reason(details.reason)}). " <>
           "Write a one-sentence gentle reminder about their stale tasks. " <>
           "If not useful, respond: skip"
     }
@@ -386,7 +386,7 @@ defmodule BotArmyGtd.IntentEvaluator do
       "text" =>
         "The user has been idle for #{div(trunc(idle_minutes), 60)} hours but " <>
           "conditions don't warrant a full #{action} (score #{Float.round(details.score, 2)}, " <>
-          "reason: #{details.reason}). " <>
+          "reason: #{format_reason(details.reason)}). " <>
           "Write a one-sentence soft prompt about their projects. " <>
           "If not useful, respond: skip"
     }
@@ -412,7 +412,7 @@ defmodule BotArmyGtd.IntentEvaluator do
         "body" => message,
         "meta" => %{
           "score" => details.score,
-          "reason" => details.reason
+          "reason" => format_reason(details.reason)
         }
       })
 
@@ -496,7 +496,7 @@ defmodule BotArmyGtd.IntentEvaluator do
         "bot_name" => bot_name,
         "action" => action,
         "score" => details.score,
-        "reason" => Atom.to_string(details.reason),
+        "reason" => format_reason(details.reason),
         "aborted_at" => DateTime.utc_now() |> DateTime.to_iso8601()
       }
     }
@@ -505,6 +505,15 @@ defmodule BotArmyGtd.IntentEvaluator do
       BotArmyLibraryRuntime.NATS.Publisher.publish("events.bot_army.intent.aborted", event)
     end)
   end
+
+  # The decision's `reason` is an atom on the normal path but a tuple when the
+  # threshold model catches a random-roll error (`{:random_error, reason}`, see
+  # `Intent.ThresholdModel`). `Atom.to_string/1` on that tuple raised
+  # ArgumentError and took the whole evaluator with it, so format every shape the
+  # model can produce.
+  defp format_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_reason(reason) when is_binary(reason), do: reason
+  defp format_reason(reason), do: inspect(reason)
 
   defp get_thresholds do
     base = Application.get_env(:bot_army_gtd, :intent_thresholds, @default_thresholds)
