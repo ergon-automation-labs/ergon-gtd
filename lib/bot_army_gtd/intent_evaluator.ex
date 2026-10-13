@@ -365,7 +365,9 @@ defmodule BotArmyGtd.IntentEvaluator do
 
   @doc false
   def build_nudge_defer_prompt(action, details, context) do
-    stale_count = get_in(context, [:summary, :stale_task_count]) || 0
+    # `context.summary.<type>` is an aggregate, not a scalar (AccumulatedContext.compute_summary/1).
+    # Interpolating it used to leak the whole map into the prompt.
+    stale_count = AccumulatedContext.latest_value(context, :stale_task_count)
 
     %{
       "intent" => "classify",
@@ -379,7 +381,9 @@ defmodule BotArmyGtd.IntentEvaluator do
 
   @doc false
   def build_remind_defer_prompt(action, details, context) do
-    idle_minutes = get_in(context, [:summary, :idle_minutes]) || 0
+    # Same aggregate trap as build_nudge_defer_prompt/3 — and here `trunc/1` on the map
+    # raised ArgumentError (the crash fitness hit live on air, 2026-10-13).
+    idle_minutes = AccumulatedContext.latest_value(context, :idle_minutes)
 
     %{
       "intent" => "classify",
