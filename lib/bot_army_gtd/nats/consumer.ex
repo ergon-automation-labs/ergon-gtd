@@ -674,6 +674,13 @@ defmodule BotArmyGtd.NATS.Consumer do
                 )
               end
 
+              # Reconcile idempotently: drop whatever we still hold on this
+              # connection before adding the role's set. GTD re-subscribes on every
+              # {:nats, :connected} and :reconnect; without the drop each round
+              # appended another copy of all 46 subjects to the SAME connection
+              # (2026-10-13: 303 subs on one cid after an air broker restart).
+              unsubscribe_all(conn, state.subscriptions)
+
               subscriptions = subscribe_all(conn, served_subjects(is_leader?), "connect")
 
               deployment_status =
@@ -1650,7 +1657,11 @@ defmodule BotArmyGtd.NATS.Consumer do
     )
 
     Process.send_after(self(), :reconnect, delay)
-    {:noreply, %{state | subscriptions: [], conn: nil, reconnect_attempt: next_attempt}}
+
+    # Keep `subscriptions`: those sids are what the next connect drops before it
+    # re-subscribes, so a status flap cannot stack a second copy of every subject
+    # on the same connection. Only `conn` is cleared (it may be gone).
+    {:noreply, %{state | conn: nil, reconnect_attempt: next_attempt}}
   end
 
   @impl true
