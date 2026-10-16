@@ -158,6 +158,10 @@ mix test
 4. **BotArmyGtd.Handlers.ProjectHandler** - Manage projects
 5. **BotArmyGtd.Handlers.DecompositionHandler** - Multi-step task decomposition (Phase 2)
 6. **BotArmyGtd.DecompositionStore** - Store decomposition results with FSRS fields
+7. **BotArmyGtd.CoachChat** / **CoachLookup** - The §62 read-only coach: builds the facts it may
+   name from `TaskStore`/`ProjectStore`, runs at most one `LOOKUP docs|para` the model asks for,
+   and strips any directive out of the final answer. `CoachJob` + `JobBell` are the backgrounded
+   fallback when the fast lane is slow.
 
 ### Task Status Flow
 
@@ -177,6 +181,13 @@ The bot listens to and publishes:
 - `gtd.inbox.*` - Inbox operations
 - `gtd.task.*` - Task operations
 - `gtd.project.*` - Project operations
+- `gtd.coach.chat` - The §62 coach (request/reply). **Read-only, and it stays that way**: nothing
+  on it creates, renames, completes, defers, deletes or files anything, and nothing stages a
+  change for her to confirm. Adding a write of any kind to this subject is a design change, not a
+  feature — see `docs/wife_care/PANELS.md` §57/§58/§62 before you touch it. Its facts must come
+  from real reads: do **not** ground it in `gtd.whats_next`, which is polluted on prod.
+- `events.llm.job.completed` - Wakes a backgrounded coach job (a bell, never a proof: read
+  `llm.job.status`)
 
 All messages follow the core envelope structure from `bot_army_core`.
 

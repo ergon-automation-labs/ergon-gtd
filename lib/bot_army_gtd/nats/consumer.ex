@@ -167,6 +167,20 @@ defmodule BotArmyGtd.NATS.Consumer do
       description: "Get what's-next ranking snapshot"
     },
     %{
+      subject: "gtd.coach.chat",
+      type: :request_reply,
+      description:
+        "Ask a question about her projects, tasks and notes, grounded in the stores and in " <>
+          "her own docs — read-only, and it never chooses anything for her"
+    },
+    %{
+      subject: "events.llm.job.completed",
+      type: :subscribe,
+      description:
+        "the llm bot rings when a backgrounded chat job ends; the words are fetched by id, " <>
+          "never carried here"
+    },
+    %{
       subject: "gtd.health",
       type: :request_reply,
       description: "Check system health - service metrics from aggregator"
@@ -282,6 +296,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     "gtd.log.create",
     "events.llm.response.parsed",
     "events.llm.chain.completed",
+    "events.llm.job.completed",
     "gtd.task.list",
     "gtd.task.get",
     "gtd.task.search",
@@ -300,6 +315,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     "gossip.social.invite",
     "gossip.poll.broadcast",
     "gtd.whats_next",
+    "gtd.coach.chat",
     "synapse.army_general.poll.broadcast",
     "gtd.army.opinion.vote",
     "gtd.para.backfill",
@@ -464,6 +480,10 @@ defmodule BotArmyGtd.NATS.Consumer do
     DecompositionHandler.handle_chain_completed(message)
   end
 
+  defp route_event("llm.job.completed", message) do
+    handle_job_bell(message)
+  end
+
   defp route_event("claude.task.create", message) do
     ClaudeHandler.handle_task_create(message)
   end
@@ -478,6 +498,18 @@ defmodule BotArmyGtd.NATS.Consumer do
 
   defp route_event(event, _message) do
     Logger.debug("Unknown event type: #{event}")
+  end
+
+  # The llm bot's bell: a backgrounded job ended. It wakes whoever is waiting for that job id,
+  # and tells them nothing else — the waiter reads the result from the llm bot's store, because
+  # a bell is a wake-up and not a proof, and because the event deliberately carries no words.
+  # The ring is a registry dispatch, so the one consumer process is never blocked by a waiter.
+  defp handle_job_bell(%{"payload" => %{"job_id" => job_id}}) when is_binary(job_id) do
+    BotArmyGtd.JobBell.ring(job_id)
+  end
+
+  defp handle_job_bell(_message) do
+    Logger.warning("A job bell arrived without a job id")
   end
 
   defp parse_task_list_params(body) do
@@ -945,6 +977,24 @@ defmodule BotArmyGtd.NATS.Consumer do
         end
 
       reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  # The GTD coach. The LLM round trip is seconds long at best and a minute at worst, and every
+  # GTD subscription rides on this one process, so the wait is spawned rather than blocking the
+  # mailbox: her task lists and her writes must keep answering while a question is with the
+  # model. The handler owns its own reply on every path, so a question is never left waiting.
+  @impl true
+  def handle_info({:msg, %{topic: "gtd.coach.chat", reply_to: reply_to, body: body} = msg}, state)
+      when is_binary(reply_to) and reply_to != "" do
+    Tracing.with_consumer_span("gtd.coach.chat", Map.get(msg, :headers, []), fn ->
+      params = decode_body(body)
+
+      spawn(fn ->
+        BotArmyGtd.Handlers.CoachChatHandler.handle_chat(params, reply_to)
+      end)
     end)
 
     {:noreply, state}

@@ -2,7 +2,7 @@
 
 GTD (Getting Things Done) bot implementation for the Bot Army ecosystem.
 
-**Current Version:** 0.2.0
+**Current Version:** 0.8.0
 
 **Status:** Inbox text parsing with LLM intelligence enabled
 
@@ -14,6 +14,13 @@ Manages task inbox, projects, and context-based organization with intelligent te
 - **Intelligent Parsing** - Uses LLM (bot_army_llm) to extract: title, description, project, priority, due_date, tags
 - **Task Organization** - Projects, contexts, priority levels, due dates
 - **State Transitions** - Task lifecycle: inbox → active → completed/deferred/deleted
+- **A coach that only reads (§62)** - `gtd.coach.chat` answers a question about her own
+  system, grounded in facts this bot reads itself: her active projects, her open tasks grouped
+  by project, and her inbox. It may use exactly one look-up across her project docs
+  (`LOOKUP docs "..."`) or her own PARA files (`LOOKUP para "..."`). It is read-only: it
+  names nothing it was not shown, it does not rank her tasks, and it does not decide what she
+  should do next. A slow answer is backgrounded on the local model and woken by
+  `events.llm.job.completed` rather than lost (§61, ported here).
 
 ## Getting Started
 
@@ -41,6 +48,8 @@ mix credo                        # Linting
 | `gtd.project.update` | ProjectHandler | Update project |
 | `llm.response.parsed` | InboxParsingHandler | Receive parsed inbox text (Phase 1) |
 | `llm.chain.completed` | DecompositionHandler | Receive decomposition chain results (Phase 2) |
+| `gtd.coach.chat` | CoachChatHandler | Ask about her own system — projects, tasks, inbox, one optional look-up (§62). **Read-only.** |
+| `events.llm.job.completed` | Consumer (JobBell) | Wake a backgrounded coach job (§62) |
 
 ### Outgoing Messages
 

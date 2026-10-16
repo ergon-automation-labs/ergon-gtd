@@ -34,6 +34,7 @@ defmodule BotArmyGtd.Application do
     base_children =
       []
       |> maybe_add_repo()
+      |> maybe_add_job_bell()
       |> maybe_add_leader_monitor()
       |> maybe_add_task_store()
       |> maybe_add_project_store()
@@ -67,6 +68,15 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_repo(children) do
     if env() == :test, do: children, else: [BotArmyGtd.Repo | children]
+  end
+
+  # The registry that wakes the GTD coach when the llm bot rings its bell. Started in every
+  # environment, tests included: it is a bare registry with no dependencies, and the tests that
+  # drive the coach's fallback use the real one rather than a stand-in. Waiting tolerates its
+  # absence anyway (`BotArmyGtd.JobBell.watch/1` returns `{:error, :no_registry}` and the waiter
+  # simply polls), so a node where it failed to start loses a shortcut and not the answer.
+  defp maybe_add_job_bell(children) do
+    [BotArmyGtd.JobBell | children]
   end
 
   defp maybe_add_leader_monitor(children) do
