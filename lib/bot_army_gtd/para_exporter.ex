@@ -28,7 +28,7 @@ defmodule BotArmyGtd.ParaExporter do
   """
 
   require Logger
-  alias BotArmyGtd.{ProjectStore, TaskStore}
+  alias BotArmyGtd.{HouseholdDay, ProjectStore, TaskStore}
   alias BotArmyLibraryRuntime.NATS.Publisher
 
   @para_refs_marker "## PARA refs"
@@ -91,7 +91,7 @@ defmodule BotArmyGtd.ParaExporter do
     name = project["name"] || "Untitled"
     project_id = project["id"]
     slug = slugify(name)
-    today = Date.utc_today() |> Date.to_iso8601()
+    today = HouseholdDay.today() |> Date.to_iso8601()
 
     files = [
       {"README.md", readme_content(name, project_id)},
@@ -120,7 +120,7 @@ defmodule BotArmyGtd.ParaExporter do
     slug = slugify(project_name)
     title = task["title"] || "Untitled"
     status = task["status"] || "inbox"
-    today = Date.utc_today() |> Date.to_iso8601()
+    today = HouseholdDay.today() |> Date.to_iso8601()
 
     # Log the new task in WEEKLY_LOG via note routing
     note_payload = %{
@@ -238,7 +238,7 @@ defmodule BotArmyGtd.ParaExporter do
     name = project["name"] || "Untitled"
     project_id = project["id"]
     slug = slugify(name)
-    today = Date.utc_today() |> Date.to_iso8601()
+    today = HouseholdDay.today() |> Date.to_iso8601()
 
     archived_readme = """
     # #{name} (archived)
@@ -316,7 +316,7 @@ defmodule BotArmyGtd.ParaExporter do
           |> Enum.filter(&(&1["status"] == "active" and &1["id"] != task["id"]))
           |> Enum.sort_by(& &1["updated_at"], :desc)
 
-        today = Date.utc_today() |> Date.to_iso8601()
+        today = HouseholdDay.today() |> Date.to_iso8601()
         content = build_next_action_content(active_tasks, today)
 
         do_publish("para.fs.write", %{
@@ -508,7 +508,7 @@ defmodule BotArmyGtd.ParaExporter do
 
   defp publish_completion_note(project_slug, task) do
     title = task["title"] || "Untitled task"
-    today = Date.utc_today() |> Date.to_iso8601()
+    today = HouseholdDay.today() |> Date.to_iso8601()
 
     payload = %{
       "schema_version" => "1.0",
@@ -524,7 +524,7 @@ defmodule BotArmyGtd.ParaExporter do
 
   defp publish_status_note(project_slug, task, old_status, new_status) do
     title = task["title"] || "Untitled task"
-    today = Date.utc_today() |> Date.to_iso8601()
+    today = HouseholdDay.today() |> Date.to_iso8601()
 
     payload = %{
       "schema_version" => "1.0",

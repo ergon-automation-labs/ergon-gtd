@@ -54,7 +54,7 @@ defmodule BotArmyGtd.Handlers.CoachChatHandlerTest do
 
       context = CoachChatHandler.context(@tenant)
 
-      assert context.today == Date.utc_today() |> Date.to_iso8601()
+      assert context.today == BotArmyGtd.HouseholdDay.today() |> Date.to_iso8601()
       assert {:ok, [%{"name" => "Feature Development"}]} = context.projects
       assert context.tasks == {:ok, []}
       assert context.inbox == {:ok, []}

@@ -166,6 +166,15 @@ mix test
    times out returns *nothing at all*, not the matches it had already found (2026-10-16). Read the
    moduledoc before changing the scope list or its order.
 
+8. **BotArmyGtd.Graphs** / **GraphSource** / **HouseholdDay** - The graphs this bot can draw from
+   the task log (§67): `Graphs` buckets purely (`week_buckets/2` Monday-started, `month_buckets/2`
+   for projects), `GraphSource` answers the four reads **bounded by a window, never by a row
+   count**, and `HouseholdDay` is the day the buckets count from. **`HouseholdDay.today/0` is the
+   only answer to "what day is it"** — `Date.utc_today/0` does not appear under `lib/`; read the day
+   once per answer and build every field from that one value. The series shape is deliberately
+   identical to the fitness bot's so one page parses both, and **a read that fails is
+   `read_failed`**, never a menu of empty series.
+
 ### Task Status Flow
 
 **General workflow:** `active → claimed → completed`
@@ -189,6 +198,12 @@ The bot listens to and publishes:
   change for her to confirm. Adding a write of any kind to this subject is a design change, not a
   feature — see `docs/wife_care/PANELS.md` §57/§58/§62 before you touch it. Its facts must come
   from real reads: do **not** ground it in `gtd.whats_next`, which is polluted on prod.
+- `gtd.graph.series` - The graphs this bot can draw from the task log: tasks opened and closed per
+  week, times worked per week, projects started per month (§67). One reply carries the whole menu,
+  empty series included, because the menu *is* the answer. **Read-only**, like the coach above it,
+  and the reads are bounded by a window rather than a row count — a chart of the last twelve weeks
+  must be of the last twelve weeks. A `completed_at` that is null is left out rather than dated to
+  `inserted_at`; a read that fails is `read_failed`.
 - `events.llm.job.completed` - Wakes a backgrounded coach job (a bell, never a proof: read
   `llm.job.status`)
 

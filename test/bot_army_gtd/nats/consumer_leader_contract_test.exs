@@ -26,12 +26,13 @@ defmodule BotArmyGtd.NATS.ConsumerLeaderContractTest do
           "gtd.task.complete",
           "gtd.project.list",
           "gtd.health",
-          "gtd.coach.chat"
+          "gtd.coach.chat",
+          "gtd.graph.series"
         ] do
       assert subject in subjects, "#{subject} must be served by the leader"
     end
 
-    assert length(subjects) == 48
+    assert length(subjects) == 49
   end
 
   test "promotion subscribes to what is served but not already held" do
@@ -42,7 +43,7 @@ defmodule BotArmyGtd.NATS.ConsumerLeaderContractTest do
 
     refute "gtd.task.update" in to_add
     assert "gtd.task.get" in to_add
-    assert length(to_add) == 47
+    assert length(to_add) == 48
   end
 
   test "a standby subscribes to nothing, so promotion only ever adds" do

@@ -62,7 +62,16 @@ defmodule BotArmyGtd.Handlers.CoachChatHandler do
 
   require Logger
 
-  alias BotArmyGtd.{CoachChat, CoachJob, CoachLookup, LlmReply, ProjectStore, TaskStore}
+  alias BotArmyGtd.{
+    CoachChat,
+    CoachJob,
+    CoachLookup,
+    HouseholdDay,
+    LlmReply,
+    ProjectStore,
+    TaskStore
+  }
+
   alias BotArmyLibraryCore.Tenant
   alias BotArmyLibraryRuntime.NATS.Reply
 
@@ -220,7 +229,7 @@ defmodule BotArmyGtd.Handlers.CoachChatHandler do
   @doc false
   def context(tenant_id) do
     %{
-      today: Date.utc_today() |> Date.to_iso8601(),
+      today: HouseholdDay.today() |> Date.to_iso8601(),
       projects: read("projects", fn -> project_store().list(tenant_id) end),
       tasks: read("open tasks", fn -> task_store().list(tenant_id, %{"status" => "active"}) end),
       inbox: read("inbox", fn -> task_store().list(tenant_id, %{"status" => "inbox"}) end)

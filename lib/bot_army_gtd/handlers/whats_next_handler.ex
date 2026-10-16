@@ -3,6 +3,7 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
   Handler for the "what's next" query to suggest the next best action for users.
   """
   require Logger
+  alias BotArmyGtd.HouseholdDay
   alias Ecto.UUID
 
   def handle_request(message) do
@@ -174,7 +175,7 @@ defmodule BotArmyGtd.Handlers.WhatsNextHandler do
   end
 
   defp filter_due_today(tasks) do
-    today = DateTime.utc_now() |> DateTime.to_date()
+    today = HouseholdDay.today()
 
     Enum.filter(tasks, fn t ->
       case t["due_date"] do

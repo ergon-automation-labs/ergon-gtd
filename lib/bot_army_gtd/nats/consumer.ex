@@ -167,6 +167,12 @@ defmodule BotArmyGtd.NATS.Consumer do
       description: "Get what's-next ranking snapshot"
     },
     %{
+      subject: "gtd.graph.series",
+      type: :request_reply,
+      description:
+        "Every graph this bot can draw from the task log, with the points behind each one"
+    },
+    %{
       subject: "gtd.coach.chat",
       type: :request_reply,
       description:
@@ -315,6 +321,7 @@ defmodule BotArmyGtd.NATS.Consumer do
     "gossip.social.invite",
     "gossip.poll.broadcast",
     "gtd.whats_next",
+    "gtd.graph.series",
     "gtd.coach.chat",
     "synapse.army_general.poll.broadcast",
     "gtd.army.opinion.vote",
@@ -975,6 +982,25 @@ defmodule BotArmyGtd.NATS.Consumer do
           {:ok, result} -> Reply.ok(result)
           {:error, reason} -> Reply.error(inspect(reason), :whats_next_failed)
         end
+
+      reply_traced(state.conn, reply_to, response)
+    end)
+
+    {:noreply, state}
+  end
+
+  # The graphs her task log can draw. Four bounded reads into the stores, bucketed into
+  # weeks and months, answered in one message so a picker knows what could be drawn before
+  # anybody picks one. No LLM, no spawned process: the reads are indexed counts over a
+  # twelve-week window, and a menu that took a minute to open would be worse than no menu.
+  @impl true
+  def handle_info(
+        {:msg, %{topic: "gtd.graph.series", reply_to: reply_to, body: body} = msg},
+        state
+      )
+      when is_binary(reply_to) and reply_to != "" do
+    Tracing.with_consumer_span("gtd.graph.series", Map.get(msg, :headers, []), fn ->
+      response = BotArmyGtd.Handlers.GraphHandler.handle_graphs(decode_body(body))
 
       reply_traced(state.conn, reply_to, response)
     end)

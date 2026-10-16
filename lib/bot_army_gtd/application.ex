@@ -31,6 +31,8 @@ defmodule BotArmyGtd.Application do
     config_data = BotArmyLibraryRuntime.ConfigLoader.load_config()
     Application.put_env(:bot_army_library_runtime, :config_data, config_data)
 
+    log_household_day()
+
     base_children =
       []
       |> maybe_add_repo()
@@ -68,6 +70,21 @@ defmodule BotArmyGtd.Application do
 
   defp maybe_add_repo(children) do
     if env() == :test, do: children, else: [BotArmyGtd.Repo | children]
+  end
+
+  # One line at boot, saying which day this bot thinks it is and how far its host's clock
+  # stands from UTC. The day is the thing every weekly count is cut on, and a host in the
+  # wrong zone is otherwise invisible until six in the evening — a graph quietly counting
+  # into tomorrow, which looks exactly like a graph that works. Reading the offset back
+  # from the log turns "the buckets look off" into a fact somebody can check. Same line and
+  # same reason as bot_army_fitness, because the two are read side by side on one page.
+  defp log_household_day do
+    require Logger
+
+    Logger.info(
+      "GTD bot day: #{BotArmyGtd.HouseholdDay.today()} " <>
+        "(local offset #{BotArmyGtd.HouseholdDay.offset_hours()}h from UTC)"
+    )
   end
 
   # The registry that wakes the GTD coach when the llm bot rings its bell. Started in every

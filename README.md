@@ -52,6 +52,7 @@ mix credo                        # Linting
 | `llm.response.parsed` | InboxParsingHandler | Receive parsed inbox text (Phase 1) |
 | `llm.chain.completed` | DecompositionHandler | Receive decomposition chain results (Phase 2) |
 | `gtd.coach.chat` | CoachChatHandler | Ask about her own system — projects, tasks, inbox, one optional look-up (§62). **Read-only.** |
+| `gtd.graph.series` | GraphHandler | Every graph this bot can draw from the task log, with the points behind each one (§67). **Read-only.** |
 | `events.llm.job.completed` | Consumer (JobBell) | Wake a backgrounded coach job (§62) |
 
 ### Outgoing Messages
@@ -129,6 +130,48 @@ DecompositionHandler.handle_chain_completed
 - **BotArmyGtd.Handlers.ProjectHandler** - Project management
 - **BotArmyGtd.Handlers.DecompositionHandler** - Multi-step task decomposition (Phase 2)
 - **BotArmyGtd.{TaskStore, ProjectStore, InboxItemStore, DecompositionStore}** - GenServer-based persistence with DB fallback
+- **BotArmyGtd.Graphs** / **GraphSource** - The four series this bot can draw from the task log
+  (tasks opened, tasks closed, times worked, projects started) and the reads behind them. Pure
+  bucketing; the reads are bounded by a window, never by a row count (§67)
+- **BotArmyGtd.HouseholdDay** - The bot's one answer to "what day is it" — the host's own day, not
+  UTC's (§65), and the day the graph buckets are counted from
+
+## Graphs, and the day they are bucketed by
+
+`gtd.graph.series` answers **every graph this bot can draw from the task log**, in one reply, and
+draws none of them — the surface asks once and chooses which one to show:
+
+```
+gtd.graph.series   {}
+  -> {"ok": true, "data": {"count": 4, "window_days": 84,
+      "graphs": [{"id": "gtd.tasks.closed.week", "title": "Tasks closed", "unit": "tasks",
+                   "kind": "bars", "note": "one bar is one week of tasks",
+                   "points": [{"label": "Sep 28", "value": 3}, ...]}, ...]}}
+```
+
+* **four series**: tasks opened and tasks closed per week, *times a task was picked up* per week
+  (one for each checkout row, which is not the same number as either), and projects started per
+  **calendar month**. Each carries the labels of the buckets it is in, so a page prints the words it
+  was handed and works out no dates of its own;
+* **the series shape is deliberately identical to the fitness bot's**, field for field, so one card
+  can parse both bots with one parser — the two logs are read side by side by the same page, and a
+  week has to be the same week in both or "the last twelve weeks" means two different things on one
+  screen;
+* **the window is a window, not a page.** The reads are bounded by a date (`Graphs.window_start/1`,
+  the Monday twelve weeks back) rather than by a row count, through a `GraphSource` seam so the
+  handlers never touch the database themselves. The lower bound carries one day of slack, which the
+  bucket function drops — the fleet has no IANA database, so a past instant cannot be converted to
+  local time, and a day of slack costs nothing;
+* **a task closed with no `completed_at` is left out rather than dated to `inserted_at`**: that would
+  move a task into a week it did not happen in, which is the one thing a bar chart must not do;
+* a read that fails is `read_failed`, never a menu of empty series.
+
+`BotArmyGtd.HouseholdDay` is the same convention the fitness bot keeps (§65): every
+`Date.utc_today/0` under `lib/` was replaced by `HouseholdDay.today()`, the host's own day, and the
+boot log prints it beside its offset (`GTD bot day: 2026-10-16 (local offset -6h from UTC)`). A UTC
+day stamped at 18:00 MDT would put her evening on tomorrow, and two conventions in one bot is a
+defect rather than a nuance. The fleet carries no `tzdata` on purpose — an offset the runtime host
+already knows is a lighter trade than a compile-time zone database.
 
 ## Phase Progress
 

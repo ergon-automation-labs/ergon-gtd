@@ -15,6 +15,8 @@ defmodule BotArmyGtd.NATS.WeeklyReportsPublisher do
   use GenServer
   require Logger
 
+  alias BotArmyGtd.HouseholdDay
+
   @reconnect_delay_ms 5000
 
   def start_link(opts) do
@@ -117,7 +119,7 @@ defmodule BotArmyGtd.NATS.WeeklyReportsPublisher do
   end
 
   defp para_publish(report_markdown) do
-    today = Date.utc_today()
+    today = HouseholdDay.today()
     filename = "Weekly_Outcomes_#{Date.to_string(today)}"
     folder = "Outcomes"
 
