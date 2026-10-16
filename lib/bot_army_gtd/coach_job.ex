@@ -13,10 +13,11 @@ defmodule BotArmyGtd.CoachJob do
   for it forces the caller to invent a wall-clock deadline for work whose duration is unknowable,
   and a guess that is too small *silently* loses the answer. The job protocol separates the two:
   the submit returns a `job_id` immediately, and the wait becomes polling with a budget the
-  caller owns. This module's own budget is five minutes
-  (`GTD_COACH_JOB_BUDGET_MS`), but the coach usually hands it less: it threads one overall
-  deadline through the whole conversation, so a look-up round cannot push the request past the
-  budget the panel is waiting on.
+  caller owns. This module's own budget is fifteen minutes (`GTD_COACH_JOB_BUDGET_MS`) and it is a
+  net for a job that has **wedged**, not a guess at how long a model may think; the coach usually
+  hands it less, because it threads one overall deadline through the whole conversation and the
+  job only gets what is left of it. A local model answering for minutes is working, and the panel
+  waits past all of it rather than turn a slow answer into "did not reply".
 
   ## Local-only by construction
 
@@ -47,10 +48,11 @@ defmodule BotArmyGtd.CoachJob do
   @submit_timeout_ms 20_000
   @status_timeout_ms 10_000
 
-  # How long the job may take before we stop being patient. The fleet's narrator and the fitness
-  # coach both wait five minutes for the same local lane; an operator can move this one the same
-  # way, without a release, when the local model is slow.
-  @job_budget_ms 300_000
+  # How long the job may take before we stop being patient. A net for a wedged job rather than a
+  # guess at how long a model may think; an operator can move it without a release
+  # (`GTD_COACH_JOB_BUDGET_MS`). The coach normally passes a smaller budget of its own — whatever
+  # is left of its single overall deadline.
+  @job_budget_ms 900_000
   @job_budget_env "GTD_COACH_JOB_BUDGET_MS"
   @poll_ms 2_000
 

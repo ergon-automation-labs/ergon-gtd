@@ -28,10 +28,18 @@ defmodule BotArmyGtd.Handlers.CoachChatHandler do
 
   The look-up round is a second model round trip, and a budget attached to each stage would stack
   into one the panel cannot be sized against: two fast lanes, a look-up, and two jobs is two
-  three-hundred-second waits. So the coach owns a **single** deadline
-  (`@overall_budget_ms`, `GTD_COACH_BUDGET_MS`) that is threaded into every stage — each fast
-  lane, the look-up, and whatever is left of the background job. When it runs out the reply is
-  an honest `:llm_failed`, and the panel's own timeout sits above this whole budget.
+  fifteen-minute waits. So the coach owns a **single** deadline (`@overall_budget_ms`,
+  `GTD_COACH_BUDGET_MS`) that is threaded into every stage — each fast lane, the look-up, and
+  whatever is left of the background job. When it runs out the reply is an honest `:llm_failed`,
+  and the panel's own timeout sits above this whole budget.
+
+  That deadline is a **ceiling, not an expectation**. It is sized far above the slowest honest
+  turn so that a working model is waited for and only a wedged one is cut off — a local model
+  answering for minutes is working, not failing, and a coach that hung up on it would turn a slow
+  answer into "did not reply" and blame the model for our own impatience. The one stage that gets
+  a **slice** of its own rather than the whole remainder is the look-up (`@lookup_budget_ms`): it
+  runs second, so "whatever is left" would let a slow first lane starve it into a "could not be
+  read just now" that says more about the clock than about her files.
 
   ## The fast lane, and the background job behind it
 
@@ -58,11 +66,18 @@ defmodule BotArmyGtd.Handlers.CoachChatHandler do
   alias BotArmyLibraryCore.Tenant
   alias BotArmyLibraryRuntime.NATS.Reply
 
-  # One deadline for the whole conversation. It has to cover two fast lanes (20 s each), a
-  # look-up (25 s at its longest) *and* a backgrounded job, so it is the job's own five minutes
-  # plus room for the rest — while staying under the panel's timeout.
-  @overall_budget_ms 360_000
+  # One deadline for the whole conversation, and a ceiling rather than an expectation: it has to
+  # cover two fast lanes (20 s each), a look-up and a backgrounded job, so it is sized above the
+  # slowest honest turn — two local jobs — while staying under the panel's own wait. A model that
+  # is still thinking is not failing; only a wedged job meets this ceiling.
+  @overall_budget_ms 1_200_000
   @overall_budget_env "GTD_COACH_BUDGET_MS"
+
+  # The look-up runs second, so it is given a slice of its own rather than the whole remainder: a
+  # first lane that was slow must not starve her notes into "could not be read just now". A minute
+  # is far above the folder walk when it answers (measured 2026-10-16: 6 s for `projects`,
+  # sub-second for the rest) and only a miss that walks every folder spends it.
+  @lookup_budget_ms 60_000
 
   # Longer than the persona's eight seconds: the grounded message is much bigger — her whole
   # project list and her open tasks — and this is the one read on the panel a person is watching
@@ -178,7 +193,7 @@ defmodule BotArmyGtd.Handlers.CoachChatHandler do
         "That could not be read just now."
 
       ms ->
-        case CoachLookup.run(source, query, timeout_ms: ms) do
+        case CoachLookup.run(source, query, timeout_ms: min(ms, @lookup_budget_ms)) do
           {:ok, text} ->
             text
 
