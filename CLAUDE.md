@@ -161,7 +161,10 @@ mix test
 7. **BotArmyGtd.CoachChat** / **CoachLookup** - The §62 read-only coach: builds the facts it may
    name from `TaskStore`/`ProjectStore`, runs at most one `LOOKUP docs|para` the model asks for,
    and strips any directive out of the final answer. `CoachJob` + `JobBell` are the backgrounded
-   fallback when the fast lane is slow.
+   fallback when the fast lane is slow. `CoachLookup` asks PARA for one folder at a time and stops
+   at the first folder that answers: a whole-tree content search there takes ~63s and a search that
+   times out returns *nothing at all*, not the matches it had already found (2026-10-16). Read the
+   moduledoc before changing the scope list or its order.
 
 ### Task Status Flow
 

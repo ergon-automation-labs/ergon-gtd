@@ -20,7 +20,10 @@ Manages task inbox, projects, and context-based organization with intelligent te
   (`LOOKUP docs "..."`) or her own PARA files (`LOOKUP para "..."`). It is read-only: it
   names nothing it was not shown, it does not rank her tasks, and it does not decide what she
   should do next. A slow answer is backgrounded on the local model and woken by
-  `events.llm.job.completed` rather than lost (§61, ported here).
+  `events.llm.job.completed` rather than lost (§61, ported here). Her PARA files are searched one
+  folder at a time — `projects`, `areas`, `inbox`, `archive`, and last the much larger
+  `resources` — stopping at the first folder that answers, because a whole-tree search there takes
+  about a minute and a timed-out one returns nothing at all, not the matches it had already found.
 
 ## Getting Started
 

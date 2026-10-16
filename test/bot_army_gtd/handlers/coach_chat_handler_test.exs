@@ -180,7 +180,7 @@ defmodule BotArmyGtd.Handlers.CoachChatHandlerTest do
           end
 
         "para.fs.search", payload ->
-          assert payload == %{"query" => "tax 2025"}
+          assert payload == %{"query" => "tax 2025", "scope" => "projects"}
 
           {:ok,
            %{
