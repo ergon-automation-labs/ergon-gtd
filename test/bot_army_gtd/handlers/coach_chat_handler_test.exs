@@ -182,15 +182,19 @@ defmodule BotArmyGtd.Handlers.CoachChatHandlerTest do
         "para.fs.search", payload ->
           assert payload == %{"query" => "tax 2025", "scope" => "projects"}
 
+          # The para bot answers inside the core envelope (measured 2026-10-16).
           {:ok,
            %{
-             "matches" => [
-               %{
-                 "path" => "personal_os/areas/taxes.md",
-                 "match_type" => "content",
-                 "excerpt" => "the return"
-               }
-             ]
+             "data" => %{
+               "matches" => [
+                 %{
+                   "path" => "personal_os/areas/taxes.md",
+                   "match_type" => "content",
+                   "excerpt" => "the return"
+                 }
+               ]
+             },
+             "ok" => true
            }}
       end)
 

@@ -113,17 +113,20 @@ defmodule BotArmyGtd.CoachLookup do
 
       true ->
         case request(@para_subject, %{"query" => query, "scope" => scope}, remaining, opts) do
-          {:ok, %{"matches" => matches}} when is_list(matches) ->
-            collected = %{
-              collected
-              | matches: collected.matches ++ matches,
-                searched: collected.searched ++ [scope]
-            }
+          {:ok, reply} ->
+            case para_matches(reply) do
+              {:ok, matches} ->
+                collected = %{
+                  collected
+                  | matches: collected.matches ++ matches,
+                    searched: collected.searched ++ [scope]
+                }
 
-            search_scopes(rest, query, deadline, opts, collected, left(deadline))
+                search_scopes(rest, query, deadline, opts, collected, left(deadline))
 
-          {:ok, other} ->
-            {:error, {:unexpected_lookup_reply, other}}
+              {:error, _reason} = error ->
+                error
+            end
 
           {:error, reason} ->
             # A folder that could not be read is not the end of the look-up: the folders after it
@@ -135,6 +138,18 @@ defmodule BotArmyGtd.CoachLookup do
         end
     end
   end
+
+  # The PARA bot answers inside the core envelope — `%{"ok" => true, "data" => %{"matches" =>
+  # [...]}}` — while the docs bot answers flat. Measured on the deployed bot 2026-10-16: reading
+  # only the top level made *every* successful search look like a reply this bot did not
+  # recognise, so the coach told her its own files "could not be read just now" while the search
+  # had in fact answered. Both shapes are accepted; the flat one is what the fake publishers in the
+  # tests use and costs nothing to keep.
+  defp para_matches(%{"data" => %{"matches" => matches}}) when is_list(matches),
+    do: {:ok, matches}
+
+  defp para_matches(%{"matches" => matches}) when is_list(matches), do: {:ok, matches}
+  defp para_matches(other), do: {:error, {:unexpected_lookup_reply, other}}
 
   defp left(deadline), do: max(deadline - System.monotonic_time(:millisecond), 0)
 

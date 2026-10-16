@@ -95,6 +95,33 @@ defmodule BotArmyGtd.CoachLookupTest do
       assert text =~ "personal_os/projects/tax/plan.md"
     end
 
+    test "the para look-up reads the matches out of the core envelope the para bot answers in" do
+      # Measured 2026-10-16 against the deployed para bot: the matches are at `data.matches`, not at
+      # the top level. Reading only the top level made every *successful* search look like a reply
+      # this bot did not recognise, so the coach told her its own files "could not be read just now"
+      # while the search had in fact answered — the §62 live proof's failed look-up.
+      set_fake(fn "para.fs.search", _payload ->
+        {:ok,
+         %{
+           "data" => %{
+             "matches" => [
+               %{
+                 "path" => "personal_os/areas/taxes.md",
+                 "match_type" => "content",
+                 "excerpt" => "the 2025 return"
+               }
+             ]
+           },
+           "ok" => true,
+           "schema_version" => "1.0",
+           "timestamp" => "2026-10-16T05:25:37.390339Z"
+         }}
+      end)
+
+      assert {:ok, text} = CoachLookup.run("para", "tax", publisher: FakePublisher)
+      assert text =~ "personal_os/areas/taxes.md: the 2025 return"
+    end
+
     test "a folder with nothing in it does not end the search — the next folder is asked" do
       set_fake(fn "para.fs.search", payload ->
         send(self(), {:asked, payload["scope"]})
