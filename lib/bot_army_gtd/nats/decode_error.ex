@@ -133,10 +133,10 @@ defmodule BotArmyGtd.NATS.DecodeError do
       case sender do
         [] ->
           "Received, but the message does not name its sender " <>
-            "(no source, source_node or triggered_by):"
+            "(no source, source_node or triggered_by)"
 
         parts ->
-          "Received from #{Enum.join(parts, " ")}:"
+          "Received from #{Enum.join(parts, " ")}"
       end
 
     detail =
@@ -145,7 +145,7 @@ defmodule BotArmyGtd.NATS.DecodeError do
         parts -> " — " <> Enum.join(parts, ", ")
       end
 
-    head <> detail <> "\n  " <> truncate(Jason.encode!(body), @max_body_chars)
+    head <> detail <> ":\n  " <> truncate(Jason.encode!(body), @max_body_chars)
   end
 
   defp received_section(other), do: "Received: #{inspect(other)}"
