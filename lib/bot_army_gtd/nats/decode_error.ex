@@ -21,11 +21,21 @@ defmodule BotArmyGtd.NATS.DecodeError do
 
   The envelope is the same for every `gtd.*` request subject; only `event` and
   `payload` change, and both are supplied by the caller of `reply/3`.
+
+  The reply also echoes back what the rejected message *did* say about its
+  sender (`source`, `source_node`, `triggered_by`, `event_id`, tenant/user), so
+  a bad request can be traced to whoever sent it without grepping the bot log.
+  When none of those fields are present the reply says so in as many words.
   """
 
   require Logger
 
   alias BotArmyLibraryRuntime.NATS.Reply
+
+  @sender_fields ~w(source source_node triggered_by)
+  @message_fields ~w(event_id event timestamp tenant_id user_id)
+  @max_body_chars 400
+  @max_value_chars 60
 
   @envelope_placeholders [
     {"event_id", "<uuid>"},
@@ -43,6 +53,8 @@ defmodule BotArmyGtd.NATS.DecodeError do
 
     * `:payload` — the payload this subject expects, as JSON text
     * `:door` — the `bridge.*` subject that accepts plain JSON instead
+    * `:received` — the raw body that failed (JSON text or a map), echoed back
+      for debugging
   """
   @spec reply(String.t(), term(), keyword()) :: String.t()
   def reply(subject, reason, opts \\ []) do
@@ -59,8 +71,14 @@ defmodule BotArmyGtd.NATS.DecodeError do
   def message(subject, reason, opts \\ []) do
     payload = Keyword.get(opts, :payload, ~s({"…": "…"}))
     door = Keyword.get(opts, :door)
+    received = Keyword.get(opts, :received)
 
-    [headline(subject, reason), envelope(subject, payload), door_hint(door, payload, subject)]
+    [
+      headline(subject, reason),
+      received_section(received),
+      envelope(subject, payload),
+      door_hint(door, payload, subject)
+    ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n\n")
   end
@@ -96,6 +114,55 @@ defmodule BotArmyGtd.NATS.DecodeError do
 
   defp headline(subject, reason) do
     "#{subject}: the message could not be decoded (#{inspect(reason)})."
+  end
+
+  defp received_section(nil), do: nil
+
+  defp received_section(raw) when is_binary(raw) do
+    case Jason.decode(raw) do
+      {:ok, %{} = body} -> received_section(body)
+      _ -> "Received (not JSON): #{truncate(raw, @max_body_chars)}"
+    end
+  end
+
+  defp received_section(body) when is_map(body) do
+    sender = describe(body, @sender_fields)
+    message = describe(body, @message_fields)
+
+    head =
+      case sender do
+        [] ->
+          "Received, but the message does not name its sender " <>
+            "(no source, source_node or triggered_by):"
+
+        parts ->
+          "Received from #{Enum.join(parts, " ")}:"
+      end
+
+    detail =
+      case message do
+        [] -> ""
+        parts -> " — " <> Enum.join(parts, ", ")
+      end
+
+    head <> detail <> "\n  " <> truncate(Jason.encode!(body), @max_body_chars)
+  end
+
+  defp received_section(other), do: "Received: #{inspect(other)}"
+
+  defp describe(body, fields) do
+    for field <- fields,
+        value = Map.get(body, field),
+        not is_nil(value),
+        value != "",
+        do: "#{field}=#{short(value)}"
+  end
+
+  defp short(value) when is_binary(value), do: truncate(value, @max_value_chars)
+  defp short(value), do: inspect(value)
+
+  defp truncate(text, limit) when is_binary(text) do
+    if String.length(text) <= limit, do: text, else: String.slice(text, 0, limit) <> "…"
   end
 
   defp envelope(subject, payload) do

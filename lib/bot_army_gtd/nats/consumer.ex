@@ -1334,6 +1334,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:error, reason} ->
         error_response =
           DecodeError.reply("gtd.task.create", reason,
+            received: msg.body,
             door: "bridge.task.create",
             payload: ~s({"title": "…", "description": "…", "priority": "…", "context": "…"})
           )
@@ -1370,6 +1371,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:error, reason} ->
         error_response =
           DecodeError.reply("gtd.task.update", reason,
+            received: msg.body,
             door: "bridge.task.update",
             payload: ~s({"task_id": "<uuid>", "title": "…", "status": "…"})
           )
@@ -1394,6 +1396,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:error, reason} ->
         error_response =
           DecodeError.reply("gtd.task.complete", reason,
+            received: msg.body,
             door: "bridge.task.complete",
             payload: ~s({"task_id": "<uuid>"})
           )
@@ -1431,6 +1434,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:error, reason} ->
         error_response =
           DecodeError.reply("gtd.project.create", reason,
+            received: msg.body,
             door: "bridge.project.create",
             payload: ~s({"name": "…", "description": "…", "area": "…", "labels": []})
           )
@@ -1468,6 +1472,7 @@ defmodule BotArmyGtd.NATS.Consumer do
       {:error, reason} ->
         error_response =
           DecodeError.reply("gtd.project.update", reason,
+            received: msg.body,
             door: "bridge.project.update",
             payload: ~s({"project_id": "<uuid>", "name": "…", "status": "…"})
           )
