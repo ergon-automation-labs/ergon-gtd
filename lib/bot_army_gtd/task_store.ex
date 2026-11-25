@@ -328,9 +328,13 @@ defmodule BotArmyGtd.TaskStore do
           new_state = Map.put(state, task_id, task)
           {:reply, {:ok, task}, new_state}
 
-        {:error, changeset} ->
+        {:error, %Ecto.Changeset{} = changeset} ->
           Logger.error("Failed to create task: #{inspect(changeset.errors)}")
           {:reply, {:error, changeset_error_reason(changeset)}, state}
+
+        {:error, reason} ->
+          Logger.error("Failed to create task: database unavailable: #{inspect(reason)}")
+          {:reply, {:error, {:database_unavailable, reason}}, state}
       end
     else
       Logger.warning("TaskStore: Write rejected (not leader)")
@@ -359,9 +363,13 @@ defmodule BotArmyGtd.TaskStore do
             {:error, :not_found} ->
               {:reply, {:error, :not_found}, state}
 
-            {:error, changeset} ->
+            {:error, %Ecto.Changeset{} = changeset} ->
               Logger.error("Failed to update task: #{inspect(changeset.errors)}")
               {:reply, {:error, changeset_error_reason(changeset)}, state}
+
+            {:error, reason} ->
+              Logger.error("Failed to update task: database unavailable: #{inspect(reason)}")
+              {:reply, {:error, {:database_unavailable, reason}}, state}
           end
       end
     else
@@ -843,9 +851,13 @@ defmodule BotArmyGtd.TaskStore do
         {:error, :not_found} ->
           {:reply, {:error, :not_found}, state}
 
-        {:error, changeset} ->
+        {:error, %Ecto.Changeset{} = changeset} ->
           Logger.error("Failed to update task (tenant scoped): #{inspect(changeset.errors)}")
           {:reply, {:error, changeset_error_reason(changeset)}, state}
+
+        {:error, reason} ->
+          Logger.error("Failed to update task (tenant scoped): database unavailable: #{inspect(reason)}")
+          {:reply, {:error, {:database_unavailable, reason}}, state}
       end
     end
   end
