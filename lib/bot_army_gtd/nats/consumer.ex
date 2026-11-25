@@ -34,6 +34,7 @@ defmodule BotArmyGtd.NATS.Consumer do
   import Ecto.Query
 
   alias BotArmyLibraryCore.NATS.Decoder
+  alias BotArmyGtd.NATS.DecodeError
 
   alias BotArmyGtd.Handlers.{
     ClaudeHandler,
@@ -1331,18 +1332,12 @@ defmodule BotArmyGtd.NATS.Consumer do
         process_task_create(decoded_message, reply_to, state)
 
       {:error, reason} ->
-        error_msg = """
-        Invalid task.create message format. Expected NATS event envelope with:
-        - event_id: UUID
-        - event: "gtd.task.create"
-        - payload: {project_id, title, description, priority, status}
-        - timestamp: RFC3339
+        error_response =
+          DecodeError.reply("gtd.task.create", reason,
+            door: "bridge.task.create",
+            payload: ~s({"title": "…", "description": "…", "priority": "…", "context": "…"})
+          )
 
-        Use bridge.task.create for simple JSON, or wrap message in envelope. Error: #{inspect(reason)}
-        """
-
-        Logger.warning(error_msg)
-        error_response = Reply.error(error_msg, :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
@@ -1373,18 +1368,12 @@ defmodule BotArmyGtd.NATS.Consumer do
         end
 
       {:error, reason} ->
-        error_msg = """
-        Invalid task.update message format. Expected NATS event envelope with:
-        - event_id: UUID
-        - event: "gtd.task.update"
-        - payload: {task_id, [updates...]}
-        - timestamp: RFC3339
+        error_response =
+          DecodeError.reply("gtd.task.update", reason,
+            door: "bridge.task.update",
+            payload: ~s({"task_id": "<uuid>", "title": "…", "status": "…"})
+          )
 
-        Use bridge.task.update for simple JSON, or wrap message in envelope. Error: #{inspect(reason)}
-        """
-
-        Logger.warning(error_msg)
-        error_response = Reply.error(error_msg, :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
@@ -1403,8 +1392,12 @@ defmodule BotArmyGtd.NATS.Consumer do
         end
 
       {:error, reason} ->
-        Logger.warning("Failed to decode task complete message: #{inspect(reason)}")
-        error_response = Reply.error("Invalid message format", :decode_error)
+        error_response =
+          DecodeError.reply("gtd.task.complete", reason,
+            door: "bridge.task.complete",
+            payload: ~s({"task_id": "<uuid>"})
+          )
+
         reply_traced(state.conn, reply_to, error_response)
     end
   end
@@ -1436,18 +1429,12 @@ defmodule BotArmyGtd.NATS.Consumer do
         end
 
       {:error, reason} ->
-        error_msg = """
-        Invalid project.create message format. Expected NATS event envelope with:
-        - event_id: UUID
-        - event: "gtd.project.create"
-        - payload: {name, description, area, labels}
-        - timestamp: RFC3339
+        error_response =
+          DecodeError.reply("gtd.project.create", reason,
+            door: "bridge.project.create",
+            payload: ~s({"name": "…", "description": "…", "area": "…", "labels": []})
+          )
 
-        Use bridge.project.create for simple JSON, or wrap message in envelope. Error: #{inspect(reason)}
-        """
-
-        Logger.warning(error_msg)
-        error_response = Reply.error(error_msg, :decode_error)
         reply_traced(state.conn, reply_to, error_response)
     end
   end
@@ -1479,8 +1466,12 @@ defmodule BotArmyGtd.NATS.Consumer do
         end
 
       {:error, reason} ->
-        Logger.warning("Failed to decode project update message: #{inspect(reason)}")
-        error_response = Reply.error("Invalid message format", :decode_error)
+        error_response =
+          DecodeError.reply("gtd.project.update", reason,
+            door: "bridge.project.update",
+            payload: ~s({"project_id": "<uuid>", "name": "…", "status": "…"})
+          )
+
         reply_traced(state.conn, reply_to, error_response)
     end
   end
